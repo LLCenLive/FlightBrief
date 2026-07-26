@@ -100,6 +100,29 @@
   .feat-card h3{font-family:var(--font-display); font-size:14.5px; margin:0 0 8px;}
   .feat-card p{font-size:13px; color:var(--text-sec); margin:0; line-height:1.55;}
 
+  /* ---------------- Bannière Twitch ---------------- */
+  .twitch-banner{display:flex; align-items:center; gap:18px; text-decoration:none; color:var(--text); background:linear-gradient(135deg, rgba(145,70,255,.14), rgba(145,70,255,.03)); border:1px solid rgba(145,70,255,.35); border-radius:14px; padding:18px 22px; margin:0 0 54px; transition:border-color .15s, transform .12s;}
+  .twitch-banner:hover{border-color:#9146ff; transform:translateY(-1px);}
+  .twitch-banner-icon{flex:none; width:44px; height:44px; border-radius:11px; background:#9146ff; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px;}
+  .twitch-banner-text{flex:1; min-width:0;}
+  .twitch-banner-title{font-family:var(--font-display); font-size:15px; margin-top:3px;}
+  .twitch-banner-title span{color:#c9a6ff; font-family:var(--font-mono);}
+  .twitch-btn{flex:none; background:#9146ff; color:#fff; border-color:#9146ff;}
+  .twitch-btn:hover{background:#a166ff;}
+
+  /* ---------------- À propos / démarche ---------------- */
+  .about-section{padding:10px 0 70px;}
+  .about-section h2{font-family:var(--font-display); font-size:26px; margin:0 0 16px;}
+  .about-section .lede{color:var(--text-sec); font-size:15px; max-width:68ch; margin:0 0 28px;}
+  .about-section .lede strong{color:var(--text); font-weight:600;}
+  .principle-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:26px;}
+  .principle-card{background:var(--panel); border:1px solid var(--hairline); border-radius:12px; padding:18px;}
+  .principle-card .tag{font-family:var(--font-display); font-weight:700; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--phosphor); background:var(--phosphor-dim); padding:3px 9px; border-radius:5px; display:inline-block; margin-bottom:10px;}
+  .principle-card p{margin:0; font-size:13px; color:var(--text-sec); line-height:1.55;}
+  .about-section .cta-line{font-size:13.5px; color:var(--text-sec);}
+  .about-section .cta-line a{color:var(--phosphor); text-decoration:none;}
+  .about-section .cta-line a:hover{text-decoration:underline;}
+
   /* ---------------- Footer ---------------- */
   footer{border-top:1px solid var(--hairline); padding:26px 0 40px;}
   footer .wrap{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:14px;}
@@ -117,6 +140,8 @@
     <div class="links">
       <a href="#telecharger">Télécharger</a>
       <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#apropos">À propos</a>
+      <a href="https://www.twitch.tv/LLCenLive" target="_blank" rel="noopener">Twitch</a>
       <a id="repoLink" href="#" target="_blank" rel="noopener">Code source</a>
     </div>
   </nav>
@@ -152,6 +177,17 @@
   </div>
 </header>
 
+<div class="wrap">
+  <a class="twitch-banner" href="https://www.twitch.tv/LLCenLive" target="_blank" rel="noopener">
+    <div class="twitch-banner-icon">▶</div>
+    <div class="twitch-banner-text">
+      <div class="eyebrow" style="color:#c9a6ff;">Ma chaîne Twitch</div>
+      <div class="twitch-banner-title">Certains de mes projets naissent d'idées en live ... Passe faire un tour sur <span>twitch.tv/LLCenLive</span></div>
+    </div>
+    <div class="btn twitch-btn">Suivre la chaîne</div>
+  </a>
+</div>
+
 <section class="dl-section wrap" id="telecharger">
   <div class="dl-panel">
     <div class="dl-panel-head">
@@ -179,10 +215,24 @@
   </div>
 </section>
 
+<section class="about-section wrap" id="apropos">
+  <div class="eyebrow">À propos</div>
+  <h2>Ma démarche</h2>
+  <p class="lede">Je ne suis pas développeur de métier. FlightBrief est un projet perso que j'ai construit en <strong>vibe codant avec Claude</strong> (l'IA d'Anthropic) parce que j'en avais besoin pour mon propre stream — et je le partage parce qu'il peut sans doute servir à d'autres créateurs de contenu simu aérienne.</p>
+  <div class="principle-grid">
+    <div class="principle-card"><div class="tag">Gratuit</div><p>Aujourd'hui et pour toujours. Pas de version payante, pas d'abonnement, pas de fonctionnalité verrouillée.</p></div>
+    <div class="principle-card"><div class="tag">Zéro collecte</div><p>Aucune donnée envoyée nulle part. Tout reste en local sur ta machine, dans un simple fichier JSON.</p></div>
+    <div class="principle-card"><div class="tag">Zéro monétisation</div><p>Pas de pub, pas de tracking, pas de revente de données. Je ne gagne rien sur cet outil.</p></div>
+    <div class="principle-card"><div class="tag">Open source</div><p>Licence MIT — le code est public, libre à toi de le consulter, le modifier, ou proposer des améliorations.</p></div>
+  </div>
+  <p class="cta-line">Un bug, une idée, une envie de fonctionnalité ? Ouvre une <a id="issuesLinkAbout" href="#" target="_blank" rel="noopener">issue sur GitHub</a>, ou viens m'en parler directement sur le <a href="https://www.twitch.tv/LLCenLive" target="_blank" rel="noopener">stream</a>.</p>
+</section>
+
 <footer>
   <div class="wrap">
     <div class="legal">FlightBrief — distribué sous licence MIT.</div>
     <div class="flinks">
+      <a href="https://www.twitch.tv/LLCenLive" target="_blank" rel="noopener">Twitch</a>
       <a id="repoLinkFooter" href="#" target="_blank" rel="noopener">Dépôt GitHub</a>
       <a id="issuesLink" href="#" target="_blank" rel="noopener">Signaler un problème</a>
       <a id="releasesLink" href="#" target="_blank" rel="noopener">Toutes les versions</a>
@@ -201,6 +251,7 @@ const REPO_NAME  = 'flightbrief';
 const REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 ['repoLink','repoLinkGhost','repoLinkFooter'].forEach(id => document.getElementById(id).href = REPO_URL);
 document.getElementById('issuesLink').href = `${REPO_URL}/issues`;
+document.getElementById('issuesLinkAbout').href = `${REPO_URL}/issues`;
 document.getElementById('releasesLink').href = `${REPO_URL}/releases`;
 
 // Reconnaît le système du visiteur pour mettre en avant le bon installeur.
