@@ -1,0 +1,44 @@
+{
+  "name": "flightbrief",
+  "productName": "FlightBrief",
+  "version": "1.1.0",
+  "description": "Briefing de vol, logbook, suivi de carrière et tracking de vol en direct (SimConnect) pour les créateurs de contenu simu aérienne, avec source OBS intégrée.",
+  "main": "main.js",
+  "author": "FlightBrief",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icons": "electron-icon-builder --input=./build/icon.png --output=./build --flatten",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "node-simconnect": "^4.2.0"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "electron-icon-builder": "^2.0.1"
+  },
+  "build": {
+    "appId": "com.flightbrief.app",
+    "productName": "FlightBrief",
+    "files": [
+      "main.js",
+      "preload.js",
+      "server.js",
+      "tracker.js",
+      "renderer/**/*",
+      "build/icon.png",
+      "node_modules/**/*"
+    ],
+    "directories": { "buildResources": "build" },
+    "win": { "target": "nsis", "icon": "build/icon.ico" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
+    "mac": { "target": "dmg", "icon": "build/icon.icns", "category": "public.app-category.utilities" },
+    "linux": { "target": ["AppImage", "deb"], "icon": "build/icon.png", "category": "Utility" }
+  }
+}

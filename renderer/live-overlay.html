@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>FlightBrief — Overlay Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@400;600;700&family=Rajdhani:wght@500;600;700&family=Oswald:wght@400;500;600&family=Chakra+Petch:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --lo-bg: rgba(10,13,17,.78); --lo-text:#e7edf2; --lo-text-sec:#7c8894; --lo-accent:#39e88f;
+    --lo-font:'Space Grotesk',sans-serif; --lo-font-mono:'IBM Plex Mono',monospace;
+    --lo-radius:12px; --lo-scale:1; --lo-gap:1px; --lo-border-w:1px; --lo-border-color:rgba(255,255,255,.08);
+  }
+  @font-face { font-family:'Evogria'; src:local('Evogria'); }
+  *{box-sizing:border-box;}
+  .hidden{display:none !important;}
+  html,body{margin:0;padding:0;background:transparent;}
+  body{font-family:var(--lo-font); color:var(--lo-text); display:flex; align-items:flex-start; justify-content:flex-start; padding:18px;}
+
+  .lo-bar{
+    display:flex; flex-direction:row; flex-wrap:wrap; align-items:stretch; gap:var(--lo-gap);
+    background:var(--lo-bg); border:var(--lo-border-w) solid var(--lo-border-color); border-radius:var(--lo-radius);
+    overflow:hidden;
+  }
+  .lo-bar.lo-shadow{box-shadow:0 14px 40px rgba(0,0,0,.35);}
+  .lo-bar.lo-blur{backdrop-filter:blur(6px);}
+  .lo-bar.lo-stack{flex-direction:column;}
+  .lo-bar.lo-uppercase .lo-val{text-transform:uppercase;}
+  .lo-bar:not(.lo-cards):not(.lo-stack).lo-divider .lo-item:not(:last-child){border-right:var(--lo-border-w) solid var(--lo-border-color);}
+  .lo-bar.lo-cards{background:transparent; border:none; overflow:visible;}
+  .lo-bar.lo-cards .lo-item{background:var(--lo-bg); border:var(--lo-border-w) solid var(--lo-border-color); border-radius:var(--lo-radius); overflow:hidden;}
+  .lo-bar.lo-cards.lo-shadow .lo-item{box-shadow:0 10px 30px rgba(0,0,0,.3);}
+  .lo-bar.lo-empty{display:none;}
+
+  .lo-item{display:flex; flex-direction:column; justify-content:center; gap:2px; padding:calc(9px * var(--lo-scale)) calc(14px * var(--lo-scale)); min-width:calc(64px * var(--lo-scale));}
+  .lo-bar.lo-stack .lo-item{min-width:0;}
+  .lo-cap{font-family:var(--lo-font); font-size:calc(9px * var(--lo-scale)); letter-spacing:.12em; text-transform:uppercase; color:var(--lo-text-sec);}
+  .lo-cap .lo-icon{color:var(--lo-accent); margin-right:4px;}
+  .lo-val{font-family:var(--lo-font-mono); font-size:calc(16px * var(--lo-scale)); font-weight:600; color:var(--lo-text); white-space:nowrap;}
+  .lo-val.lo-accent{color:var(--lo-accent);}
+
+  .lo-item.lo-route .lo-val{display:flex; align-items:center; gap:6px;}
+  .lo-item.lo-route .lo-arrow{color:var(--lo-text-sec); font-size:calc(13px * var(--lo-scale));}
+
+  .lo-item.lo-progress{min-width:calc(120px * var(--lo-scale));}
+  .lo-progress-track{position:relative; width:100%; height:6px; border-radius:4px; background:rgba(255,255,255,.12); overflow:hidden; margin-top:3px;}
+  .lo-progress-fill{position:absolute; inset:0 auto 0 0; width:0%; background:var(--lo-accent); border-radius:4px; transition:width .6s ease;}
+
+  .lo-waiting{font-family:var(--lo-font); font-size:12px; color:var(--lo-text-sec); background:var(--lo-bg); border:1px solid rgba(255,255,255,.08); border-radius:var(--lo-radius); padding:10px 14px;}
+</style>
+</head>
+<body>
+  <div class="lo-bar" id="loBar"></div>
+  <div class="lo-waiting hidden" id="loWaiting">FlightBrief — overlay live en attente de configuration…</div>
+
+<script>
+function el(id){ return document.getElementById(id); }
+function hidden(node, v){ node.classList.toggle('hidden', v); }
+
+const LIVE_OVERLAY_DEFAULT_LABELS = { callsign:'Indicatif', route:'Trajet', phase:'Phase', altitude:'Altitude', heading:'Cap', radio:'Fréquence radio', distance:'Distance', progress:'Progression' };
+const LIVE_OVERLAY_ICONS = { callsign:'✈', route:'→', phase:'◎', altitude:'▲', heading:'◈', radio:'▮', distance:'↦', progress:'%' };
+// Ordre d'affichage fixe (l'utilisateur choisit seulement quels champs sont visibles et comment les nommer)
+const FIELD_ORDER = ['callsign','route','phase','altitude','heading','radio','distance','progress'];
+
+const PHASE_LABELS = {
+  taxi_out:'Roulage', liftoff:'Décollage', initial_climb:'Montée initiale', climb:'Montée',
+  cruise:'Croisière', descent:'Descente', approach:'Approche', final_approach:'Approche finale',
+  touchdown:'Toucher des roues', taxi_in:'Roulage', idle:'—', ground:'Au sol', airborne:'En vol', landed:'Atterri'
+};
+
+function hexToRgba(hex, opacityPct){
+  const h = (hex || '#0a0d11').replace('#','');
+  const r = parseInt(h.length===3? h[0]+h[0] : h.substring(0,2), 16) || 0;
+  const g = parseInt(h.length===3? h[1]+h[1] : h.substring(2,4), 16) || 0;
+  const b = parseInt(h.length===3? h[2]+h[2] : h.substring(4,6), 16) || 0;
+  const a = Math.max(0, Math.min(100, opacityPct != null ? opacityPct : 100)) / 100;
+  return `rgba(${r},${g},${b},${a.toFixed(2)})`;
+}
+
+function applyStyle(style){
+  const s = style || {};
+  const r = document.documentElement.style;
+  r.setProperty('--lo-bg', hexToRgba(s.bg || '#0a0d11', s.bgOpacity != null ? s.bgOpacity : 78));
+  r.setProperty('--lo-text', s.text || '#e7edf2');
+  r.setProperty('--lo-accent', s.accent || '#39e88f');
+  r.setProperty('--lo-font', s.font || "'Space Grotesk',sans-serif");
+  r.setProperty('--lo-radius', (s.radius != null ? s.radius : 12) + 'px');
+  r.setProperty('--lo-scale', (s.scale || 100) / 100);
+  r.setProperty('--lo-gap', (s.gap != null ? s.gap : 1) + 'px');
+  r.setProperty('--lo-border-w', s.border === false ? '0px' : '1px');
+  r.setProperty('--lo-border-color', s.borderColor ? hexToRgba(s.borderColor, 22) : 'rgba(255,255,255,.08)');
+  const bar = el('loBar');
+  bar.classList.toggle('lo-stack', s.layout === 'stack');
+  bar.classList.toggle('lo-cards', s.layout === 'cards');
+  bar.classList.toggle('lo-shadow', s.shadow !== false);
+  bar.classList.toggle('lo-blur', s.blur !== false);
+  bar.classList.toggle('lo-uppercase', !!s.uppercase);
+  bar.classList.toggle('lo-divider', s.divider !== false);
+}
+
+function fieldValue(key, t){
+  if(key === 'callsign') return escapeHtml(t.callsign || '—');
+  if(key === 'route') return `<span>${escapeHtml((t.dep || '----').toUpperCase())}</span><span class="lo-arrow">→</span><span>${escapeHtml((t.arr || '----').toUpperCase())}</span>`;
+  if(key === 'phase') return escapeHtml(PHASE_LABELS[t.phase] || t.phase || '—');
+  if(key === 'altitude') return (t.altFt != null) ? Math.round(t.altFt).toLocaleString('fr-FR') + ' ft' : '—';
+  if(key === 'heading') return (t.headingDeg != null) ? String(Math.round(t.headingDeg)).padStart(3,'0') + '°' : '—';
+  if(key === 'radio') return (t.comFreqMhz != null) ? t.comFreqMhz.toFixed(3) : '—';
+  if(key === 'distance') return (t.distanceNm != null) ? Math.round(t.distanceNm) + ' NM' : '—';
+  if(key === 'progress') return (t.progressPct != null) ? Math.max(0, Math.min(100, t.progressPct)) + ' %' : '—';
+  return '—';
+}
+
+function fieldMarkup(key, t, cfg){
+  const labels = cfg.labels || LIVE_OVERLAY_DEFAULT_LABELS;
+  const label = labels[key] || LIVE_OVERLAY_DEFAULT_LABELS[key] || key;
+  const icon = cfg.style && cfg.style.icons ? `<span class="lo-icon">${LIVE_OVERLAY_ICONS[key] || ''}</span>` : '';
+  const accentClass = key === 'phase' ? ' lo-accent' : '';
+  const extraClass = key === 'route' ? ' lo-route' : (key === 'progress' ? ' lo-progress' : '');
+  let valueBlock = `<div class="lo-val${accentClass}">${fieldValue(key, t)}</div>`;
+  if(key === 'progress'){
+    const pct = (t.progressPct != null) ? Math.max(0, Math.min(100, t.progressPct)) : 0;
+    valueBlock += `<div class="lo-progress-track"><div class="lo-progress-fill" style="width:${pct}%"></div></div>`;
+  }
+  return `<div class="lo-item${extraClass}"><div class="lo-cap">${icon}${escapeHtml(label)}</div>${valueBlock}</div>`;
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function render(state){
+  const config = state && state.config;
+  const telemetry = (state && state.telemetry) || {};
+
+  if(!config){
+    hidden(el('loBar'), true);
+    hidden(el('loWaiting'), false);
+    return;
+  }
+  hidden(el('loWaiting'), true);
+  hidden(el('loBar'), false);
+
+  applyStyle(config.style);
+
+  const fields = config.fields || {};
+  const visible = FIELD_ORDER.filter(k => fields[k]);
+  el('loBar').innerHTML = visible.map(k => fieldMarkup(k, telemetry, config)).join('');
+  el('loBar').classList.toggle('lo-empty', visible.length === 0);
+}
+
+async function poll(){
+  try{
+    const res = await fetch('/api/live-state', { cache:'no-store' });
+    const s = await res.json();
+    render(s);
+  }catch(e){ /* le serveur n'est pas encore prêt, on réessaie au prochain tick */ }
+}
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

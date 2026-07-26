@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>FlightBrief — OBS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@400;600;700&family=Rajdhani:wght@500;600;700&family=Oswald:wght@400;500;600&family=Chakra+Petch:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&family=Nunito+Sans:wght@400;600;700;800&family=Roboto:wght@300;400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cockpit-night:#0a0d11; --panel-bezel:#12171c;
+    --text-primary:#e7edf2; --text-secondary:#7c8894;
+    --accent-vfr:#ffb020; --accent-ifr:#54d6e8;
+    --accent-vfr-dim: color-mix(in srgb, var(--accent-vfr) 16%, transparent);
+    --accent-ifr-dim: color-mix(in srgb, var(--accent-ifr) 16%, transparent);
+    --mode-color: var(--accent-ifr); --mode-dim: var(--accent-ifr-dim);
+    --radius:10px;
+    --font-scale:1;
+    --font-display:'Space Grotesk',sans-serif; --font-mono:'IBM Plex Mono',monospace; --font-body:'Inter',sans-serif;
+    --hairline: rgba(231,237,242,0.08);
+  }
+  @font-face { font-family:'Evogria'; src:local('Evogria'); }
+  *{box-sizing:border-box;}
+  .hidden{display:none !important;}
+  html,body{margin:0;padding:0;background:transparent;}
+  body{font-family:var(--font-body); color:var(--text-primary); display:flex; align-items:flex-start; justify-content:flex-start; padding:20px;}
+
+  .card{position:relative; width:820px; background:linear-gradient(180deg, var(--panel-bezel) 0%, var(--cockpit-night) 100%); border:1px solid var(--hairline); border-radius:var(--radius); padding:22px 26px 20px; box-shadow:0 20px 60px rgba(0,0,0,.45);}
+  .card:before{content:"";position:absolute; inset:0; border-radius:var(--radius); pointer-events:none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02), inset 0 1px 0 rgba(255,255,255,0.04);}
+  .card.no-glow .plane-icon{filter:none !important;}
+  .card.no-border{border-color:transparent;}
+  .card.no-border:before{box-shadow:none;}
+  .card.no-shadow{box-shadow:none;}
+  .card.transparent-bg{background:transparent;}
+  .card.transparent-bg .tile, .card.transparent-bg .tile.wide{background:rgba(255,255,255,.03);}
+
+  .card-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+  .card-header.align-center{flex-direction:column; text-align:center; gap:6px;}
+  .card-header.align-center .eyebrow, .card-header.align-center .callsign{text-align:center;}
+  .eyebrow{font-family:var(--font-display); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:2px;}
+  .callsign{font-family:var(--font-mono); font-weight:600; font-size:calc(20px * var(--font-scale)); letter-spacing:.04em; color:var(--text-primary);}
+  .badge{font-family:var(--font-display); font-weight:700; font-size:calc(12px * var(--font-scale)); letter-spacing:.1em; padding:5px 12px; border-radius:20px; border:1px solid;}
+  .badge.vfr{color:var(--accent-vfr); border-color:color-mix(in srgb, var(--accent-vfr) 35%, transparent); background:var(--accent-vfr-dim);}
+  .badge.ifr{color:var(--accent-ifr); border-color:color-mix(in srgb, var(--accent-ifr) 35%, transparent); background:var(--accent-ifr-dim);}
+
+  .route-strip{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:14px; margin:6px 0 20px;}
+  .airport{text-align:center;}
+  .airport .icao{font-family:var(--font-mono); font-size:calc(30px * var(--font-scale)); font-weight:600; line-height:1; letter-spacing:.02em;}
+  .airport .name{font-size:calc(10.5px * var(--font-scale)); color:var(--text-secondary); margin-top:5px; max-width:120px;}
+  .route-line-wrap{position:relative; height:46px;}
+  .route-line-wrap svg{width:100%; height:100%; overflow:visible;}
+  .plane-icon{fill:var(--mode-color);}
+  .route-caption{position:absolute; top:100%; left:50%; transform:translateX(-50%); font-family:var(--font-mono); font-size:calc(10px * var(--font-scale)); color:var(--text-secondary); white-space:nowrap; margin-top:2px; max-width:100%; overflow:hidden; text-overflow:ellipsis;}
+
+  .tiles{display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:10px;}
+  .tiles.cols-2{grid-template-columns:repeat(2, 1fr);}
+  .tile{background:rgba(255,255,255,.02); border:1px solid var(--hairline); border-radius:9px; padding:10px 12px;}
+  .tile.wide{margin-bottom:10px;}
+  .tile.wide .val{font-size:calc(14px * var(--font-scale)); font-weight:500; line-height:1.4;}
+  .tile .cap{font-family:var(--font-display); font-size:calc(9.5px * var(--font-scale)); letter-spacing:.1em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:5px;}
+  .tile .val{font-family:var(--font-mono); font-size:calc(16px * var(--font-scale)); font-weight:600; color:var(--text-primary); line-height:1.2; word-break:break-word;}
+  .tile .val.accent{color:var(--mode-color);}
+
+  .notes-bar{display:flex; align-items:center; gap:10px; border-top:1px solid var(--hairline); padding-top:12px; margin-top:2px; font-size:calc(12px * var(--font-scale)); color:var(--text-secondary);}
+  .notes-bar .tag{flex:none; font-family:var(--font-display); font-weight:700; font-size:calc(10px * var(--font-scale)); letter-spacing:.08em; color:var(--mode-color); background:var(--mode-dim); padding:3px 8px; border-radius:5px;}
+  .notes-bar .txt{color:var(--text-primary);}
+
+  .brand-tag{position:absolute; right:14px; bottom:-9px; font-family:var(--font-display); font-size:9.5px; letter-spacing:.08em; color:var(--text-secondary); background:var(--cockpit-night); padding:2px 8px; border-radius:6px; border:1px solid var(--hairline);}
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="card-header" id="cardHeader">
+      <div><div class="eyebrow">Briefing de vol</div><div class="callsign" id="outCallsign">—</div></div>
+      <div class="badge vfr" id="outRules">VFR</div>
+    </div>
+    <div class="route-strip">
+      <div class="airport dep"><div class="icao" id="outDep">----</div><div class="name" id="outDepName">Aéroport de départ</div></div>
+      <div class="route-line-wrap">
+        <svg viewBox="0 0 100 30" preserveAspectRatio="none" id="routeSvg"></svg>
+        <div class="route-caption" id="outRouteCaption">—</div>
+      </div>
+      <div class="airport arr"><div class="icao" id="outArr">----</div><div class="name" id="outArrName">Aéroport d'arrivée</div></div>
+    </div>
+    <div class="tiles" id="tilesGrid">
+      <div class="tile" id="tileAircraft"><div class="cap">Appareil</div><div class="val" id="outAircraft">—</div></div>
+      <div class="tile" id="tileAltitude"><div class="cap">Niveau</div><div class="val accent" id="outAltitude">—</div></div>
+      <div class="tile" id="tileDuration"><div class="cap">Durée est.</div><div class="val accent" id="outDuration">—</div></div>
+    </div>
+    <div class="tile wide" id="tileApproach"><div class="cap" id="outApproachCap">Approche</div><div class="val" id="outApproach">—</div></div>
+    <div class="tile wide" id="tileWeather" style="margin-bottom:14px;"><div class="cap">Météo</div><div class="val" id="outWeather">—</div></div>
+    <div class="notes-bar" id="notesBar"><div class="tag">NOTES</div><div class="txt" id="outNotes">En attente de données…</div></div>
+    <div class="brand-tag hidden" id="brandTag"></div>
+  </div>
+
+<script>
+function el(id){ return document.getElementById(id); }
+
+function renderRoute(routeRaw){
+  const svg = el('routeSvg');
+  svg.querySelectorAll('.plane-icon').forEach(n => n.remove());
+  const plane = document.createElementNS('http://www.w3.org/2000/svg','path');
+  plane.setAttribute('class','plane-icon');
+  plane.setAttribute('d','M48,11 L52,15 L48,19 L49,16 L44,16 L44,14 L49,14 Z');
+  svg.appendChild(plane);
+  el('outRouteCaption').textContent = (routeRaw && routeRaw.trim()) || 'Route à définir';
+}
+
+function applyTheme(t){
+  if(!t) return;
+  const r = document.documentElement.style;
+  r.setProperty('--cockpit-night', t.bg);
+  r.setProperty('--panel-bezel', t.panel);
+  r.setProperty('--text-primary', t.text);
+  r.setProperty('--text-secondary', t.textSec);
+  r.setProperty('--accent-vfr', t.vfr);
+  r.setProperty('--accent-ifr', t.ifr);
+  r.setProperty('--font-display', t.fontDisplay);
+  r.setProperty('--font-mono', t.fontMono);
+  r.setProperty('--font-body', t.fontBody);
+  r.setProperty('--radius', t.radius + 'px');
+  r.setProperty('--font-scale', (t.fontScale || 100) / 100);
+
+  const card = el('card');
+  card.style.width = (t.cardWidth || 820) + 'px';
+  if(t.cardHeight && t.cardHeight > 0){
+    card.style.height = t.cardHeight + 'px';
+    card.style.overflow = 'hidden';
+  } else {
+    card.style.height = 'auto';
+    card.style.overflow = 'visible';
+  }
+
+  card.classList.toggle('no-glow', !t.glow);
+  card.classList.toggle('no-border', t.cardBorder === false);
+  card.classList.toggle('no-shadow', t.cardShadow === false);
+  card.classList.toggle('transparent-bg', !!t.cardTransparentBg);
+  el('cardHeader').classList.toggle('align-center', t.headerAlign === 'center');
+  el('tilesGrid').classList.toggle('cols-2', t.tileColumns === 2);
+
+  const brand = el('brandTag');
+  if(t.brandText && t.brandText.trim()){
+    brand.textContent = t.brandText.trim();
+    brand.classList.remove('hidden');
+  } else {
+    brand.classList.add('hidden');
+  }
+
+  el('tileAircraft').style.display = t.showAircraft === false ? 'none' : '';
+  el('tileAltitude').style.display = t.showAltitude === false ? 'none' : '';
+  el('tileDuration').style.display = t.showDuration === false ? 'none' : '';
+  el('tileWeather').style.display = t.showWeather === false ? 'none' : '';
+  el('tileApproach').style.display = t.showApproach === false ? 'none' : '';
+  el('notesBar').style.display = t.showNotes === false ? 'none' : '';
+}
+
+function renderState(s){
+  const rules = s.rules || 'VFR';
+  document.documentElement.style.setProperty('--mode-color', rules === 'VFR' ? 'var(--accent-vfr)' : 'var(--accent-ifr)');
+  document.documentElement.style.setProperty('--mode-dim', rules === 'VFR' ? 'var(--accent-vfr-dim)' : 'var(--accent-ifr-dim)');
+
+  el('outCallsign').textContent = s.callsign || '—';
+  const outRules = el('outRules');
+  outRules.textContent = rules;
+  outRules.className = 'badge ' + rules.toLowerCase();
+  el('outDep').textContent = (s.dep || '----').toUpperCase();
+  el('outArr').textContent = (s.arr || '----').toUpperCase();
+  el('outDepName').textContent = s.depName || 'Aéroport de départ';
+  el('outArrName').textContent = s.arrName || "Aéroport d'arrivée";
+  el('outAircraft').textContent = s.aircraft || '—';
+  el('outAltitude').textContent = s.altitude || '—';
+  el('outDuration').textContent = s.duration || '—';
+  el('outApproach').textContent = s.approach || '—';
+  el('outApproachCap').textContent = rules === 'VFR' ? 'Repères' : 'Approche';
+  el('outWeather').textContent = s.weather || '—';
+  el('outNotes').textContent = s.notes || 'Aucune note particulière.';
+
+  renderRoute(s.route);
+  applyTheme(s.theme);
+}
+
+async function poll(){
+  try{
+    const res = await fetch('/api/state', { cache:'no-store' });
+    const s = await res.json();
+    if(s && Object.keys(s).length) renderState(s);
+  }catch(e){ /* le serveur n'est pas encore prêt, on réessaie au prochain tick */ }
+}
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>FlightBrief</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@400;600;700&family=Rajdhani:wght@500;600;700&family=Oswald:wght@400;500;600&family=Chakra+Petch:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&family=Nunito+Sans:wght@400;600;700;800&family=Roboto:wght@300;400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ================= TITLEBAR CUSTOM ================= -->
+<div class="titlebar" id="titlebar">
+  <div class="titlebar-drag">
+    <img src="../build/icon.png" alt="" class="titlebar-icon">
+    <span class="titlebar-title">FlightBrief</span>
+  </div>
+  <div class="titlebar-controls" id="titlebarControls">
+    <button class="tbtn" id="tbMin" title="Réduire"><svg viewBox="0 0 10 10"><path d="M1 5h8" stroke="currentColor" stroke-width="1"/></svg></button>
+    <button class="tbtn" id="tbMax" title="Agrandir / Restaurer">
+      <svg viewBox="0 0 10 10" id="tbMaxIconRestore" class="hidden"><path d="M2.5 1.5h5v5h-5z" fill="none" stroke="currentColor" stroke-width="1"/><path d="M1.5 3.5v5h5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      <svg viewBox="0 0 10 10" id="tbMaxIconExpand"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+    </button>
+    <button class="tbtn close" id="tbClose" title="Fermer"><svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1"/></svg></button>
+  </div>
+</div>
+
+<nav class="topnav">
+  <div class="tabs" id="tabs">
+    <button data-view="briefing" class="active">Briefing</button>
+    <button data-view="logbook">Logbook</button>
+    <button data-view="career">Carrière</button>
+    <button data-view="livetool">Outil Live</button>
+    <button data-view="tools">Outils</button>
+    <button data-view="admin">Admin</button>
+    <button data-view="profil">Profil</button>
+  </div>
+</nav>
+
+<main>
+
+  <!-- ================= BRIEFING VIEW ================= -->
+  <div class="view active" id="view-briefing">
+    <div class="workspace">
+
+      <div class="panel" id="panel">
+        <div class="panel-title"><span class="dot"></span> Réglages du vol</div>
+
+        <h2>Import SimBrief</h2>
+        <div class="field">
+          <label>Pseudo SimBrief</label>
+          <div class="simbrief-row">
+            <input type="text" id="sbUsername" placeholder="ex : jdupont">
+            <button class="btn primary small" onclick="importFromSimbrief()">Importer le dernier plan de vol</button>
+          </div>
+          <div class="hint">Récupère ton dernier plan de vol SimBrief (aéroports, route, appareil, météo, durée) et l'applique directement aux champs ci-dessous. Ton pseudo est mémorisé automatiquement.</div>
+          <div class="status-msg" id="sbStatus"></div>
+        </div>
+
+        <h2>Vol</h2>
+        <div class="field">
+          <label>Type de vol</label>
+          <div class="toggle-group" id="vfrIfrToggle">
+            <button onclick="setFlightRules('VFR')">VFR</button>
+            <button onclick="setFlightRules('IFR')">IFR</button>
+          </div>
+        </div>
+        <div class="field"><label>Indicatif / N° de vol</label><input type="text" id="callsign" placeholder="ex : AFR23F ou F-HBAA"></div>
+        <div class="row2">
+          <div class="field"><label>Départ (OACI)</label><input type="text" id="depIcao" placeholder="LFPG" maxlength="4"></div>
+          <div class="field"><label>Arrivée (OACI)</label><input type="text" id="arrIcao" placeholder="LFBO" maxlength="4"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Nom aéroport départ</label><input type="text" id="depName" placeholder="Paris CDG"></div>
+          <div class="field"><label>Nom aéroport arrivée</label><input type="text" id="arrName" placeholder="Toulouse Blagnac"></div>
+        </div>
+        <div class="field"><label>Route / points de passage</label><input type="text" id="routeText" placeholder="ex : LFPG BANOX UZ29 TOU LFBO"></div>
+
+        <h2>Appareil &amp; conditions</h2>
+        <div class="field"><label>Appareil</label><input type="text" id="aircraft" placeholder="ex : A320neo — Air France"></div>
+        <div class="row2">
+          <div class="field"><label>Niveau / Altitude</label><input type="text" id="altitude" placeholder="ex : FL350"></div>
+          <div class="field"><label>Durée estimée</label><input type="text" id="duration" placeholder="ex : 1h05"></div>
+        </div>
+        <div class="field"><label id="approachLabel">Type d'approche</label><input type="text" id="approach" placeholder="ex : ILS RWY 32L"></div>
+        <div class="field"><label>Météo (résumé ou METAR)</label><textarea id="weather" placeholder="ex : Vent 250/12kt, CAVOK, QNH 1013"></textarea></div>
+        <div class="field"><label>Notes opérationnelles</label><textarea id="notes" placeholder="ex : SID BANOX 4A, piste 27R, transpondeur assigné"></textarea></div>
+
+        <div class="btn-row">
+          <button class="btn primary block" onclick="sendBriefingToLogbook()">Enregistrer ce vol dans le logbook</button>
+        </div>
+
+        <h2>Suivi du vol (SimConnect)</h2>
+        <div class="field">
+          <div class="tracking-connect-row">
+            <div class="tracking-status">
+              <span class="status-dot" id="trkStatusDot"></span>
+              <span id="trkStatusText">Non connecté</span>
+            </div>
+            <button class="btn primary small" id="trkConnectBtn" onclick="toggleTrackerConnection()">Connecter au simulateur</button>
+          </div>
+          <div class="status-msg" id="trkStatusMsg"></div>
+          <div class="hint">Connecte-toi à ton simulateur (MSFS) pour suivre ce vol en direct : la carte, la télémétrie et le rapport détaillé se complètent ci-contre et ci-dessous au fil du vol, jusqu'à l'atterrissage.</div>
+        </div>
+      </div>
+
+      <div class="card-col">
+        <div class="eyebrow" style="margin-bottom:8px;" id="liveTrackHint">Connecte-toi au simulateur ci-contre pour afficher la carte et la télémétrie en direct.</div>
+        <div class="card-panel" style="padding:0;">
+          <div class="map-shell">
+            <div id="trackMap"></div>
+            <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
+            <span class="hud-corner bl"></span><span class="hud-corner br"></span>
+          </div>
+        </div>
+        <div class="card-panel">
+          <h3>Télémétrie</h3>
+          <div class="telemetry-grid">
+            <div class="tstat"><div class="cap">Phase</div><div class="val" id="trkPhase">—</div></div>
+            <div class="tstat"><div class="cap">Altitude</div><div class="val" id="trkAlt">—</div></div>
+            <div class="tstat"><div class="cap">Vitesse (IAS)</div><div class="val" id="trkIas">—</div></div>
+            <div class="tstat"><div class="cap">Vitesse sol</div><div class="val" id="trkGs">—</div></div>
+            <div class="tstat"><div class="cap">Vario</div><div class="val" id="trkVs">—</div></div>
+            <div class="tstat"><div class="cap">Cap</div><div class="val" id="trkHdg">—</div></div>
+            <div class="tstat"><div class="cap">Fréquence radio</div><div class="val" id="trkRadio">—</div></div>
+          </div>
+          <div class="hint" style="margin-top:12px;" id="trkAircraftName"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phases + rapport détaillé qui se complètent au fil du vol (et pas seulement
+         dans la vue synthétique de l'onglet Carte du Logbook une fois le vol terminé) -->
+    <div class="live-tracking-section" id="liveTrackingSection">
+      <div class="card-panel hidden" id="liveReportPanel">
+        <h3>Rapport détaillé du vol — en direct</h3>
+        <div class="phase-legend" id="liveReportLegend"></div>
+        <h4 class="modal-subhead">Profil du vol</h4>
+        <div id="liveReportProfile"></div>
+        <h4 class="modal-subhead">Phases détaillées</h4>
+        <div style="overflow-x:auto;">
+          <table class="phase-table">
+            <thead><tr><th></th><th>Phase</th><th>Durée</th><th>Distance</th><th>Altitude</th><th>Vitesse (moy / max)</th></tr></thead>
+            <tbody id="liveReportPhaseRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card-panel tracking-result hidden" id="trkResultPanel">
+        <h3>Vol tracké terminé</h3>
+        <div class="telemetry-grid">
+          <div class="tstat"><div class="cap">Trajet estimé</div><div class="val" id="trkResRoute">—</div></div>
+          <div class="tstat"><div class="cap">Durée</div><div class="val" id="trkResDuration">—</div></div>
+          <div class="tstat"><div class="cap">Distance</div><div class="val" id="trkResDistance">—</div></div>
+          <div class="tstat"><div class="cap">Altitude max</div><div class="val" id="trkResMaxAlt">—</div></div>
+          <div class="tstat"><div class="cap">Vitesse max</div><div class="val" id="trkResMaxIas">—</div></div>
+          <div class="tstat"><div class="cap">Taux d'atterrissage</div><div class="val" id="trkResLanding">—</div></div>
+        </div>
+        <div class="btn-row" style="margin-top:14px;">
+          <button class="btn primary" onclick="applyTrackedFlightToLogbook()">Ajouter au logbook</button>
+          <button class="btn" onclick="dismissTrackedFlight()">Ignorer ce vol</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= LOGBOOK VIEW ================= -->
+  <div class="view" id="view-logbook">
+    <div class="page-head">
+      <h1>Logbook</h1>
+      <p>Historique de tous tes vols, réseau par réseau, avec le lien vers ta progression de carrière.</p>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-card"><div class="cap">Vols enregistrés</div><div class="val" id="statFlights">0</div></div>
+      <div class="stat-card"><div class="cap">Heures totales</div><div class="val" id="statHours">0h00</div></div>
+      <div class="stat-card"><div class="cap">Dernier vol</div><div class="val" id="statLast" style="font-size:16px;">—</div></div>
+    </div>
+
+    <div class="card-panel">
+      <h3 id="logbookFormTitle">Ajouter un vol</h3>
+      <div class="row3">
+        <div class="field"><label>Date</label><input type="date" id="lbDate"></div>
+        <div class="field"><label>Indicatif</label><input type="text" id="lbCallsign" placeholder="AFR23F"></div>
+        <div class="field">
+          <label>Règles</label>
+          <div class="toggle-group" id="lbRulesToggle">
+            <button onclick="setLbRules('VFR')">VFR</button>
+            <button onclick="setLbRules('IFR')">IFR</button>
+          </div>
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field"><label>Départ (OACI)</label><input type="text" id="lbDep" placeholder="LFPG" maxlength="4"></div>
+        <div class="field"><label>Arrivée (OACI)</label><input type="text" id="lbArr" placeholder="LFBO" maxlength="4"></div>
+        <div class="field"><label>Durée (hh:mm)</label><input type="text" id="lbDuration" placeholder="01:05"></div>
+      </div>
+      <div class="row3">
+        <div class="field"><label>Appareil</label><input type="text" id="lbAircraft" placeholder="A320neo"></div>
+        <div class="field">
+          <label>Réseau</label>
+          <input type="text" id="lbNetwork" list="networkList" placeholder="VATSIM, IVAO, Solo…">
+          <datalist id="networkList"><option value="VATSIM"><option value="IVAO"><option value="PilotEdge"><option value="POSCON"><option value="Solo / hors-ligne"></datalist>
+        </div>
+        <div class="field">
+          <label>Carrière liée</label>
+          <select id="lbCareer"><option value="">Aucune</option></select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Statut PIREP</label>
+          <select id="lbPirep">
+            <option value="none">Aucun</option>
+            <option value="pending">En attente</option>
+            <option value="ok">Validé</option>
+            <option value="rejected">Refusé</option>
+          </select>
+        </div>
+        <div class="field"><label>Remarques</label><input type="text" id="lbRemarks" placeholder="ex : turbulences en approche"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveLogbookEntry()">Enregistrer le vol</button>
+        <button class="btn" onclick="resetLogbookForm()">Annuler</button>
+      </div>
+    </div>
+
+    <div class="card-panel">
+      <h3>Historique</h3>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Date</th><th>Indicatif</th><th>Trajet</th><th>Appareil</th><th>Règles</th><th>Durée</th><th>Réseau</th><th>Carrière</th><th>PIREP</th><th></th></tr></thead>
+          <tbody id="logbookRows"></tbody>
+        </table>
+        <div class="empty-state" id="logbookEmpty">Aucun vol enregistré pour le moment.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CAREER VIEW ================= -->
+  <div class="view" id="view-career">
+    <div class="page-head">
+      <h1>Carrière</h1>
+      <p>Suis ta progression au sein d'une compagnie virtuelle, d'un réseau IVAO/VATSIM, ou de tout autre parcours basé sur les heures de vol.</p>
+    </div>
+
+    <div class="career-grid" id="careerGrid"></div>
+
+    <div class="tours-section" id="toursSection">
+      <h3 class="tours-heading">Tours IVAO</h3>
+      <div id="toursList"></div>
+    </div>
+
+    <div class="card-panel" id="tourPanel">
+      <h3 id="tourFormTitle">Nouveau tour</h3>
+      <div class="field">
+        <label>Carrière IVAO concernée</label>
+        <select id="tourCareerSelect"></select>
+        <div class="hint">Seules les carrières de type IVAO apparaissent ici. Crée d'abord une carrière IVAO ci-dessous si la liste est vide.</div>
+      </div>
+      <div class="field"><label>Nom du tour</label><input type="text" id="tourName" placeholder="ex : Tour d'Europe 2026"></div>
+      <div class="field">
+        <label>Étapes (une par ligne, format : OACI départ;OACI arrivée)</label>
+        <textarea id="tourLegs" placeholder="LFPG;EDDF&#10;EDDF;LOWW&#10;LOWW;LIRF" style="min-height:90px; font-family:var(--font-mono);"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="tourSaveBtn" onclick="saveTour()">Ajouter ce tour</button>
+        <button class="btn" onclick="resetTourForm()">Annuler</button>
+      </div>
+    </div>
+
+    <div class="card-panel">
+      <h3 id="careerFormTitle">Nouvelle carrière</h3>
+      <div class="row2">
+        <div class="field"><label>Nom</label><input type="text" id="carName" placeholder="ex : Air France Virtual"></div>
+        <div class="field">
+          <label>Type</label>
+          <select id="carType"><option value="VA">Compagnie virtuelle</option><option value="IVAO">IVAO</option><option value="VATSIM">VATSIM</option><option value="Autre">Autre</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Grades (un par ligne, format : Nom;heures requises)</label>
+        <textarea id="carRanks" placeholder="Cadet;0&#10;First Officer;50&#10;Captain;150&#10;Senior Captain;400" style="min-height:90px; font-family:var(--font-mono);"></textarea>
+        <div class="hint">Le premier grade doit commencer à 0 heure. Les heures totales sont calculées automatiquement à partir des vols du logbook liés à cette carrière.</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveCareer()">Enregistrer la carrière</button>
+        <button class="btn" onclick="resetCareerForm()">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= OUTIL LIVE VIEW ================= -->
+  <div class="view" id="view-livetool">
+    <div class="page-head">
+      <h1>Outil Live</h1>
+      <p>Le rendu OBS du briefing de vol, et un overlay Twitch personnalisable qui affiche ta télémétrie en direct pendant le suivi du vol (onglet Briefing).</p>
+    </div>
+
+    <div class="workspace">
+      <div class="card-col">
+        <div class="eyebrow" style="margin-bottom:8px;">Aperçu — le rendu réel est servi en direct sur l'adresse OBS ci-contre</div>
+        <div class="card" id="card">
+          <div class="card-header" id="cardHeader">
+            <div><div class="eyebrow">Briefing de vol</div><div class="callsign" id="outCallsign">—</div></div>
+            <div class="badge vfr" id="outRules">VFR</div>
+          </div>
+          <div class="route-strip">
+            <div class="airport dep"><div class="icao" id="outDep">----</div><div class="name" id="outDepName">Aéroport de départ</div></div>
+            <div class="route-line-wrap">
+              <svg viewBox="0 0 100 30" preserveAspectRatio="none" id="routeSvg"></svg>
+              <div class="route-caption" id="outRouteCaption">—</div>
+            </div>
+            <div class="airport arr"><div class="icao" id="outArr">----</div><div class="name" id="outArrName">Aéroport d'arrivée</div></div>
+          </div>
+          <div class="tiles" id="tilesGrid">
+            <div class="tile" id="tileAircraft"><div class="cap">Appareil</div><div class="val" id="outAircraft">—</div></div>
+            <div class="tile" id="tileAltitude"><div class="cap">Niveau</div><div class="val accent" id="outAltitude">—</div></div>
+            <div class="tile" id="tileDuration"><div class="cap">Durée est.</div><div class="val accent" id="outDuration">—</div></div>
+          </div>
+          <div class="tile wide" id="tileApproach"><div class="cap" id="outApproachCap">Approche</div><div class="val" id="outApproach">—</div></div>
+          <div class="tile wide" id="tileWeather" style="margin-bottom:14px;"><div class="cap">Météo</div><div class="val" id="outWeather">—</div></div>
+          <div class="notes-bar" id="notesBar"><div class="tag">NOTES</div><div class="txt" id="outNotes">Renseigne les réglages de l'onglet Briefing pour commencer.</div></div>
+          <div class="brand-tag hidden" id="brandTag"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="obsLinkPanel">
+        <div class="panel-title"><span class="dot"></span> Briefing de vol — OBS</div>
+        <h2>Lien pour OBS</h2>
+        <div class="field">
+          <label>Adresse de la source navigateur</label>
+          <div class="simbrief-row">
+            <input type="text" id="obsLink" readonly>
+            <button class="btn small" onclick="copyObsLink()">Copier</button>
+          </div>
+          <div class="status-msg" id="obsLinkStatus"></div>
+          <div class="btn-row"><button class="btn small" onclick="openObsPreview()">Aperçu dans le navigateur</button></div>
+          <div class="hint">Cette adresse est fixe tant que l'application tourne sur cette machine. Colle-la dans OBS → Source → Navigateur → URL. Elle se met à jour en direct dès que tu modifies un champ de l'onglet Briefing.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="live-tracking-section">
+      <div class="section-head-row">
+        <h2 class="section-title">Overlay Live personnalisable</h2>
+        <p class="hint">Choisis toi-même les informations affichées sur ton overlay Twitch — elles se mettent à jour en direct pendant le suivi du vol.</p>
+      </div>
+
+      <div class="workspace">
+        <div class="panel" id="liveOverlayPanel">
+          <div class="panel-title"><span class="dot"></span> Configuration de l'overlay</div>
+
+          <h2>Champs affichés</h2>
+          <div class="switch-row"><span>Indicatif</span><label class="switch"><input type="checkbox" id="loFieldCallsign" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>OACI départ / arrivée</span><label class="switch"><input type="checkbox" id="loFieldRoute" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Progression</span><label class="switch"><input type="checkbox" id="loFieldProgress" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Distance parcourue</span><label class="switch"><input type="checkbox" id="loFieldDistance" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Fréquence radio</span><label class="switch"><input type="checkbox" id="loFieldRadio" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Cap</span><label class="switch"><input type="checkbox" id="loFieldHeading" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Altitude</span><label class="switch"><input type="checkbox" id="loFieldAltitude" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Phase de vol</span><label class="switch"><input type="checkbox" id="loFieldPhase" checked><span class="slider"></span></label></div>
+
+          <h2>Style</h2>
+          <div class="field">
+            <label>Disposition</label>
+            <div class="toggle-group" id="loLayoutToggle" data-layout="bar">
+              <button onclick="setLiveOverlayLayout('bar')">Barre</button>
+              <button onclick="setLiveOverlayLayout('stack')">Bloc vertical</button>
+              <button onclick="setLiveOverlayLayout('cards')">Cartes</button>
+            </div>
+          </div>
+          <div class="swatches">
+            <div class="field"><label>Fond</label><input type="color" id="loBg"></div>
+            <div class="field"><label>Texte</label><input type="color" id="loText"></div>
+            <div class="field"><label>Accent</label><input type="color" id="loAccent"></div>
+            <div class="field"><label>Bordure</label><input type="color" id="loBorderColor"></div>
+          </div>
+          <div class="field">
+            <label>Opacité du fond</label>
+            <div class="range-row"><input type="range" id="loBgOpacity" min="0" max="100" step="5"><span class="val-label" id="loBgOpacityVal">78%</span></div>
+          </div>
+          <div class="field">
+            <label>Police</label>
+            <select id="loFont">
+              <option value="'Space Grotesk',sans-serif">Space Grotesk</option>
+              <option value="'Sora',sans-serif">Sora</option>
+              <option value="'Rajdhani',sans-serif">Rajdhani</option>
+              <option value="'Oswald',sans-serif">Oswald</option>
+              <option value="'Chakra Petch',sans-serif">Chakra Petch</option>
+              <option value="'Barlow Condensed',sans-serif">Barlow Condensed</option>
+              <option value="'Evogria','Space Grotesk',sans-serif">Evogria (police perso)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Taille</label>
+            <div class="range-row"><input type="range" id="loScale" min="70" max="160" step="5"><span class="val-label" id="loScaleVal">100%</span></div>
+          </div>
+          <div class="field">
+            <label>Rayon des angles</label>
+            <div class="range-row"><input type="range" id="loRadius" min="0" max="28" step="1"><span class="val-label" id="loRadiusVal">12px</span></div>
+          </div>
+          <div class="field">
+            <label>Espacement entre les champs</label>
+            <div class="range-row"><input type="range" id="loGap" min="0" max="24" step="1"><span class="val-label" id="loGapVal">1px</span></div>
+          </div>
+          <div class="switch-row"><span>Bordure</span><label class="switch"><input type="checkbox" id="loBorder" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Ombre portée</span><label class="switch"><input type="checkbox" id="loShadow" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Flou d'arrière-plan (verre dépoli)</span><label class="switch"><input type="checkbox" id="loBlur" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Séparateurs entre les champs (mode barre)</span><label class="switch"><input type="checkbox" id="loDivider" checked><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Icônes</span><label class="switch"><input type="checkbox" id="loIcons"><span class="slider"></span></label></div>
+          <div class="switch-row"><span>Valeurs en majuscules</span><label class="switch"><input type="checkbox" id="loUppercase"><span class="slider"></span></label></div>
+
+          <h2>Libellés personnalisés</h2>
+          <div class="hint" style="margin-top:-4px; margin-bottom:10px;">Renomme chaque champ comme tu veux (ex : "Cap" → "HDG").</div>
+          <div class="field"><label>Indicatif</label><input type="text" id="loLabel_callsign" placeholder="Indicatif"></div>
+          <div class="field"><label>Trajet</label><input type="text" id="loLabel_route" placeholder="Trajet"></div>
+          <div class="field"><label>Phase</label><input type="text" id="loLabel_phase" placeholder="Phase"></div>
+          <div class="field"><label>Altitude</label><input type="text" id="loLabel_altitude" placeholder="Altitude"></div>
+          <div class="field"><label>Cap</label><input type="text" id="loLabel_heading" placeholder="Cap"></div>
+          <div class="field"><label>Fréquence radio</label><input type="text" id="loLabel_radio" placeholder="Fréquence radio"></div>
+          <div class="field"><label>Distance</label><input type="text" id="loLabel_distance" placeholder="Distance"></div>
+          <div class="field"><label>Progression</label><input type="text" id="loLabel_progress" placeholder="Progression"></div>
+
+          <h2>Lien pour OBS</h2>
+          <div class="field">
+            <label>Adresse de la source navigateur</label>
+            <div class="simbrief-row">
+              <input type="text" id="liveOverlayLink" readonly>
+              <button class="btn small" onclick="copyLiveOverlayLink()">Copier</button>
+            </div>
+            <div class="status-msg" id="liveOverlayLinkStatus"></div>
+            <div class="btn-row"><button class="btn small" onclick="openLiveOverlayPreview()">Aperçu dans le navigateur</button></div>
+            <div class="hint">Colle cette adresse dans OBS → Source → Navigateur → URL. C'est une adresse différente de celle du briefing ci-dessus. Elle affiche automatiquement la télémétrie du vol suivi dans l'onglet Briefing.</div>
+          </div>
+        </div>
+
+        <div class="card-col">
+          <div class="eyebrow" style="margin-bottom:8px;">Aperçu — overlay Twitch (données live si un vol est suivi)</div>
+          <div class="live-overlay-preview-shell">
+            <div class="lo-bar" id="loPreviewBar"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TOOLS VIEW ================= -->
+  <div class="view" id="view-tools">
+    <div class="page-head">
+      <h1>Outils</h1>
+      <p>Calculateurs de vol rapides — temps/distance/vitesse, carburant &amp; autonomie, top of descent, et une estimation IAS → TAS. Rien n'est enregistré, ce sont de simples calculatrices.</p>
+    </div>
+
+    <div class="tools-grid">
+      <!-- Temps / Distance / Vitesse -->
+      <div class="card-panel">
+        <h3>Temps · Distance · Vitesse</h3>
+        <div class="field">
+          <label>Calculer</label>
+          <select id="tdsSolveFor">
+            <option value="time">La durée</option>
+            <option value="speed">La vitesse sol</option>
+            <option value="distance">La distance</option>
+          </select>
+        </div>
+        <div class="row3">
+          <div class="field"><label>Distance (NM)</label><input type="number" id="tdsDistance" min="0" step="0.1" placeholder="120"></div>
+          <div class="field"><label>Vitesse sol (kt)</label><input type="number" id="tdsSpeed" min="0" step="1" placeholder="140"></div>
+          <div class="field"><label>Durée (hh:mm)</label><input type="text" id="tdsTime" placeholder="0h51"></div>
+        </div>
+        <div class="tool-result" id="tdsResult">Renseigne les deux champs nécessaires.</div>
+      </div>
+
+      <!-- Carburant & autonomie -->
+      <div class="card-panel">
+        <h3>Carburant &amp; autonomie</h3>
+        <div class="field">
+          <label>Mode</label>
+          <div class="toggle-group" id="fuelModeToggle">
+            <button onclick="setFuelMode('endurance')">Autonomie</button>
+            <button onclick="setFuelMode('required')">Carburant nécessaire</button>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Consommation horaire</label><input type="number" id="fuelFlow" min="0" step="0.1" placeholder="ex : 32"></div>
+          <div class="field" id="fuelOnboardField"><label>Carburant à bord</label><input type="number" id="fuelOnboard" min="0" step="0.1" placeholder="ex : 160"></div>
+          <div class="field hidden" id="fuelDurationField"><label>Durée de vol prévue (hh:mm)</label><input type="text" id="fuelDuration" placeholder="2h30"></div>
+        </div>
+        <div class="field"><label>Réserve souhaitée (minutes)</label><input type="number" id="fuelReserve" min="0" step="5" value="45"></div>
+        <div class="hint">Peu importe l'unité (kg, lbs, gallons…) — utilise juste la même partout, le calcul est un simple ratio.</div>
+        <div class="tool-result" id="fuelResult">Renseigne les champs ci-dessus.</div>
+      </div>
+
+      <!-- Top of Descent -->
+      <div class="card-panel">
+        <h3>Top of Descent</h3>
+        <div class="row2">
+          <div class="field"><label>Altitude de croisière (ft)</label><input type="number" id="todCruiseAlt" min="0" step="100" placeholder="35000"></div>
+          <div class="field"><label>Altitude cible (ft)</label><input type="number" id="todTargetAlt" min="0" step="100" placeholder="2000"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Vitesse sol en descente (kt)</label><input type="number" id="todGs" min="0" step="5" placeholder="250"></div>
+          <div class="field"><label>Taux de descente visé (ft/min)</label><input type="number" id="todVs" min="0" step="50" placeholder="1000"></div>
+        </div>
+        <div class="tool-result" id="todResult">Renseigne les champs ci-dessus.</div>
+      </div>
+
+      <!-- IAS -> TAS -->
+      <div class="card-panel">
+        <h3>IAS → TAS (approximation)</h3>
+        <div class="row2">
+          <div class="field"><label>Vitesse indiquée — IAS (kt)</label><input type="number" id="tasIas" min="0" step="1" placeholder="250"></div>
+          <div class="field"><label>Altitude pression (ft)</label><input type="number" id="tasAlt" min="0" step="100" placeholder="35000"></div>
+        </div>
+        <div class="hint">Estimation ISA rapide (≈ +2 % de TAS par 1000 ft) — pratique pour une planification, pas pour la navigation réelle.</div>
+        <div class="tool-result" id="tasResult">Renseigne les champs ci-dessus.</div>
+      </div>
+
+      <!-- Entrée en hold -->
+      <div class="card-panel">
+        <h3>Entrée en hold (attente)</h3>
+        <div class="row2">
+          <div class="field"><label>Cap d'insertion (cap inbound vers le fix)</label><input type="number" id="holdIc" min="0" max="360" step="1" placeholder="309"></div>
+          <div class="field"><label>Cap actuel de l'avion</label><input type="number" id="holdHdg" min="0" max="360" step="1" placeholder="090"></div>
+        </div>
+        <div class="field">
+          <label>Sens des virages du hold</label>
+          <div class="toggle-group" id="holdTurnToggle" data-dir="R">
+            <button onclick="setHoldTurn('R')">Droite (standard)</button>
+            <button onclick="setHoldTurn('L')">Gauche</button>
+          </div>
+        </div>
+        <div class="hold-panel">
+          <div id="holdDiagram"></div>
+          <div class="tool-result" id="holdResult" style="flex:1;">Renseigne les caps ci-dessus.</div>
+        </div>
+        <div class="hint">Secteurs standard : direct 180°, teardrop 70°, parallèle 110° — comme sur l'Easy Entry Tool IVAO FR.</div>
+      </div>
+
+      <!-- Tour de piste -->
+      <div class="card-panel">
+        <h3>Tour de piste</h3>
+        <div class="field"><label>Cap de piste (axe — ex : piste 27 → 270°)</label><input type="number" id="patRwyHdg" min="0" max="360" step="1" placeholder="270"></div>
+        <div class="field">
+          <label>Sens du circuit</label>
+          <div class="toggle-group" id="patTurnToggle" data-dir="L">
+            <button onclick="setPatTurn('L')">Gauche (standard)</button>
+            <button onclick="setPatTurn('R')">Droite</button>
+          </div>
+        </div>
+        <div class="telemetry-grid">
+          <div class="tstat"><div class="cap">Vent traversier</div><div class="val" id="patCrosswind">—</div></div>
+          <div class="tstat"><div class="cap">Vent arrière</div><div class="val" id="patDownwind">—</div></div>
+          <div class="tstat"><div class="cap">Base</div><div class="val" id="patBase">—</div></div>
+          <div class="tstat"><div class="cap">Finale</div><div class="val" id="patFinal">—</div></div>
+        </div>
+      </div>
+
+      <!-- Convertisseur d'unités -->
+      <div class="card-panel">
+        <h3>Convertisseur d'unités</h3>
+        <div class="field">
+          <label>Catégorie</label>
+          <select id="convCategory">
+            <option value="poids">Poids</option>
+            <option value="distance">Distance</option>
+            <option value="vitesse">Vitesse</option>
+            <option value="pression">Pression</option>
+          </select>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Valeur</label><input type="number" id="convValueA" step="any" placeholder="1"></div>
+          <div class="field"><label>Unité</label><select id="convUnitA"></select></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Valeur convertie</label><input type="number" id="convValueB" step="any" placeholder="0"></div>
+          <div class="field"><label>Unité</label><select id="convUnitB"></select></div>
+        </div>
+        <div class="hint">Modifie n'importe quel champ (valeur ou unité) : l'autre se met à jour automatiquement.</div>
+      </div>
+
+      <!-- METAR / TAF -->
+      <div class="card-panel tool-wide">
+        <h3>METAR / TAF</h3>
+        <div class="simbrief-row">
+          <input type="text" id="wxIcao" placeholder="ex : LFPG" maxlength="4" style="text-transform:uppercase;">
+          <button class="btn primary small" onclick="fetchWx()">Récupérer</button>
+        </div>
+        <div class="status-msg" id="wxStatus"></div>
+        <div id="wxResult"></div>
+        <div class="hint" style="margin-top:8px;">Source : aviationweather.gov (NOAA), données publiques en temps réel. Tous les aéroports ne publient pas de TAF.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ADMIN VIEW ================= -->
+  <div class="view" id="view-admin">
+    <div class="page-head">
+      <h1>Admin — Personnalisation</h1>
+      <p>Adapte les couleurs, les polices et la disposition de la carte de briefing à ton identité de chaîne.</p>
+    </div>
+
+    <div class="card-panel">
+      <h3>Thèmes prédéfinis</h3>
+      <div class="theme-preset-grid" id="themePresets"></div>
+      <div class="hint" style="margin-top:10px;">Appliquer un thème remplace couleurs, polices et disposition ci-dessous — tu peux ensuite les affiner librement.</div>
+    </div>
+
+    <div class="admin-grid">
+      <div class="card-panel">
+        <h3>Couleurs</h3>
+        <div class="swatches">
+          <div class="field"><label>Fond</label><input type="color" id="thBg"></div>
+          <div class="field"><label>Panneau</label><input type="color" id="thPanel"></div>
+          <div class="field"><label>Texte principal</label><input type="color" id="thText"></div>
+          <div class="field"><label>Texte secondaire</label><input type="color" id="thTextSec"></div>
+          <div class="field"><label>Accent VFR</label><input type="color" id="thVfr"></div>
+          <div class="field"><label>Accent IFR</label><input type="color" id="thIfr"></div>
+        </div>
+      </div>
+
+      <div class="card-panel">
+        <h3>Typographie</h3>
+        <div class="field">
+          <label>Police des titres / labels</label>
+          <select id="thFontDisplay">
+            <option value="'Space Grotesk',sans-serif">Space Grotesk</option>
+            <option value="'Sora',sans-serif">Sora</option>
+            <option value="'Rajdhani',sans-serif">Rajdhani</option>
+            <option value="'Oswald',sans-serif">Oswald</option>
+            <option value="'Chakra Petch',sans-serif">Chakra Petch</option>
+            <option value="'Barlow Condensed',sans-serif">Barlow Condensed</option>
+            <option value="'Evogria','Space Grotesk',sans-serif">Evogria (police perso)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Police des données (indicatif, ICAO, chiffres)</label>
+          <select id="thFontMono">
+            <option value="'IBM Plex Mono',monospace">IBM Plex Mono</option>
+            <option value="'JetBrains Mono',monospace">JetBrains Mono</option>
+            <option value="'Roboto Mono',monospace">Roboto Mono</option>
+            <option value="'Space Mono',monospace">Space Mono</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Police du texte courant</label>
+          <select id="thFontBody">
+            <option value="'Inter',sans-serif">Inter</option>
+            <option value="'Manrope',sans-serif">Manrope</option>
+            <option value="'Work Sans',sans-serif">Work Sans</option>
+            <option value="'Nunito Sans',sans-serif">Nunito Sans</option>
+            <option value="'Roboto',sans-serif">Roboto</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card-panel">
+        <h3>Disposition de la carte</h3>
+        <div class="row2">
+          <div class="field"><label>Largeur (px)</label><input type="number" id="thWidth" min="300" max="3000" step="10"></div>
+          <div class="field"><label>Hauteur (px)</label><input type="number" id="thHeight" min="0" max="2000" step="10"></div>
+        </div>
+        <div class="hint" style="margin-top:-6px; margin-bottom:10px;">Hauteur à 0 = automatique selon le contenu affiché. Sinon, le contenu qui dépasse est masqué (utile pour caler exactement la source OBS).</div>
+        <div class="field">
+          <label>Taille du texte</label>
+          <div class="range-row"><input type="range" id="thFontScale" min="70" max="160" step="5"><span class="val-label" id="thFontScaleVal">100%</span></div>
+        </div>
+        <div class="field">
+          <label>Rayon des angles</label>
+          <div class="range-row"><input type="range" id="thRadius" min="0" max="28" value="10"><span class="val-label" id="thRadiusVal">10px</span></div>
+        </div>
+        <div class="switch-row"><span>Halo lumineux sur les accents</span><label class="switch"><input type="checkbox" id="thGlow" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Bordure de la carte</span><label class="switch"><input type="checkbox" id="thCardBorder" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Ombre portée</span><label class="switch"><input type="checkbox" id="thCardShadow" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Fond transparent (texte flottant)</span><label class="switch"><input type="checkbox" id="thCardTransparentBg"><span class="slider"></span></label></div>
+        <div class="field">
+          <label>Alignement de l'en-tête</label>
+          <div class="toggle-group" id="thHeaderAlignToggle" data-align="left">
+            <button onclick="setHeaderAlign('left')">Gauche</button>
+            <button onclick="setHeaderAlign('center')">Centré</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Colonnes des cases (Appareil / Niveau / Durée)</label>
+          <div class="toggle-group" id="thTileColumnsToggle" data-cols="3">
+            <button onclick="setTileColumns(2)">2 colonnes</button>
+            <button onclick="setTileColumns(3)">3 colonnes</button>
+          </div>
+        </div>
+        <div class="field"><label>Texte de marque (watermark, ex : @tonpseudo)</label><input type="text" id="thBrandText" placeholder="ex : twitch.tv/tonpseudo"></div>
+        <div class="switch-row"><span>Case Appareil</span><label class="switch"><input type="checkbox" id="thShowAircraft" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Case Niveau</span><label class="switch"><input type="checkbox" id="thShowAltitude" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Case Durée</span><label class="switch"><input type="checkbox" id="thShowDuration" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Case Approche / Repères</span><label class="switch"><input type="checkbox" id="thShowApproach" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Case Météo</span><label class="switch"><input type="checkbox" id="thShowWeather" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Barre de notes</span><label class="switch"><input type="checkbox" id="thShowNotes" checked><span class="slider"></span></label></div>
+      </div>
+
+      <div class="card-panel">
+        <h3>Données</h3>
+        <p class="hint" style="margin-bottom:10px;">Toutes les données (logbook, carrières, thème) sont enregistrées automatiquement dans un fichier sur cet ordinateur :</p>
+        <div class="field"><input type="text" id="dataPathDisplay" readonly style="font-size:11px;"></div>
+        <div class="btn-row"><button class="btn block" onclick="resetTheme()">Réinitialiser le thème par défaut</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= PROFIL VIEW ================= -->
+  <div class="view" id="view-profil">
+    <div class="page-head">
+      <h1>Profil</h1>
+      <p>Ton identité de pilote virtuel, et toutes les statistiques calculées à partir de ton logbook.</p>
+    </div>
+
+    <div class="workspace">
+      <div class="panel" id="profilPanel">
+        <div class="panel-title"><span class="dot"></span> Identité</div>
+        <div class="field"><label>Prénom</label><input type="text" id="pfFirstName" placeholder="ex : Alex"></div>
+        <div class="field">
+          <label>Réseau préféré</label>
+          <select id="pfNetwork">
+            <option value="">Non renseigné</option>
+            <option value="VATSIM">VATSIM</option>
+            <option value="IVAO">IVAO</option>
+            <option value="PilotEdge">PilotEdge</option>
+            <option value="POSCON">POSCON</option>
+            <option value="Offline">Hors ligne</option>
+          </select>
+        </div>
+        <div class="row2">
+          <div class="field"><label>VID VATSIM</label><input type="text" id="pfVatsimId" placeholder="ex : 1234567"></div>
+          <div class="field"><label>VID IVAO</label><input type="text" id="pfIvaoId" placeholder="ex : 123456"></div>
+        </div>
+        <div class="field"><label>Pseudo Twitch</label><input type="text" id="pfTwitchHandle" placeholder="ex : tonpseudo"></div>
+        <div class="field"><label>Aéroport de base (OACI)</label><input type="text" id="pfHomeBase" placeholder="ex : LFPG" maxlength="4"></div>
+        <div class="btn-row">
+          <button class="btn primary block" onclick="saveUserProfile()">Enregistrer le profil</button>
+        </div>
+        <div class="status-msg" id="pfStatus"></div>
+
+        <h2>Visite guidée</h2>
+        <div class="btn-row"><button class="btn block" onclick="startTour()">Revoir la visite guidée</button></div>
+      </div>
+
+      <div class="card-col">
+        <div class="eyebrow" style="margin-bottom:8px;">Statistiques — calculées à partir de ton logbook</div>
+        <div class="stat-row" id="pfStatRow">
+          <div class="stat-card"><div class="cap">Vols enregistrés</div><div class="val" id="pfStatFlights">0</div></div>
+          <div class="stat-card"><div class="cap">Heures de vol</div><div class="val" id="pfStatHours">0h</div></div>
+          <div class="stat-card"><div class="cap">Distance totale</div><div class="val" id="pfStatDistance" style="font-size:18px;">0 NM</div></div>
+          <div class="stat-card"><div class="cap">Vol le plus long</div><div class="val" id="pfStatLongest" style="font-size:18px;">—</div></div>
+        </div>
+
+        <div class="card-panel">
+          <h3>VFR / IFR</h3>
+          <div class="progress-track" id="pfRulesBar"><div class="progress-fill" id="pfRulesFill" style="width:0%"></div></div>
+          <div class="hint" id="pfRulesLabel" style="margin-top:8px;">Aucun vol enregistré pour l'instant.</div>
+        </div>
+
+        <div class="card-panel">
+          <h3>Appareils les plus utilisés</h3>
+          <div id="pfTopAircraft" class="top-list"></div>
+        </div>
+
+        <div class="card-panel">
+          <h3>Aéroports les plus visités</h3>
+          <div id="pfTopAirports" class="top-list"></div>
+        </div>
+
+        <div class="card-panel">
+          <h3>Répartition par réseau</h3>
+          <div id="pfTopNetworks" class="top-list"></div>
+        </div>
+
+        <div class="card-panel">
+          <h3>Carrières</h3>
+          <div id="pfCareersSummary" class="top-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="app-footer">Application Vibe codée par LLCenLive avec Claude Sonnet 5</footer>
+
+<!-- ================= MODALE CARTE DE TRAJET (logbook) ================= -->
+<div class="modal-overlay hidden" id="routeModalOverlay" onclick="if(event.target===this) closeRouteModal()">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <h3 id="routeModalTitle">Trajet du vol</h3>
+      <button class="icon-btn" onclick="closeRouteModal()">Fermer</button>
+    </div>
+    <div class="map-shell">
+      <div id="routeModalMap"></div>
+      <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
+      <span class="hud-corner bl"></span><span class="hud-corner br"></span>
+    </div>
+    <div class="phase-legend" id="routeModalLegend"></div>
+    <div class="telemetry-grid" id="routeModalStats" style="margin-top:12px;"></div>
+
+    <div id="routeModalDetailed" class="hidden">
+      <h4 class="modal-subhead">Profil du vol</h4>
+      <div id="routeModalProfile"></div>
+
+      <h4 class="modal-subhead">Phases détaillées</h4>
+      <div style="overflow-x:auto;">
+        <table class="phase-table">
+          <thead><tr><th></th><th>Phase</th><th>Durée</th><th>Distance</th><th>Altitude</th><th>Vitesse (moy / max)</th></tr></thead>
+          <tbody id="routeModalPhaseRows"></tbody>
+        </table>
+      </div>
+
+      <h4 class="modal-subhead">Toucher des roues</h4>
+      <div id="routeModalTouchdown"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODALE D'ACCUEIL (premier lancement) ================= -->
+<div class="modal-overlay hidden" id="onboardingModalOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Bienvenue dans FlightBrief 👋</h3>
+    </div>
+    <p class="hint" style="margin-bottom:14px;">Quelques infos pour personnaliser ton expérience — tout est facultatif et modifiable plus tard depuis l'onglet Profil.</p>
+    <div class="field"><label>Prénom</label><input type="text" id="obFirstName" placeholder="ex : Alex"></div>
+    <div class="field">
+      <label>Réseau préféré</label>
+      <select id="obNetwork">
+        <option value="">Non renseigné</option>
+        <option value="VATSIM">VATSIM</option>
+        <option value="IVAO">IVAO</option>
+        <option value="PilotEdge">PilotEdge</option>
+        <option value="POSCON">POSCON</option>
+        <option value="Offline">Hors ligne</option>
+      </select>
+    </div>
+    <div class="row2">
+      <div class="field"><label>VID VATSIM</label><input type="text" id="obVatsimId" placeholder="ex : 1234567"></div>
+      <div class="field"><label>VID IVAO</label><input type="text" id="obIvaoId" placeholder="ex : 123456"></div>
+    </div>
+    <div class="field"><label>Pseudo Twitch</label><input type="text" id="obTwitchHandle" placeholder="ex : tonpseudo"></div>
+    <div class="field"><label>Aéroport de base (OACI)</label><input type="text" id="obHomeBase" placeholder="ex : LFPG" maxlength="4"></div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn primary block" onclick="completeOnboarding(true)">Commencer &amp; visiter l'appli</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn block" onclick="completeOnboarding(false)">Plus tard</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= VISITE GUIDÉE ================= -->
+<div class="tour-spotlight hidden" id="tourSpotlight"></div>
+<div class="tour-tooltip hidden" id="tourTooltip">
+  <div class="tour-step-label" id="tourStepLabel">Étape 1/7</div>
+  <h4 id="tourTitle">Bienvenue</h4>
+  <p id="tourText"></p>
+  <div class="tour-actions">
+    <button class="btn small" onclick="tourSkip()">Passer</button>
+    <div class="tour-actions-right">
+      <button class="btn small" id="tourPrevBtn" onclick="tourPrev()">Précédent</button>
+      <button class="btn primary small" id="tourNextBtn" onclick="tourNext()">Suivant</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

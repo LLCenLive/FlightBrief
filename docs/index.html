@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlightBrief — Téléchargement</title>
+<meta name="description" content="FlightBrief : briefing de vol, logbook, carrière et overlays OBS en direct pour les créateurs de contenu simu aérienne. Télécharge l'installeur pour Windows, macOS ou Linux.">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --night:#0a0d11; --panel:#12171c; --panel-2:#161c22;
+    --text:#e7edf2; --text-sec:#7c8894; --hairline:rgba(231,237,242,.09);
+    --phosphor:#39e88f; --phosphor-dim:rgba(57,232,143,.14);
+    --amber:#ffb020; --amber-dim:rgba(255,176,32,.14);
+    --cyan:#54d6e8;
+    --font-display:'Space Grotesk',sans-serif; --font-mono:'IBM Plex Mono',monospace; --font-body:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{animation-duration:.01ms !important; transition-duration:.01ms !important;} }
+  body{margin:0; background:var(--night); color:var(--text); font-family:var(--font-body); line-height:1.5; -webkit-font-smoothing:antialiased;}
+  a{color:inherit;}
+  :focus-visible{outline:2px solid var(--phosphor); outline-offset:3px;}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 24px;}
+  .eyebrow{font-family:var(--font-display); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-sec);}
+
+  /* ---------------- Nav ---------------- */
+  nav.top{display:flex; align-items:center; justify-content:space-between; padding:20px 0;}
+  nav.top .brand{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:16px; letter-spacing:.02em;}
+  nav.top .brand .dot{width:9px; height:9px; border-radius:50%; background:var(--phosphor); box-shadow:0 0 10px var(--phosphor);}
+  nav.top .links{display:flex; gap:26px; font-family:var(--font-display); font-size:12.5px; font-weight:600; letter-spacing:.03em;}
+  nav.top .links a{text-decoration:none; color:var(--text-sec); transition:color .15s;}
+  nav.top .links a:hover{color:var(--text);}
+
+  /* ---------------- Hero : mise en page façon carte de briefing ---------------- */
+  .hero{padding:56px 0 70px; display:grid; grid-template-columns:1fr; gap:40px;}
+  @media (min-width:920px){ .hero{grid-template-columns:1.05fr 1fr; align-items:center;} }
+  .hero-copy h1{font-family:var(--font-display); font-size:clamp(34px,5vw,52px); line-height:1.05; margin:14px 0 18px; letter-spacing:-.01em;}
+  .hero-copy h1 .accent{color:var(--phosphor);}
+  .hero-copy p{color:var(--text-sec); font-size:16px; max-width:46ch; margin:0 0 30px;}
+  .hero-actions{display:flex; flex-wrap:wrap; gap:12px;}
+
+  .btn{font-family:var(--font-display); font-weight:600; font-size:13px; letter-spacing:.03em; padding:13px 22px; border-radius:9px; text-decoration:none; display:inline-flex; align-items:center; gap:9px; border:1px solid var(--hairline); transition:transform .12s, border-color .12s, background .12s;}
+  .btn:hover{transform:translateY(-1px);}
+  .btn.primary{background:var(--phosphor); color:#04120b; border-color:var(--phosphor);}
+  .btn.primary:hover{background:#4dfa9f;}
+  .btn.ghost{background:transparent; color:var(--text);}
+  .btn.ghost:hover{border-color:var(--text-sec);}
+  .btn .sub{opacity:.7; font-weight:400;}
+
+  /* La carte hero réutilise exactement le style de la carte de briefing produite
+     par l'application elle-même (voir renderer/obs.html) : c'est la signature
+     visuelle du projet, pas un habillage générique. */
+  .brief-card{position:relative; background:linear-gradient(180deg, var(--panel) 0%, var(--night) 100%); border:1px solid var(--hairline); border-radius:14px; padding:24px 26px 20px; box-shadow:0 30px 80px rgba(0,0,0,.5);}
+  .brief-card:before{content:"";position:absolute; inset:0; border-radius:14px; pointer-events:none; box-shadow:inset 0 0 0 1px rgba(255,255,255,.02), inset 0 1px 0 rgba(255,255,255,.05);}
+  .brief-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;}
+  .brief-head .callsign{font-family:var(--font-mono); font-weight:600; font-size:21px; letter-spacing:.03em;}
+  .badge{font-family:var(--font-display); font-weight:700; font-size:11.5px; letter-spacing:.09em; padding:5px 12px; border-radius:20px; border:1px solid color-mix(in srgb, var(--phosphor) 35%, transparent); color:var(--phosphor); background:var(--phosphor-dim);}
+  .route-strip{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:14px; margin:4px 0 20px;}
+  .route-strip .airport{text-align:center;}
+  .route-strip .icao{font-family:var(--font-mono); font-size:26px; font-weight:600;}
+  .route-strip .name{font-size:10px; color:var(--text-sec); margin-top:4px; letter-spacing:.02em;}
+  .route-line{position:relative; height:2px; background:linear-gradient(90deg, var(--hairline), var(--phosphor), var(--hairline));}
+  .route-line .plane{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:13px; color:var(--phosphor); background:var(--panel); padding:0 6px;}
+  .tiles{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px;}
+  .tile{background:rgba(255,255,255,.02); border:1px solid var(--hairline); border-radius:9px; padding:10px 12px;}
+  .tile .cap{font-family:var(--font-display); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-sec); margin-bottom:5px;}
+  .tile .val{font-family:var(--font-mono); font-size:15px; font-weight:600;}
+  .tile .val.accent{color:var(--phosphor);}
+  .notes-bar{display:flex; gap:10px; border-top:1px solid var(--hairline); padding-top:12px; font-size:12px; color:var(--text-sec);}
+  .notes-bar .tag{flex:none; font-family:var(--font-display); font-weight:700; font-size:9.5px; letter-spacing:.08em; color:var(--phosphor); background:var(--phosphor-dim); padding:3px 8px; border-radius:5px; height:fit-content;}
+
+  /* ---------------- Téléchargement ---------------- */
+  .dl-section{padding:10px 0 64px;}
+  .dl-panel{background:var(--panel); border:1px solid var(--hairline); border-radius:16px; padding:30px 30px 26px;}
+  .dl-panel-head{display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:22px;}
+  .dl-panel-head h2{font-family:var(--font-display); font-size:18px; margin:0;}
+  .dl-version{font-family:var(--font-mono); font-size:12.5px; color:var(--text-sec);}
+  .dl-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px;}
+  .dl-card{background:var(--panel-2); border:1px solid var(--hairline); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:10px;}
+  .dl-card.recommended{border-color:color-mix(in srgb, var(--phosphor) 45%, transparent); box-shadow:0 0 0 1px color-mix(in srgb, var(--phosphor) 20%, transparent);}
+  .dl-card .os-name{font-family:var(--font-display); font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px;}
+  .dl-card .os-name .rec-tag{font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--phosphor); background:var(--phosphor-dim); padding:2px 7px; border-radius:5px; font-weight:700;}
+  .dl-card .fmt{font-size:11.5px; color:var(--text-sec); font-family:var(--font-mono);}
+  .dl-card .btn{justify-content:center; margin-top:4px;}
+  .dl-status{font-size:12.5px; color:var(--text-sec); margin-top:16px;}
+  .dl-status a{color:var(--phosphor); text-decoration:none;}
+  .dl-status a:hover{text-decoration:underline;}
+
+  /* ---------------- Fonctionnalités ---------------- */
+  .features{padding:20px 0 70px;}
+  .features h2{font-family:var(--font-display); font-size:26px; margin:0 0 8px;}
+  .features > p{color:var(--text-sec); margin:0 0 34px; max-width:60ch;}
+  .feat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px;}
+  .feat-card{background:var(--panel); border:1px solid var(--hairline); border-radius:13px; padding:20px;}
+  .feat-card .glyph{width:30px; height:30px; border-radius:8px; background:var(--phosphor-dim); color:var(--phosphor); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:600; font-size:14px; margin-bottom:14px;}
+  .feat-card h3{font-family:var(--font-display); font-size:14.5px; margin:0 0 8px;}
+  .feat-card p{font-size:13px; color:var(--text-sec); margin:0; line-height:1.55;}
+
+  /* ---------------- Footer ---------------- */
+  footer{border-top:1px solid var(--hairline); padding:26px 0 40px;}
+  footer .wrap{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:14px;}
+  footer .legal{font-size:12px; color:var(--text-sec);}
+  footer .flinks{display:flex; gap:20px; font-size:12.5px;}
+  footer .flinks a{text-decoration:none; color:var(--text-sec);}
+  footer .flinks a:hover{color:var(--text);}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="top">
+    <div class="brand"><span class="dot"></span> FlightBrief</div>
+    <div class="links">
+      <a href="#telecharger">Télécharger</a>
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a id="repoLink" href="#" target="_blank" rel="noopener">Code source</a>
+    </div>
+  </nav>
+</div>
+
+<header class="wrap hero">
+  <div class="hero-copy">
+    <div class="eyebrow">Application de bureau — Windows · macOS · Linux</div>
+    <h1>Le briefing de vol de <span class="accent">tes streams</span>, prêt en un clic.</h1>
+    <p>Briefing, logbook, progression de carrière et suivi de vol en direct — avec deux overlays OBS entièrement personnalisables. Gratuit et open source.</p>
+    <div class="hero-actions">
+      <a class="btn primary" href="#telecharger">Télécharger <span class="sub">— gratuit</span></a>
+      <a class="btn ghost" id="repoLinkGhost" href="#" target="_blank" rel="noopener">Voir le code sur GitHub</a>
+    </div>
+  </div>
+
+  <div class="brief-card" aria-hidden="true">
+    <div class="brief-head">
+      <div><div class="eyebrow">Briefing de vol</div><div class="callsign">FLIGHTBRIEF</div></div>
+      <div class="badge">OPEN SOURCE</div>
+    </div>
+    <div class="route-strip">
+      <div class="airport"><div class="icao">DEV</div><div class="name">Poste de développement</div></div>
+      <div class="route-line"><span class="plane">✈</span></div>
+      <div class="airport"><div class="icao">LIVE</div><div class="name">Ton stream</div></div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="cap">Version</div><div class="val" id="cardVersion">—</div></div>
+      <div class="tile"><div class="cap">Plateformes</div><div class="val accent">3</div></div>
+      <div class="tile"><div class="cap">Licence</div><div class="val accent">MIT</div></div>
+    </div>
+    <div class="notes-bar"><div class="tag">NOTES</div><div>Deux sources OBS, un logbook complet, et un suivi de vol en direct via SimConnect.</div></div>
+  </div>
+</header>
+
+<section class="dl-section wrap" id="telecharger">
+  <div class="dl-panel">
+    <div class="dl-panel-head">
+      <h2>Télécharger FlightBrief</h2>
+      <div class="dl-version" id="versionLabel">Recherche de la dernière version…</div>
+    </div>
+    <div class="dl-grid" id="dlGrid">
+      <!-- Rempli dynamiquement par script.js à partir de la dernière Release GitHub -->
+    </div>
+    <div class="dl-status" id="dlStatus"></div>
+  </div>
+</section>
+
+<section class="features wrap" id="fonctionnalites">
+  <div class="eyebrow">Fonctionnalités</div>
+  <h2>Tout ce qu'il faut pour streamer un vol</h2>
+  <p>Pensé pour les créateurs de contenu simu aérienne : préparation du vol, suivi en direct, et diffusion sur Twitch via OBS, sans jongler entre dix outils.</p>
+  <div class="feat-grid">
+    <div class="feat-card"><div class="glyph">✈</div><h3>Briefing de vol</h3><p>Indicatif, aéroports, route, appareil, météo, notes — bascule VFR/IFR, import automatique depuis SimBrief.</p></div>
+    <div class="feat-card"><div class="glyph">◎</div><h3>Suivi en direct (SimConnect)</h3><p>Connexion à MSFS pour la position, l'altitude, les vitesses, le cap et la fréquence radio, avec détection automatique des phases de vol.</p></div>
+    <div class="feat-card"><div class="glyph">▤</div><h3>Logbook &amp; carrière</h3><p>Historique complet des vols, relecture des trajets trackés sur carte, progression de grade pour tes compagnies virtuelles (IVAO, VATSIM).</p></div>
+    <div class="feat-card"><div class="glyph">◈</div><h3>Deux overlays OBS</h3><p>La carte de briefing, et un overlay de télémétrie live entièrement personnalisable — champs, libellés, couleurs, disposition.</p></div>
+    <div class="feat-card"><div class="glyph">▲</div><h3>Personnalisation poussée</h3><p>Couleurs, polices, rayons, bordures, transparence, thèmes prédéfinis — pour coller à l'identité visuelle de ta chaîne.</p></div>
+    <div class="feat-card"><div class="glyph">▮</div><h3>100% local</h3><p>Toutes tes données restent sur ta machine, dans un simple fichier JSON. Aucun compte, aucun cloud.</p></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="legal">FlightBrief — distribué sous licence MIT.</div>
+    <div class="flinks">
+      <a id="repoLinkFooter" href="#" target="_blank" rel="noopener">Dépôt GitHub</a>
+      <a id="issuesLink" href="#" target="_blank" rel="noopener">Signaler un problème</a>
+      <a id="releasesLink" href="#" target="_blank" rel="noopener">Toutes les versions</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ==========================================================================
+   À CONFIGURER : remplace par ton pseudo GitHub et le nom du dépôt avant de
+   publier cette page (voir CONTRIBUTING.md, section GitHub Pages).
+   ========================================================================== */
+const REPO_OWNER = 'ton-pseudo';
+const REPO_NAME  = 'flightbrief';
+
+const REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
+['repoLink','repoLinkGhost','repoLinkFooter'].forEach(id => document.getElementById(id).href = REPO_URL);
+document.getElementById('issuesLink').href = `${REPO_URL}/issues`;
+document.getElementById('releasesLink').href = `${REPO_URL}/releases`;
+
+// Reconnaît le système du visiteur pour mettre en avant le bon installeur.
+function detectOs(){
+  const ua = navigator.userAgent;
+  if(ua.includes('Win')) return 'windows';
+  if(ua.includes('Mac')) return 'mac';
+  if(ua.includes('Linux') || ua.includes('X11')) return 'linux';
+  return null;
+}
+
+const PLATFORMS = [
+  { key:'windows', label:'Windows', fmt:'Installeur .exe', match: n => n.endsWith('.exe') },
+  { key:'mac',     label:'macOS',   fmt:'Image disque .dmg', match: n => n.endsWith('.dmg') },
+  { key:'linux',   label:'Linux',   fmt:'.AppImage / .deb', match: n => n.endsWith('.AppImage') || n.endsWith('.deb') }
+];
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadLatestRelease(){
+  const grid = document.getElementById('dlGrid');
+  const status = document.getElementById('dlStatus');
+  const versionLabel = document.getElementById('versionLabel');
+  const detected = detectOs();
+
+  try{
+    const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`);
+    if(!res.ok) throw new Error('Aucune version publiée pour le moment.');
+    const release = await res.json();
+    const assets = release.assets || [];
+
+    versionLabel.textContent = release.tag_name ? `Dernière version : ${release.tag_name}` : 'Dernière version';
+    document.getElementById('cardVersion').textContent = release.tag_name || '—';
+
+    const cards = PLATFORMS.map(p => {
+      const asset = assets.find(a => p.match(a.name));
+      const recommended = detected === p.key;
+      return `<div class="dl-card${recommended ? ' recommended' : ''}">
+        <div class="os-name">${escapeHtml(p.label)} ${recommended ? '<span class="rec-tag">Ton système</span>' : ''}</div>
+        <div class="fmt">${escapeHtml(p.fmt)}</div>
+        ${asset
+          ? `<a class="btn primary" href="${asset.browser_download_url}">Télécharger</a>`
+          : `<a class="btn ghost" href="${REPO_URL}/releases">Voir les Releases</a>`}
+      </div>`;
+    }).join('');
+
+    grid.innerHTML = cards;
+    status.innerHTML = `Signé et généré automatiquement depuis le code source. <a href="${REPO_URL}/releases" target="_blank" rel="noopener">Historique des versions →</a>`;
+  }catch(e){
+    versionLabel.textContent = '';
+    grid.innerHTML = PLATFORMS.map(p => `<div class="dl-card">
+      <div class="os-name">${escapeHtml(p.label)}</div>
+      <div class="fmt">${escapeHtml(p.fmt)}</div>
+      <a class="btn ghost" href="${REPO_URL}/releases">Voir les Releases</a>
+    </div>`).join('');
+    status.textContent = "Aucune version publiée pour l'instant — reviens bientôt, ou consulte le dépôt directement.";
+  }
+}
+loadLatestRelease();
+</script>
+</body>
+</html>
