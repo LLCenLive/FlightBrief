@@ -15,7 +15,13 @@ const REQ_ID = 1;
 const VARS = [
   { name: 'PLANE LATITUDE', unit: 'degrees', key: 'lat' },
   { name: 'PLANE LONGITUDE', unit: 'degrees', key: 'lon' },
-  { name: 'PLANE ALTITUDE', unit: 'feet', key: 'altFt' },
+  // INDICATED ALTITUDE (et non PLANE ALTITUDE) : c'est la valeur lue sur l'altimètre du
+  // cockpit, calée sur le calage altimétrique (QNH/Kohlsman) réglé par le pilote. PLANE
+  // ALTITUDE est l'altitude vraie (MSL géométrique), indépendante de ce calage — d'où le
+  // décalage rapporté entre le panneau de bord et le tracker dès que le QNH réglé n'est
+  // pas exactement la pression locale (ex. calage 1013 laissé par erreur, ou pas remis à
+  // jour en croisière).
+  { name: 'INDICATED ALTITUDE', unit: 'feet', key: 'altFt' },
   { name: 'AIRSPEED INDICATED', unit: 'knots', key: 'iasKt' },
   { name: 'GROUND VELOCITY', unit: 'knots', key: 'gsKt' },
   { name: 'VERTICAL SPEED', unit: 'feet per minute', key: 'vsFpm' },
@@ -71,12 +77,48 @@ function loadRunways(rendererDir) {
   return runwayIndex;
 }
 
+// Index spatial en grille (cellules de 1° x 1°) pour éviter de rebalayer tout le jeu
+// d'aéroports (72k+ entrées depuis le passage au jeu complet OurAirports) à chaque
+// appel de nearestAirport, qui est déclenché plusieurs fois par minute pendant le
+// suivi de vol en direct.
+let airportGrid = null;
+function buildAirportGrid(list) {
+  const grid = new Map();
+  for (const entry of list) {
+    const lat = entry[2], lon = entry[3];
+    const key = Math.floor(lat) + '_' + Math.floor(lon);
+    let cell = grid.get(key);
+    if (!cell) { cell = []; grid.set(key, cell); }
+    cell.push(entry);
+  }
+  return grid;
+}
+
 function nearestAirport(lat, lon, rendererDir) {
   const list = loadAirports(rendererDir);
+  if (!list.length) return null;
+  if (!airportGrid) airportGrid = buildAirportGrid(list);
+
+  const cellLat = Math.floor(lat), cellLon = Math.floor(lon);
   let best = null, bestDist = Infinity;
-  for (const [icao, name, alat, alon, elevFt] of list) {
-    const d = haversineNm(lat, lon, alat, alon);
-    if (d < bestDist) { bestDist = d; best = { icao, name, distanceNm: Math.round(d * 10) / 10, elevFt: elevFt ?? null }; }
+
+  // Recherche par anneaux concentriques de cellules autour du point, du plus proche
+  // au plus loin, jusqu'à être sûr qu'aucune cellule non explorée ne peut contenir un
+  // aéroport plus proche que le meilleur candidat déjà trouvé (marge ~55 Nm/degré,
+  // volontairement pessimiste pour rester correct près des pôles).
+  for (let radius = 0; radius <= 20; radius++) {
+    for (let dLat = -radius; dLat <= radius; dLat++) {
+      for (let dLon = -radius; dLon <= radius; dLon++) {
+        if (Math.max(Math.abs(dLat), Math.abs(dLon)) !== radius) continue; // anneau courant seulement
+        const cell = airportGrid.get((cellLat + dLat) + '_' + (cellLon + dLon));
+        if (!cell) continue;
+        for (const [icao, name, alat, alon, elevFt] of cell) {
+          const d = haversineNm(lat, lon, alat, alon);
+          if (d < bestDist) { bestDist = d; best = { icao, name, distanceNm: Math.round(d * 10) / 10, elevFt: elevFt ?? null }; }
+        }
+      }
+    }
+    if (best && bestDist < radius * 55) break;
   }
   return best;
 }
@@ -513,10 +555,10 @@ class FlightTracker extends EventEmitter {
   _terminateFlight() {
     const now = Date.now();
     this._end = now;
-    if (!this._hasBeenAirborne || !this._takeoffAt) { this._resetFlightState(); return; }
+    if (!this._hasBeenAirborne || !this._takeoffAt) { this._resetFlightState(); return { ok: false, reason: 'no_flight' }; }
 
     const airDuration = (this._touchdownAt || now) - this._takeoffAt;
-    if (airDuration < MIN_FLIGHT_MIN * 60 * 1000) { this._resetFlightState(); return; }
+    if (airDuration < MIN_FLIGHT_MIN * 60 * 1000) { this._resetFlightState(); return { ok: false, reason: 'too_short' }; }
 
     const first = this._path[0], last = this._path[this._path.length - 1];
     const depAirport = nearestAirport(first.lat, first.lon, this._rendererDir);
@@ -553,6 +595,22 @@ class FlightTracker extends EventEmitter {
     };
     this.emit('flight-end', result);
     this._resetFlightState();
+    return { ok: true };
+  }
+
+  // Arrête le suivi du vol en cours immédiatement (sans attendre le délai de parking à
+  // l'arrêt), pour permettre de clôturer le vol et déclencher l'envoi du PIREP en un seul
+  // clic depuis le renderer, plutôt que d'attendre la détection automatique. La connexion
+  // SimConnect elle-même reste active (ne se déconnecte pas), prête pour un prochain vol.
+  stopTracking() {
+    // 'ground' couvre aussi bien "connecté, avion immobile" que "roulage avant décollage" :
+    // dans ce dernier cas, _terminateFlight() gère déjà proprement l'absence de vol réel
+    // (this._hasBeenAirborne == false -> reset silencieux, sans PIREP à envoyer).
+    if (this._phase === 'idle' || !this._firstMoveTs) {
+      return { ok: false, reason: 'not_tracking' };
+    }
+    this._stationarySince = null;
+    return this._terminateFlight();
   }
 }
 
