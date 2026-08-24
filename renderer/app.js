@@ -70,6 +70,9 @@ const LIVE_OVERLAY_ICONS = { callsign:'✈', route:'→', phase:'◎', altitude:
 const defaultLiveOverlay = {
   fields: { callsign:true, route:true, progress:true, distance:true, radio:true, heading:true, altitude:true, phase:true },
   labels: {...LIVE_OVERLAY_DEFAULT_LABELS},
+  // Jusqu'à 2 textes libres, entièrement facultatifs : si le champ est vide, rien ne
+  // s'affiche dans l'overlay (contrairement aux champs de télémétrie qui affichent "—").
+  custom: { text1:'', text2:'' },
   style: {
     bg:'#0a0d11', text:'#e7edf2', accent:'#39e88f', bgOpacity:78, font:"'Space Grotesk',sans-serif", scale:100, radius:12, layout:'bar',
     border:true, borderColor:'#ffffff', shadow:true, blur:true, gap:1, icons:false, uppercase:false, divider:true
@@ -84,7 +87,7 @@ const defaultUserProfile = {
   onboarded:false, tourDone:false
 };
 
-let db = { logbook: [], careers: [], theme: {...defaultTheme}, simbriefUsername: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, style:{...defaultLiveOverlay.style}}, userProfile: {...defaultUserProfile} };
+let db = { logbook: [], careers: [], theme: {...defaultTheme}, simbriefUsername: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, custom:{...defaultLiveOverlay.custom}, style:{...defaultLiveOverlay.style}}, userProfile: {...defaultUserProfile} };
 
 async function loadDb(){
   try{
@@ -98,6 +101,7 @@ async function loadDb(){
       db.liveOverlay = {
         fields: {...defaultLiveOverlay.fields, ...(storedLo.fields || {})},
         labels: {...defaultLiveOverlay.labels, ...(storedLo.labels || {})},
+        custom: {...defaultLiveOverlay.custom, ...(storedLo.custom || {})},
         style: {...defaultLiveOverlay.style, ...(storedLo.style || {})}
       };
       db.userProfile = {...defaultUserProfile, ...(stored.userProfile || {})};
@@ -154,7 +158,19 @@ function switchView(name){
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
   if(name === 'career') renderCareers();
   if(name === 'logbook') { populateCareerSelect(); renderLogbook(); }
-  if(name === 'profil') { fillUserProfileForm('pf', db.userProfile); renderProfileStats(); }
+  if(name === 'profil') {
+    fillUserProfileForm('pf', db.userProfile);
+    renderProfileStats();
+    initFlightsGlobe();
+    populateFlightsGlobeNetworkFilter();
+    setTimeout(resizeFlightsGlobe, 60);
+    renderFlightsGlobeArcs();
+    resumeFlightsGlobe();
+  } else {
+    // Le globe 3D ne sert que sur cet onglet : on coupe sa boucle de rendu dès qu'on le
+    // quitte plutôt que de la laisser tourner en arrière-plan pour rien (voir animateFlightsGlobe).
+    pauseFlightsGlobe();
+  }
   // La carte de suivi vit désormais dans la page Briefing (plus de page Tracking dédiée) :
   // on force juste un recalcul de sa taille à chaque fois qu'on revient sur cet onglet,
   // Leaflet ayant besoin de ça quand son conteneur était caché (display:none).
@@ -373,16 +389,26 @@ function haversineNmRenderer(lat1, lon1, lat2, lon2){
 // Distance totale départ -> arrivée (grand cercle), calculée à partir des champs OACI
 // du Briefing, pour donner un pourcentage de progression sur l'overlay. Recalculée
 // (debounce) à chaque changement des champs départ/arrivée, mise en cache ensuite.
+// On garde aussi les coordonnées d'arrivée : la progression est calculée à partir de la
+// distance RESTANTE jusqu'à l'arrivée (position courante -> arrivée) plutôt que de la
+// distance déjà parcourue -> total en ligne droite, qui dépasse presque toujours 100 %
+// avant le toucher des roues (montée/descente/route non directe = trajet plus long que
+// le grand cercle dép -> arr).
 let _overlayTotalRouteNm = null;
+let _overlayArrCoord = null;
 const updateOverlayRouteDistance = debounce(async () => {
   _overlayTotalRouteNm = null;
+  _overlayArrCoord = null;
   if(!window.api || !window.api.lookupAirport) return;
   const depIcao = el('depIcao').value.trim();
   const arrIcao = el('arrIcao').value.trim();
   if(!depIcao || !arrIcao) return;
   try{
     const [dep, arr] = await Promise.all([window.api.lookupAirport(depIcao), window.api.lookupAirport(arrIcao)]);
-    if(dep && arr) _overlayTotalRouteNm = haversineNmRenderer(dep.lat, dep.lon, arr.lat, arr.lon);
+    if(dep && arr){
+      _overlayTotalRouteNm = haversineNmRenderer(dep.lat, dep.lon, arr.lat, arr.lon);
+      _overlayArrCoord = { lat: arr.lat, lon: arr.lon };
+    }
   }catch(e){ /* ICAO inconnu ou lookup indisponible -> progression affichée en '—' */ }
 }, 400);
 
@@ -391,7 +417,14 @@ const updateOverlayRouteDistance = debounce(async () => {
 let _overlayTelemetry = { callsign:null, dep:null, arr:null, altFt:null, headingDeg:null, comFreqMhz:null, phase:null, distanceNm:null, progressPct:null };
 
 function currentLiveOverlayConfig(){
-  return { fields: {...db.liveOverlay.fields}, style: {...db.liveOverlay.style} };
+  return { fields: {...db.liveOverlay.fields}, custom: {...db.liveOverlay.custom}, style: {...db.liveOverlay.style} };
+}
+
+// Rendu d'un texte libre personnalisé (aucun libellé/cap au-dessus, juste le texte du
+// user) — n'est jamais rendu si le champ est vide, à la différence des champs de
+// télémétrie qui affichent toujours un "—" par défaut.
+function liveOverlayCustomHtml(text){
+  return `<div class="lo-item lo-custom"><div class="lo-val">${escapeHtml(text)}</div></div>`;
 }
 
 // Rendu partagé aperçu-en-app / logique reproduite à l'identique dans live-overlay.html
@@ -473,8 +506,9 @@ function renderLiveOverlayPreview(){
   applyLiveOverlayStyleVars(bar, cfg);
 
   const visible = LIVE_OVERLAY_FIELD_ORDER.filter(k => cfg.fields[k]);
-  bar.innerHTML = visible.map(k => liveOverlayFieldHtml(k, t, cfg)).join('');
-  el('loPreviewBar').classList.toggle('lo-empty', visible.length === 0);
+  const customTexts = [(cfg.custom && cfg.custom.text1), (cfg.custom && cfg.custom.text2)].filter(t2 => t2 && t2.trim());
+  bar.innerHTML = visible.map(k => liveOverlayFieldHtml(k, t, cfg)).join('') + customTexts.map(t2 => liveOverlayCustomHtml(t2.trim())).join('');
+  el('loPreviewBar').classList.toggle('lo-empty', visible.length === 0 && customTexts.length === 0);
 }
 
 function pushLiveOverlayConfig(){
@@ -513,6 +547,9 @@ function loadLiveOverlayIntoForm(cfg){
     const input = document.getElementById('loLabel_' + key);
     if(input) input.value = (cfg.labels && cfg.labels[key]) || LIVE_OVERLAY_DEFAULT_LABELS[key];
   });
+
+  el('loCustom1').value = (cfg.custom && cfg.custom.text1) || '';
+  el('loCustom2').value = (cfg.custom && cfg.custom.text2) || '';
 
   el('loBg').value = cfg.style.bg;
   el('loText').value = cfg.style.text;
@@ -566,6 +603,18 @@ function bindLiveOverlayControls(){
     if(!input) return;
     input.addEventListener('input', () => {
       db.liveOverlay.labels[key] = input.value.trim() || LIVE_OVERLAY_DEFAULT_LABELS[key];
+      renderLiveOverlayPreview();
+      pushLiveOverlayConfig();
+      queueSaveDb();
+    });
+  });
+
+  // Textes libres personnalisés (jusqu'à 2) : rien n'est affiché tant que le champ est vide.
+  ['text1','text2'].forEach((key, i) => {
+    const input = el('loCustom' + (i + 1));
+    if(!input) return;
+    input.addEventListener('input', () => {
+      db.liveOverlay.custom[key] = input.value;
       renderLiveOverlayPreview();
       pushLiveOverlayConfig();
       queueSaveDb();
@@ -1066,6 +1115,21 @@ let trackMap = null, trackPathLine = null, trackPlaneMarker = null;
 let modalMap = null, modalPhaseLayers = [];
 let _liveTrackPoints = [];
 let _lastTrackedFlight = null; // en attente d'ajout au logbook
+let _trackerConnectedState = false; // connecté ou en tracking auprès du simulateur
+let _pendingManualStop = false; // true entre le clic sur "Arrêter le vol & envoyer le PIREP" et l'événement flight-end correspondant
+
+// Un seul chemin d'envoi vers le logbook pour un vol suivi par le simulateur : tant que
+// le tracking est actif (connecté/en vol) ou qu'un vol tracké attend son envoi de PIREP,
+// le bouton d'enregistrement manuel du Briefing est masqué pour éviter le doublon
+// "Enregistrer ce vol dans le logbook" + "Envoyer le PIREP" pour un seul et même vol.
+function updateBriefingSaveVisibility(){
+  const row = el('briefingSaveRow');
+  const hint = el('briefingSaveHint');
+  if(!row) return;
+  const hideManualSave = _trackerConnectedState || !!_lastTrackedFlight;
+  row.style.display = hideManualSave ? 'none' : '';
+  if(hint) hint.style.display = hideManualSave ? '' : 'none';
+}
 
 const PHASE_META = {
   taxi_out:       { label:'Roulage (départ)',   color:'#7c8894' },
@@ -1145,7 +1209,42 @@ async function toggleTrackerConnection(){
   if(!res.ok){
     el('trkStatusMsg').textContent = res.error || 'Connexion impossible.';
     el('trkStatusMsg').className = 'status-msg err';
-    btn.textContent = 'Connecter au simulateur';
+    btn.textContent = 'Lancer le vol & le tracker';
+  }
+}
+
+// Affiche/masque le bouton "Arrêter le vol & envoyer le PIREP", visible uniquement pendant
+// qu'un vol est réellement en cours de suivi (du roulage au décollage jusqu'à l'atterrissage).
+function setTrkStopVisible(visible){
+  const row = el('trkStopRow'), hint = el('trkStopHint');
+  if(row) row.classList.toggle('hidden', !visible);
+  if(hint) hint.classList.toggle('hidden', !visible);
+  if(!visible){
+    const btn = el('trkStopBtn');
+    if(btn){ btn.disabled = false; btn.textContent = 'Arrêter le vol & envoyer le PIREP'; }
+  }
+}
+
+// Clôture le vol en cours immédiatement (sans attendre le délai de parking détecté
+// automatiquement) et enchaîne directement sur l'envoi du PIREP complet dans le logbook —
+// un seul clic pour arrêter le tracking ET envoyer le PIREP. La suite (remplissage des
+// champs + enregistrement) est prise en charge par le handler onFlightEnd ci-dessous, une
+// fois l'événement de fin de vol effectivement reçu du tracker.
+async function stopTrackingAndSendPirep(){
+  const btn = el('trkStopBtn');
+  if(!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Arrêt du vol…';
+  _pendingManualStop = true;
+  const res = await window.tracker.stopTracking();
+  if(!res || !res.ok){
+    _pendingManualStop = false;
+    btn.disabled = false;
+    btn.textContent = 'Arrêter le vol & envoyer le PIREP';
+    el('trkStatusMsg').textContent = res && res.reason === 'too_short'
+      ? "Vol trop court pour être enregistré (moins de 2 minutes en l'air)."
+      : 'Aucun vol en cours à arrêter.';
+    el('trkStatusMsg').className = 'status-msg err';
   }
 }
 
@@ -1154,7 +1253,9 @@ function setTrackerUiConnected(connected, tracking){
   dot.classList.toggle('connected', connected && !tracking);
   dot.classList.toggle('tracking', !!tracking);
   el('trkStatusText').textContent = tracking ? 'Vol en cours de tracking…' : (connected ? 'Connecté — en attente du décollage' : 'Non connecté');
-  el('trkConnectBtn').textContent = connected ? 'Déconnecter' : 'Connecter au simulateur';
+  el('trkConnectBtn').textContent = connected ? 'Déconnecter' : 'Lancer le vol & le tracker';
+  _trackerConnectedState = !!connected;
+  updateBriefingSaveVisibility();
 }
 
 function initTrackerListeners(){
@@ -1177,11 +1278,14 @@ function initTrackerListeners(){
       _overlayTelemetry = { callsign:null, dep:null, arr:null, altFt:null, headingDeg:null, comFreqMhz:null, phase:null, distanceNm:null, progressPct:null };
       renderLiveOverlayPreview();
       pushLiveOverlayTelemetry();
+      setTrkStopVisible(false);
+      _pendingManualStop = false;
     }
   });
 
   window.tracker.onFlightStart(data => {
     setTrackerUiConnected(true, true);
+    setTrkStopVisible(true);
     _liveTrackPoints = [];
     if(trackPathLine){ trackPathLine.setLatLngs([]); trackPathGlow.setLatLngs([]); }
     if(data.aircraft) el('trkAircraftName').textContent = 'Appareil détecté : ' + data.aircraft;
@@ -1190,6 +1294,7 @@ function initTrackerListeners(){
     // Nouveau vol : on repart d'une télémétrie propre pour l'overlay live et on
     // (re)calcule la distance totale départ -> arrivée pour la progression en %.
     _overlayTelemetry = { callsign: el('callsign').value, dep: el('depIcao').value, arr: el('arrIcao').value, altFt:null, headingDeg:null, comFreqMhz:null, phase:null, distanceNm:null, progressPct:null };
+    _overlayArrCoord = null;
     updateOverlayRouteDistance();
   });
 
@@ -1229,6 +1334,11 @@ function initTrackerListeners(){
 
   window.tracker.onFlightLanded(data => {
     setTrackerUiConnected(true, false);
+    // Toucher des roues : progression forcée à 100 % pile à cet instant, plutôt que de
+    // dépendre du calcul distance restante (qui peut ne pas retomber exactement à 0 NM).
+    _overlayTelemetry.progressPct = 100;
+    renderLiveOverlayPreview();
+    pushLiveOverlayTelemetry();
   });
 
   // Phases de vol + rapport détaillé qui se complètent directement dans l'app au fil
@@ -1248,7 +1358,16 @@ function initTrackerListeners(){
       // départ -> arrivée saisie dans le Briefing) + phase courante plus précise
       // (ex. "Croisière", "Descente"...) que le statut brut idle/ground/airborne/landed.
       _overlayTelemetry.distanceNm = data.distanceNm;
-      _overlayTelemetry.progressPct = _overlayTotalRouteNm ? Math.round((data.distanceNm / _overlayTotalRouteNm) * 100) : null;
+      // Progression = distance RESTANTE jusqu'à l'arrivée (voir onTelemetry, mis à jour à
+      // chaque tick avec la position courante) plutôt que distance parcourue / ligne droite,
+      // qui dépassait 100 % avant le toucher des roues sur un trajet non direct.
+      const lastPt = Array.isArray(data.path) && data.path.length ? data.path[data.path.length - 1] : null;
+      if(lastPt && lastPt.lat != null && lastPt.lon != null && _overlayArrCoord && _overlayTotalRouteNm){
+        const remainingNm = haversineNmRenderer(lastPt.lat, lastPt.lon, _overlayArrCoord.lat, _overlayArrCoord.lon);
+        _overlayTelemetry.progressPct = Math.max(0, Math.min(99, Math.round(100 * (1 - remainingNm / _overlayTotalRouteNm))));
+      } else if(!_overlayTotalRouteNm){
+        _overlayTelemetry.progressPct = null;
+      }
       const lastPhase = data.phases[data.phases.length - 1];
       if(lastPhase) _overlayTelemetry.phase = lastPhase.phase;
       renderLiveOverlayPreview();
@@ -1256,9 +1375,24 @@ function initTrackerListeners(){
     });
   }
 
-  window.tracker.onFlightEnd(data => {
+  window.tracker.onFlightEnd(async data => {
     setTrackerUiConnected(true, false);
+    setTrkStopVisible(false);
     _lastTrackedFlight = data;
+    updateBriefingSaveVisibility();
+
+    // Arrêt manuel via "Arrêter le vol & envoyer le PIREP" : un seul clic, donc pas d'étape
+    // de relecture intermédiaire — on complète tous les champs et on enregistre directement.
+    if(_pendingManualStop){
+      _pendingManualStop = false;
+      await applyTrackedFlightToLogbook(false);
+      el('trkStatusMsg').textContent = 'Vol arrêté et PIREP envoyé dans le logbook (tous les champs complétés) ✓';
+      el('trkStatusMsg').className = 'status-msg ok';
+      return;
+    }
+
+    // Fin de vol détectée automatiquement (parking + délai écoulé) : on affiche le résumé
+    // et on laisse la main pour envoyer le PIREP ou ignorer ce vol (ex. faux positif).
     const dep = data.depGuess ? data.depGuess.icao : '----';
     const arr = data.arrGuess ? data.arrGuess.icao : '----';
     el('trkResRoute').textContent = `${dep} → ${arr}`;
@@ -1267,6 +1401,10 @@ function initTrackerListeners(){
     el('trkResMaxAlt').textContent = data.maxAltFt.toLocaleString('fr-FR') + ' ft';
     el('trkResMaxIas').textContent = data.maxIasKt + ' kt';
     el('trkResLanding').textContent = data.landingRateFpm != null ? data.landingRateFpm + ' ft/min' : '—';
+    el('trkResBounce').textContent = data.bounceCount ? `${data.bounceCount} rebond${data.bounceCount > 1 ? 's' : ''}` : 'Aucun';
+    el('trkResMaxBank').textContent = (data.turnStats && data.turnStats.maxBankDeg)
+      ? `${data.turnStats.maxBankDeg}°${data.turnStats.aggressiveTurnCount ? ' ⚠️' : (data.turnStats.steepTurnCount ? ' (serré)' : '')}`
+      : '—';
     el('trkResultPanel').classList.remove('hidden');
     // Rapport final complet (avec la vraie phase d'atterrissage) à la place du live partiel.
     if(Array.isArray(data.phases) && data.phases.length){
@@ -1279,37 +1417,65 @@ function initTrackerListeners(){
   });
 }
 
-function applyTrackedFlightToLogbook(){
-  if(!_lastTrackedFlight) return;
-  const data = _lastTrackedFlight;
+// Remplit TOUS les champs du formulaire logbook à partir du vol tracké : les champs saisis
+// dans le Briefing (indicatif, appareil, règles VFR/IFR) autant que les données mesurées par
+// le tracker (dép/arr devinés, durée, trajet, stats). Avant : seuls dép/arr/durée/remarques
+// étaient repris, laissant indicatif/appareil/règles vides dans le PIREP envoyé.
+function populateLogbookFieldsFromTrackedFlight(data){
   resetLogbookForm();
   el('lbDate').value = data.startedAt.slice(0,10);
-  if(data.depGuess) el('lbDep').value = data.depGuess.icao;
-  if(data.arrGuess) el('lbArr').value = data.arrGuess.icao;
+  el('lbCallsign').value = el('callsign').value.trim();
+  const dep = el('depIcao').value.trim().toUpperCase() || (data.depGuess ? data.depGuess.icao : '');
+  const arr = el('arrIcao').value.trim().toUpperCase() || (data.arrGuess ? data.arrGuess.icao : '');
+  el('lbDep').value = dep;
+  el('lbArr').value = arr;
+  el('lbAircraft').value = el('aircraft').value.trim();
+  setLbRules(state.rules === 'IFR' ? 'IFR' : 'VFR');
   el('lbDuration').value = minToHhmm(data.durationMin);
+  el('lbNetwork').value = '';
+  populateCareerSelect();
+  el('lbCareer').value = '';
+  el('lbPirep').value = 'none';
   const remarksBits = [
     `Distance : ${data.distanceNm} NM`,
     `Altitude max : ${data.maxAltFt} ft`,
     `Vitesse max : ${data.maxIasKt} kt`,
     data.landingRateFpm != null ? `Atterrissage : ${data.landingRateFpm} ft/min` : null,
+    data.bounceCount ? `${data.bounceCount} rebond${data.bounceCount > 1 ? 's' : ''} au toucher` : null,
     data.touchdown && data.touchdown.zone ? `Toucher : piste ${data.touchdown.zone.runway}, ${data.touchdown.zone.distanceFromThresholdFt} ft après le seuil, ${data.touchdown.zone.lateralOffsetFt} ft à ${data.touchdown.zone.side}` : null,
+    data.turnStats && data.turnStats.maxBankDeg ? `Virage max : ${data.turnStats.maxBankDeg}°${data.turnStats.aggressiveTurnCount ? ' (' + data.turnStats.aggressiveTurnCount + ' virage(s) engagé(s) >' + 45 + '°)' : (data.turnStats.steepTurnCount ? ' (' + data.turnStats.steepTurnCount + ' virage(s) serré(s))' : '')}` : null,
     data.fuelUsedLbs != null ? `Carburant utilisé : ${data.fuelUsedLbs} lbs` : null
   ].filter(Boolean);
-  el('lbRemarks').value = 'Vol tracké automatiquement — ' + remarksBits.join(' · ');
+  const briefingNotes = el('notes').value.trim();
+  el('lbRemarks').value = 'Vol tracké automatiquement — ' + remarksBits.join(' · ') + (briefingNotes ? ' · Notes de briefing : ' + briefingNotes : '');
   // Trajet complet + segmentation de phases + zone de toucher, associés au vol du logbook.
   _pendingTrackData = {
     path: data.path, phases: data.phases, touchdown: data.touchdown,
     distanceNm: data.distanceNm, maxAltFt: data.maxAltFt, maxIasKt: data.maxIasKt,
     landingRateFpm: data.landingRateFpm, fuelUsedLbs: data.fuelUsedLbs,
+    bounceCount: data.bounceCount, turnStats: data.turnStats,
     depGuess: data.depGuess, arrGuess: data.arrGuess
   };
+}
+
+// Envoie le PIREP du vol tracké dans le logbook en un seul clic : remplit tous les champs
+// (voir populateLogbookFieldsFromTrackedFlight) ET enregistre directement — plus besoin d'un
+// second clic sur "Enregistrer le vol" une fois basculé sur l'onglet Logbook. Par défaut on
+// bascule sur l'onglet Logbook pour montrer le résultat ; passer `false` pour rester sur le
+// Briefing (utilisé par l'arrêt manuel, qui affiche déjà une confirmation sur place).
+async function applyTrackedFlightToLogbook(switchToLogbook){
+  if(!_lastTrackedFlight) return;
+  const data = _lastTrackedFlight;
+  populateLogbookFieldsFromTrackedFlight(data);
+  await saveLogbookEntry();
   dismissTrackedFlight();
-  switchView('logbook');
+  if(switchToLogbook !== false) switchView('logbook');
 }
 
 function dismissTrackedFlight(){
   _lastTrackedFlight = null;
   el('trkResultPanel').classList.add('hidden');
+  updateBriefingSaveVisibility();
 }
 
 /* ---------------- Modale carte de trajet + relecture détaillée (depuis le logbook) ---------------- */
@@ -1323,6 +1489,8 @@ function openRouteModal(flightId){
     <div class="tstat"><div class="cap">Altitude max</div><div class="val">${td.maxAltFt ?? '—'} ft</div></div>
     <div class="tstat"><div class="cap">Vitesse max</div><div class="val">${td.maxIasKt ?? '—'} kt</div></div>
     <div class="tstat"><div class="cap">Atterrissage</div><div class="val">${(td.landingRateFpm ?? td.landingRate) != null ? (td.landingRateFpm ?? td.landingRate) + ' ft/min' : '—'}</div></div>
+    <div class="tstat"><div class="cap">Rebonds</div><div class="val">${td.bounceCount ? td.bounceCount : 'Aucun'}</div></div>
+    <div class="tstat"><div class="cap">Virage max</div><div class="val">${(td.turnStats && td.turnStats.maxBankDeg) ? td.turnStats.maxBankDeg + '°' : '—'}</div></div>
   `;
 
   const hasDetailed = Array.isArray(td.phases) && td.phases.length > 0;
@@ -1335,7 +1503,7 @@ function openRouteModal(flightId){
 
     renderPhaseTable(td.phases);
     renderProfileChart(td.path);
-    renderTouchdownPanel(td.touchdown);
+    renderTouchdownPanel(td.touchdown, td.turnStats);
   }
 
   el('routeModalOverlay').classList.remove('hidden');
@@ -1455,10 +1623,18 @@ function renderPhaseLegend(path, targetId){
 
 // Petit schéma de piste vue du dessus, avec le point de toucher des roues positionné
 // à l'échelle (distance depuis le seuil + écart latéral) et le taux de descente (fpm).
-function renderTouchdownPanel(touchdown){
+function renderTouchdownPanel(touchdown, turnStats){
   const container = el('routeModalTouchdown');
+  const turnsHtml = (turnStats && turnStats.totalTurns)
+    ? `<div class="touchdown-stats" style="margin-top:10px;">
+        <div class="tstat"><div class="cap">Virages effectués</div><div class="val">${turnStats.totalTurns}</div></div>
+        <div class="tstat"><div class="cap">Inclinaison max</div><div class="val">${turnStats.maxBankDeg}°</div></div>
+        <div class="tstat"><div class="cap">Virages serrés (&gt;30°)</div><div class="val">${turnStats.steepTurnCount}</div></div>
+        <div class="tstat"><div class="cap">Virages engagés (&gt;45°)</div><div class="val">${turnStats.aggressiveTurnCount}</div></div>
+      </div>`
+    : '';
   if(!touchdown){
-    container.innerHTML = '<div class="hint">Pas de donnée de toucher des roues pour ce vol.</div>';
+    container.innerHTML = '<div class="hint">Pas de donnée de toucher des roues pour ce vol.</div>' + turnsHtml;
     return;
   }
   const zone = touchdown.zone;
@@ -1487,6 +1663,7 @@ function renderTouchdownPanel(touchdown){
       <div class="tstat"><div class="cap">Distance depuis le seuil</div><div class="val">${zone ? zone.distanceFromThresholdFt + ' ft (' + zone.percentAlongRunway + '%)' : '—'}</div></div>
       <div class="tstat"><div class="cap">Écart latéral</div><div class="val">${zone ? zone.lateralOffsetFt + ' ft à ' + zone.side : '—'}</div></div>
     </div>
+    ${turnsHtml}
   </div>`;
 }
 
@@ -2093,25 +2270,27 @@ async function saveUserProfile(){
 }
 
 /* ---------------- Statistiques (calculées à partir du logbook) ---------------- */
-function renderTopListFromCounts(targetId, counts, limit){
+function renderTopListFromCounts(targetId, counts, limit, accent){
   const entries = Object.entries(counts).filter(([k]) => k && k !== 'undefined').sort((a,b) => b[1]-a[1]).slice(0, limit);
   if(!entries.length){ el(targetId).innerHTML = '<div class="empty">Pas encore de données.</div>'; return; }
   const max = entries[0][1];
-  el(targetId).innerHTML = entries.map(([name,count]) => `
-    <div class="row">
+  const total = entries.reduce((s,[,c]) => s + c, 0);
+  el(targetId).innerHTML = entries.map(([name,count], i) => `
+    <div class="row${i === 0 ? ' top-rank' : ''}" style="--row-accent:${accent || 'var(--phosphor)'};">
+      <span class="rank">${i+1}</span>
       <span class="name">${escapeHtml(name)}</span>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.round((count/max)*100)}%"></div></div>
-      <span class="count">${count}</span>
+      <span class="count">${count}<span class="pct">${Math.round((count/total)*100)}%</span></span>
     </div>`).join('');
 }
-function renderTopList(targetId, items, keyFn, limit){
+function renderTopList(targetId, items, keyFn, limit, accent){
   const counts = {};
   items.forEach(it => {
     const k = keyFn(it);
     if(!k) return;
     counts[k] = (counts[k] || 0) + 1;
   });
-  renderTopListFromCounts(targetId, counts, limit);
+  renderTopListFromCounts(targetId, counts, limit, accent);
 }
 
 function renderProfileStats(){
@@ -2130,6 +2309,12 @@ function renderProfileStats(){
   flights.forEach(f => { if(!longest || (f.durationMin || 0) > (longest.durationMin || 0)) longest = f; });
   el('pfStatLongest').textContent = longest ? `${longest.callsign || (longest.dep + '→' + longest.arr)} · ${minToHhmm(longest.durationMin || 0)}` : '—';
 
+  el('pfStatAvgDuration').textContent = flights.length ? minToHhmm(Math.round(totalMin / flights.length)) : '—';
+
+  const uniqueAirports = new Set();
+  flights.forEach(f => { if(f.dep) uniqueAirports.add(f.dep); if(f.arr) uniqueAirports.add(f.arr); });
+  el('pfStatAirportCount').textContent = uniqueAirports.size;
+
   const vfrCount = flights.filter(f => f.rules === 'VFR').length;
   const ifrCount = flights.filter(f => f.rules === 'IFR').length;
   const totalRules = vfrCount + ifrCount;
@@ -2139,29 +2324,456 @@ function renderProfileStats(){
     ? `${vfrPct}% VFR (${vfrCount}) · ${100 - vfrPct}% IFR (${ifrCount})`
     : 'Aucun vol enregistré pour l’instant.';
 
-  renderTopList('pfTopAircraft', flights, f => f.aircraft, 5);
+  renderTopList('pfTopAircraft', flights, f => f.aircraft, 5, 'var(--accent-ifr)');
   const airportCounts = {};
   flights.forEach(f => {
     if(f.dep) airportCounts[f.dep] = (airportCounts[f.dep] || 0) + 1;
     if(f.arr) airportCounts[f.arr] = (airportCounts[f.arr] || 0) + 1;
   });
-  renderTopListFromCounts('pfTopAirports', airportCounts, 5);
-  renderTopList('pfTopNetworks', flights, f => f.network, 6);
+  renderTopListFromCounts('pfTopAirports', airportCounts, 5, 'var(--accent-vfr)');
+  renderTopList('pfTopNetworks', flights, f => f.network, 6, 'var(--phosphor)');
 
   const careerData = db.careers.map(c => ({
     name: c.name,
     hours: db.logbook.filter(f => f.careerId === c.id).reduce((s,f) => s + (f.durationMin || 0), 0) / 60
-  }));
+  })).sort((a,b) => b.hours - a.hours);
   if(!careerData.length){
     el('pfCareersSummary').innerHTML = '<div class="empty">Aucune carrière définie.</div>';
   } else {
     const maxH = Math.max(1, ...careerData.map(c => c.hours));
-    el('pfCareersSummary').innerHTML = careerData.map(c => `
-      <div class="row">
+    const totalH = careerData.reduce((s,c) => s + c.hours, 0) || 1;
+    el('pfCareersSummary').innerHTML = careerData.map((c, i) => `
+      <div class="row${i === 0 ? ' top-rank' : ''}" style="--row-accent:var(--accent-ifr);">
+        <span class="rank">${i+1}</span>
         <span class="name">${escapeHtml(c.name)}</span>
         <div class="bar-track"><div class="bar-fill" style="width:${Math.round((c.hours/maxH)*100)}%"></div></div>
-        <span class="count">${c.hours.toFixed(1)}h</span>
+        <span class="count">${c.hours.toFixed(1)}h<span class="pct">${Math.round((c.hours/totalH)*100)}%</span></span>
       </div>`).join('');
+  }
+}
+
+/* =========================================================
+   PROFIL — globe 3D des vols déjà effectués (logbook)
+   ========================================================= */
+let flightsGlobeScene = null, flightsGlobeCamera = null, flightsGlobeRenderer = null, flightsGlobeControls = null;
+let flightsGlobeGroup = null, flightsGlobeContentGroup = null, flightsGlobeRaycaster = null;
+let _flightsGlobeMeshes = []; // arcs + points aéroports, pour le hover/click
+let _flightsGlobeFilters = { rules: 'all', search: '', network: 'all' };
+let _airportCoordCache = {}; // ICAO -> {icao,name,lat,lon,elevFt} | null, mémorisé entre 2 rendus
+const GLOBE_RADIUS = 100;
+
+// Conversion latitude/longitude -> position 3D sur la sphère (convention Three.js standard),
+// réutilisée pour les points aéroports et les arcs de trajet.
+function latLonToVector3(lat, lon, radius){
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180);
+  return new THREE.Vector3(
+    -(radius * Math.sin(phi) * Math.cos(theta)),
+    (radius * Math.cos(phi)),
+    (radius * Math.sin(phi) * Math.sin(theta))
+  );
+}
+function globePointerToNDC(evt, container){
+  const rect = container.getBoundingClientRect();
+  return {
+    x: ((evt.clientX - rect.left) / rect.width) * 2 - 1,
+    y: -((evt.clientY - rect.top) / rect.height) * 2 + 1
+  };
+}
+
+let _flightsGlobeAutoRotate = true; // coupée dès que l'utilisateur clique/interagit avec le globe
+
+function initFlightsGlobe(){
+  if(flightsGlobeScene || !window.THREE) return;
+  const container = el('flightsGlobe');
+  if(!container) return;
+  const w = container.clientWidth || 600, h = container.clientHeight || 480;
+
+  flightsGlobeScene = new THREE.Scene();
+  flightsGlobeCamera = new THREE.PerspectiveCamera(45, w / h, 0.1, 2000);
+  flightsGlobeCamera.position.set(0, 0, 260);
+
+  flightsGlobeRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  flightsGlobeRenderer.setSize(w, h);
+  flightsGlobeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  container.appendChild(flightsGlobeRenderer.domElement);
+
+  // Éclairage léger pour donner un vrai relief 3D à la sphère (avant : matériau Basic
+  // plat, sans ombrage, donc peu lisible en silhouette). Une lumière directionnelle fixe
+  // (indépendante de la rotation, comme un "soleil" de studio) + un peu d'ambiante pour
+  // ne jamais avoir de face totalement noire.
+  flightsGlobeScene.add(new THREE.AmbientLight(0x8fb8c9, 0.55));
+  const globeSun = new THREE.DirectionalLight(0xffffff, 1.1);
+  globeSun.position.set(120, 90, 160);
+  flightsGlobeScene.add(globeSun);
+
+  flightsGlobeControls = new THREE.OrbitControls(flightsGlobeCamera, flightsGlobeRenderer.domElement);
+  flightsGlobeControls.enableDamping = true;
+  flightsGlobeControls.dampingFactor = 0.08;
+  flightsGlobeControls.minDistance = 130;
+  flightsGlobeControls.maxDistance = 520;
+  flightsGlobeControls.rotateSpeed = 0.5;
+  flightsGlobeControls.enablePan = false;
+  // Dès que l'utilisateur commence à interagir (clic + glisser, molette, tactile), on coupe
+  // la rotation automatique pour de bon — sinon elle continue de tourner sous les doigts de
+  // l'utilisateur et se bat visuellement avec le drag manuel.
+  flightsGlobeControls.addEventListener('start', () => { _flightsGlobeAutoRotate = false; });
+
+  // Sphère sombre + maillage filaire façon HUD, cohérent avec l'esthétique sombre/cockpit
+  // du reste de l'appli, complétée par le tracé des côtes (voir loadFlightsGlobeCoastlines)
+  // pour que les continents restent reconnaissables sans recourir à une texture réaliste.
+  flightsGlobeGroup = new THREE.Group();
+  flightsGlobeGroup.add(new THREE.Mesh(
+    new THREE.SphereGeometry(GLOBE_RADIUS - 0.6, 64, 48),
+    // MeshPhong (et non plus Basic) pour que la sphère réagisse à l'éclairage ci-dessus —
+    // donne un vrai dégradé jour/nuit qui aide à percevoir le relief/la rotation, plutôt
+    // qu'une silhouette plate uniformément sombre.
+    new THREE.MeshPhongMaterial({ color: 0x0d1620, emissive: 0x050a10, shininess: 4, transparent: true, opacity: .95 })
+  ));
+  flightsGlobeGroup.add(new THREE.Mesh(
+    new THREE.SphereGeometry(GLOBE_RADIUS + 6, 32, 24),
+    new THREE.MeshBasicMaterial({ color: 0x39e88f, transparent: true, opacity: .035, side: THREE.BackSide })
+  ));
+  flightsGlobeScene.add(flightsGlobeGroup);
+
+  // Arcs de trajet + points aéroports, enfants du globe pour tourner avec lui.
+  flightsGlobeContentGroup = new THREE.Group();
+  flightsGlobeGroup.add(flightsGlobeContentGroup);
+
+  loadFlightsGlobeCoastlines();
+  addFlightsGlobeGraticule();
+
+  flightsGlobeRaycaster = new THREE.Raycaster();
+  flightsGlobeRaycaster.params.Line = { threshold: 2.2 }; // tolérance de survol des arcs (fins)
+
+  container.addEventListener('mousemove', onFlightsGlobePointerMove);
+  container.addEventListener('mouseleave', hideFlightsGlobeTooltip);
+  // Clic (souris ou tactile) = arrêt définitif de la rotation automatique, même sans
+  // glisser (ex. simple clic pour examiner le globe immobile).
+  container.addEventListener('pointerdown', () => { _flightsGlobeAutoRotate = false; });
+  window.addEventListener('resize', resizeFlightsGlobe);
+  // Coupe aussi le rendu quand la fenêtre est réduite/masquée (ex. en arrière-plan pendant
+  // qu'on vole/stream) : le globe n'est de toute façon visible que sur l'onglet Profil, pas
+  // la peine de continuer à faire tourner le GPU pour rien.
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden) pauseFlightsGlobe();
+    else if(el('view-profil') && el('view-profil').classList.contains('active')) resumeFlightsGlobe();
+  });
+
+  resumeFlightsGlobe();
+}
+
+// Charge une fois le tracé simplifié des côtes (renderer/data/coastlines.json, ~130 lignes
+// dérivées de Natural Earth 110m, entièrement local/hors-ligne) et le dessine comme des
+// lignes posées sur la sphère, dans le même esprit HUD filaire que le reste du globe —
+// pour rendre les continents reconnaissables sans texture terrestre réaliste.
+let _flightsGlobeCoastlinesLoaded = false;
+async function loadFlightsGlobeCoastlines(){
+  if(_flightsGlobeCoastlinesLoaded || !flightsGlobeGroup) return;
+  _flightsGlobeCoastlinesLoaded = true;
+  try{
+    const res = await fetch('data/coastlines.json');
+    const lines = await res.json();
+    const coastR = GLOBE_RADIUS - 0.15;
+    // Plus lumineux et plus opaque qu'avant (0x8fb8c9/.55) pour que les continents restent
+    // lisibles même en rotation ou avec plusieurs arcs de trajet superposés par-dessus.
+    const material = new THREE.LineBasicMaterial({ color: 0xcfe9f2, transparent: true, opacity: .8 });
+    // Halo légèrement plus large et plus terne en dessous, pour un effet de "glow" qui
+    // rattrape la finesse d'1 px des lignes WebGL (lineWidth n'est pas honoré sur la plupart
+    // des GPU/ANGLE) sans avoir à recourir à un shader dédié.
+    const glowMaterial = new THREE.LineBasicMaterial({ color: 0x54d6e8, transparent: true, opacity: .22 });
+    const coastGroup = new THREE.Group();
+    lines.forEach(line => {
+      if(!Array.isArray(line) || line.length < 2) return;
+      const points = line.map(([lon, lat]) => latLonToVector3(lat, lon, coastR));
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      coastGroup.add(new THREE.Line(geo, material));
+      const glowPoints = line.map(([lon, lat]) => latLonToVector3(lat, lon, coastR - 0.35));
+      coastGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(glowPoints), glowMaterial));
+    });
+    flightsGlobeGroup.add(coastGroup);
+  }catch(e){ /* fichier de côtes indisponible -> globe filaire seul, sans bloquer le reste */ }
+}
+
+// Quadrillage latitude/longitude (tous les 30°, + équateur et méridien de Greenwich un peu
+// plus marqués) : repère visuel pour situer un trajet/aéroport sur le globe, absent avant
+// (seul le wireframe de la sphère donnait une notion très vague d'orientation).
+function addFlightsGlobeGraticule(){
+  if(!flightsGlobeGroup) return;
+  const r = GLOBE_RADIUS + 0.05;
+  const graticule = new THREE.Group();
+  // Volontairement très discret : sert de repère d'orientation, pas de décor — trop marqué,
+  // il rentre en concurrence visuelle avec les côtes et les arcs de trajet (retour terrain :
+  // combiné à l'ancien maillage filaire de la sphère, l'effet "ballon de foot" rendait le
+  // globe illisible). Un seul jeu de lignes, pas de doublon avec un wireframe de sphère.
+  const normalMat = new THREE.LineBasicMaterial({ color: 0x3d6b7a, transparent: true, opacity: .1 });
+  const majorMat = new THREE.LineBasicMaterial({ color: 0x54d6e8, transparent: true, opacity: .2 });
+
+  // Parallèles (latitude constante)
+  for(let lat = -60; lat <= 60; lat += 30){
+    const pts = [];
+    for(let lon = -180; lon <= 180; lon += 5) pts.push(latLonToVector3(lat, lon, r));
+    graticule.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lat === 0 ? majorMat : normalMat));
+  }
+  // Méridiens (longitude constante)
+  for(let lon = -180; lon < 180; lon += 30){
+    const pts = [];
+    for(let lat = -90; lat <= 90; lat += 5) pts.push(latLonToVector3(lat, lon, r));
+    graticule.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lon === 0 ? majorMat : normalMat));
+  }
+  flightsGlobeGroup.add(graticule);
+}
+
+function resizeFlightsGlobe(){
+  const container = el('flightsGlobe');
+  if(!container || !flightsGlobeRenderer || !flightsGlobeCamera) return;
+  const w = container.clientWidth || 600, h = container.clientHeight || 480;
+  flightsGlobeCamera.aspect = w / h;
+  flightsGlobeCamera.updateProjectionMatrix();
+  flightsGlobeRenderer.setSize(w, h);
+}
+
+// Boucle de rendu du globe : ne tourne QUE pendant que l'onglet Profil est réellement affiché
+// (et la fenêtre visible) — avant, elle continuait indéfiniment en arrière-plan dès la 1ère
+// visite de l'onglet, consommant du GPU en continu (perte de FPS potentielle côté simu/stream,
+// notamment sur un setup avec un seul GPU partagé entre MSFS et l'encodage OBS).
+let _flightsGlobeAnimHandle = null;
+function resumeFlightsGlobe(){
+  if(_flightsGlobeAnimHandle || !flightsGlobeRenderer) return; // déjà en cours, ou pas encore initialisé
+  animateFlightsGlobe();
+}
+function pauseFlightsGlobe(){
+  if(_flightsGlobeAnimHandle){ cancelAnimationFrame(_flightsGlobeAnimHandle); _flightsGlobeAnimHandle = null; }
+}
+
+function animateFlightsGlobe(){
+  _flightsGlobeAnimHandle = requestAnimationFrame(animateFlightsGlobe);
+  if(flightsGlobeControls) flightsGlobeControls.update();
+  if(flightsGlobeGroup && _flightsGlobeAutoRotate) flightsGlobeGroup.rotation.y += 0.0006; // légère rotation continue, coupée au 1er clic
+  if(flightsGlobeRenderer && flightsGlobeScene && flightsGlobeCamera) flightsGlobeRenderer.render(flightsGlobeScene, flightsGlobeCamera);
+}
+
+function flightsGlobeColor(rules){
+  return rules === 'VFR' ? 0xffb020 : 0x54d6e8; // mêmes teintes que --accent-vfr / --accent-ifr
+}
+
+// Filtre "tous les vols", "certains appareils/indicatifs" (recherche libre), "certain
+// réseau" ou "certain type de vol" (IFR/VFR) — appliqué aux vols déjà enregistrés dans le logbook.
+function filteredFlightsGlobeData(){
+  const q = (_flightsGlobeFilters.search || '').trim().toUpperCase();
+  return db.logbook.filter(f => {
+    if(!f.dep || !f.arr) return false;
+    if(_flightsGlobeFilters.rules !== 'all' && f.rules !== _flightsGlobeFilters.rules) return false;
+    if(_flightsGlobeFilters.network !== 'all' && (f.network || '').trim() !== _flightsGlobeFilters.network) return false;
+    if(q){
+      const hay = `${f.callsign || ''} ${f.aircraft || ''}`.toUpperCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+// Résout les coordonnées de chaque OACI via l'index local (main process), avec cache
+// mémoire pour éviter de refaire l'aller-retour IPC à chaque changement de filtre.
+async function resolveAirportCoords(icaoList){
+  const results = {};
+  await Promise.all(icaoList.map(async icao => {
+    if(_airportCoordCache[icao] !== undefined){ results[icao] = _airportCoordCache[icao]; return; }
+    let info = null;
+    try{ info = (window.api && window.api.lookupAirport) ? await window.api.lookupAirport(icao) : null; }
+    catch(e){ info = null; }
+    _airportCoordCache[icao] = info;
+    results[icao] = info;
+  }));
+  return results;
+}
+
+// Arc de grand cercle stylisé : point milieu élevé au-dessus de la sphère (d'autant plus
+// haut que la distance parcourue est grande), pour bien distinguer les trajets superposés.
+function buildArcPoints(startLatLon, endLatLon, radius){
+  const startVec = latLonToVector3(startLatLon.lat, startLatLon.lon, radius);
+  const endVec = latLonToVector3(endLatLon.lat, endLatLon.lon, radius);
+  const distance = startVec.distanceTo(endVec);
+  const mid = startVec.clone().add(endVec).multiplyScalar(0.5);
+  const bulge = radius * 0.15 + distance * 0.18;
+  mid.normalize().multiplyScalar(radius + bulge);
+  return new THREE.QuadraticBezierCurve3(startVec, mid, endVec).getPoints(48);
+}
+
+async function renderFlightsGlobeArcs(){
+  if(!flightsGlobeContentGroup) return;
+  const statusEl = el('fgStatusMsg');
+
+  const flights = filteredFlightsGlobeData();
+  if(!flights.length){
+    while(flightsGlobeContentGroup.children.length){
+      const m = flightsGlobeContentGroup.children.pop();
+      if(m.geometry) m.geometry.dispose();
+      if(m.material) m.material.dispose();
+    }
+    _flightsGlobeMeshes = [];
+    if(statusEl){ statusEl.textContent = 'Aucun vol avec départ/arrivée renseignés ne correspond aux filtres actuels.'; statusEl.className = 'status-msg'; }
+    return;
+  }
+
+  if(statusEl){ statusEl.textContent = 'Chargement des coordonnées aéroports…'; statusEl.className = 'status-msg'; }
+  const icaos = Array.from(new Set(flights.flatMap(f => [f.dep, f.arr]).filter(Boolean).map(x => x.toUpperCase())));
+  const coords = await resolveAirportCoords(icaos);
+
+  // Nettoyage des arcs/points précédents (fait après la résolution des coordonnées pour
+  // éviter un globe vide pendant le chargement lors d'un changement de filtre rapide).
+  while(flightsGlobeContentGroup.children.length){
+    const m = flightsGlobeContentGroup.children.pop();
+    if(m.geometry) m.geometry.dispose();
+    if(m.material) m.material.dispose();
+  }
+  _flightsGlobeMeshes = [];
+
+  const airportUsage = {}; // ICAO -> { info, count }
+  let arcsDrawn = 0;
+
+  flights.forEach(f => {
+    const dep = coords[(f.dep || '').toUpperCase()];
+    const arr = coords[(f.arr || '').toUpperCase()];
+    if(!dep || !arr) return;
+    const points = buildArcPoints(dep, arr, GLOBE_RADIUS);
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: flightsGlobeColor(f.rules), transparent: true, opacity: .5 })
+    );
+    line.userData.flight = f;
+    flightsGlobeContentGroup.add(line);
+    _flightsGlobeMeshes.push(line);
+    arcsDrawn++;
+
+    [[f.dep, dep], [f.arr, arr]].forEach(([icao, info]) => {
+      const key = icao.toUpperCase();
+      if(!airportUsage[key]) airportUsage[key] = { info, count: 0, icao: key };
+      airportUsage[key].count++;
+    });
+  });
+
+  // Taille du point proportionnelle au nombre de vols (racine carrée pour un rapport de
+  // taille raisonnable même entre l'aéroport de base et une escale visitée une fois) —
+  // avant, tous les points faisaient la même taille, rendant les hubs peu visibles.
+  const maxUsage = Math.max(1, ...Object.values(airportUsage).map(a => a.count));
+  const dotMat = new THREE.MeshBasicMaterial({ color: 0x39e88f });
+  Object.values(airportUsage).forEach(a => {
+    const radius = 0.8 + Math.sqrt(a.count / maxUsage) * 1.6;
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 12), dotMat);
+    mesh.position.copy(latLonToVector3(a.info.lat, a.info.lon, GLOBE_RADIUS + 1));
+    mesh.userData.airport = a;
+    flightsGlobeContentGroup.add(mesh);
+    _flightsGlobeMeshes.push(mesh);
+    // Halo discret pour les aéroports les plus fréquentés (hubs), qui ressortent
+    // maintenant nettement au premier coup d'œil plutôt que de se fondre dans la masse.
+    if(a.count / maxUsage > 0.5){
+      const halo = new THREE.Mesh(
+        new THREE.SphereGeometry(radius + 1.4, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x39e88f, transparent: true, opacity: .18 })
+      );
+      halo.position.copy(mesh.position);
+      // Pas ajouté à _flightsGlobeMeshes : purement décoratif, ne doit pas interférer avec
+      // le raycast de survol (qui doit toujours cibler le point plein en priorité).
+      flightsGlobeContentGroup.add(halo);
+    }
+  });
+
+  if(statusEl){
+    const airportCount = Object.keys(airportUsage).length;
+    statusEl.textContent = arcsDrawn
+      ? `${arcsDrawn} vol${arcsDrawn > 1 ? 's' : ''} affiché${arcsDrawn > 1 ? 's' : ''} sur ${airportCount} aéroport${airportCount > 1 ? 's' : ''}.`
+      : "Aucun des vols filtrés n'a pu être placé sur le globe (aéroport introuvable dans l'index local).";
+    statusEl.className = 'status-msg';
+  }
+}
+
+function setFlightsGlobeRulesFilter(rules){
+  _flightsGlobeFilters.rules = rules;
+  el('fgRulesToggle').dataset.rules = rules;
+  const order = ['all', 'IFR', 'VFR'];
+  document.querySelectorAll('#fgRulesToggle button').forEach((b, i) => {
+    b.classList.remove('active-vfr', 'active-ifr');
+    if(order[i] === rules) b.classList.add(rules === 'VFR' ? 'active-vfr' : 'active-ifr');
+  });
+  renderFlightsGlobeArcs();
+}
+
+// Liste des réseaux réellement présents dans le logbook (VATSIM, IVAO, Solo, etc.),
+// reconstruite à chaque affichage de l'onglet pour rester à jour.
+function populateFlightsGlobeNetworkFilter(){
+  const sel = el('fgNetwork');
+  if(!sel) return;
+  const current = sel.value || 'all';
+  const networks = Array.from(new Set(db.logbook.map(f => (f.network || '').trim()).filter(Boolean))).sort();
+  sel.innerHTML = '<option value="all">Tous les réseaux</option>' + networks.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  sel.value = networks.includes(current) ? current : 'all';
+  _flightsGlobeFilters.network = sel.value;
+}
+
+function onFlightsGlobePointerMove(evt){
+  if(!flightsGlobeRaycaster || !flightsGlobeCamera || !_flightsGlobeMeshes.length){ hideFlightsGlobeTooltip(); return; }
+  const container = el('flightsGlobe');
+  const ndc = globePointerToNDC(evt, container);
+  flightsGlobeRaycaster.setFromCamera(ndc, flightsGlobeCamera);
+  const hits = flightsGlobeRaycaster.intersectObjects(_flightsGlobeMeshes);
+  if(hits.length){
+    const obj = hits[0].object;
+    if(obj.userData.flight) showFlightsGlobeFlightTooltip(obj.userData.flight, evt, container);
+    else if(obj.userData.airport) showFlightsGlobeAirportTooltip(obj.userData.airport, evt, container);
+    container.style.cursor = 'pointer';
+  } else {
+    hideFlightsGlobeTooltip();
+    container.style.cursor = 'grab';
+  }
+}
+
+function showFlightsGlobeFlightTooltip(f, evt, container){
+  const tip = el('fgTooltip');
+  if(!tip) return;
+  const rect = container.getBoundingClientRect();
+  tip.style.left = (evt.clientX - rect.left) + 'px';
+  tip.style.top = (evt.clientY - rect.top) + 'px';
+  tip.innerHTML = `
+    <div class="tt-title ${f.rules === 'VFR' ? 'vfr' : 'ifr'}">${escapeHtml(f.callsign || '—')}</div>
+    <div class="tt-line">${escapeHtml(f.dep)} → ${escapeHtml(f.arr)}</div>
+    <div class="tt-line">${escapeHtml(f.aircraft || '—')} · ${f.rules || '—'}</div>
+    <div class="tt-line">${escapeHtml(f.date || '—')} · ${minToHhmm(f.durationMin || 0)}${f.network ? ' · ' + escapeHtml(f.network) : ''}</div>
+  `;
+  tip.classList.remove('hidden');
+}
+function showFlightsGlobeAirportTooltip(a, evt, container){
+  const tip = el('fgTooltip');
+  if(!tip) return;
+  const rect = container.getBoundingClientRect();
+  tip.style.left = (evt.clientX - rect.left) + 'px';
+  tip.style.top = (evt.clientY - rect.top) + 'px';
+  tip.innerHTML = `
+    <div class="tt-title">${escapeHtml(a.icao)}</div>
+    <div class="tt-line">${escapeHtml((a.info && a.info.name) || '')}</div>
+    <div class="tt-line">${a.count} vol${a.count > 1 ? 's' : ''} départ/arrivée</div>
+  `;
+  tip.classList.remove('hidden');
+}
+function hideFlightsGlobeTooltip(){
+  const tip = el('fgTooltip');
+  if(tip) tip.classList.add('hidden');
+}
+
+function bindFlightsGlobeControls(){
+  const search = el('fgSearch');
+  if(search){
+    search.addEventListener('input', debounce(() => {
+      _flightsGlobeFilters.search = search.value;
+      renderFlightsGlobeArcs();
+    }, 200));
+  }
+  const network = el('fgNetwork');
+  if(network){
+    network.addEventListener('change', () => {
+      _flightsGlobeFilters.network = network.value;
+      renderFlightsGlobeArcs();
+    });
   }
 }
 
@@ -2176,7 +2788,7 @@ const TOUR_STEPS = [
   { target: '[data-view="livetool"]', title: 'Outil Live', text: "La carte OBS de ton briefing, et un overlay Twitch entièrement personnalisable pour afficher ta télémétrie en direct." },
   { target: '[data-view="tools"]', title: 'Outils', text: 'Des calculateurs de vol rapides : temps/distance/vitesse, carburant, top of descent, entrée en hold, METAR/TAF...' },
   { target: '[data-view="admin"]', title: 'Admin', text: "Personnalise entièrement l'apparence de la carte de briefing OBS : couleurs, polices, disposition." },
-  { target: '[data-view="profil"]', title: 'Profil', text: 'Ton identité pilote et toutes tes statistiques de vol. Tu peux relancer cette visite ici à tout moment.' }
+  { target: '[data-view="profil"]', title: 'Profil', text: "Ton identité pilote, toutes tes statistiques de vol, et un globe 3D de tous tes trajets déjà effectués. Tu peux relancer cette visite ici à tout moment." }
 ];
 let _tourIndex = 0;
 
@@ -2269,6 +2881,8 @@ async function endTour(){
   renderThemePresets();
   initTrackerListeners();
   initTrackMap();
+  updateBriefingSaveVisibility();
+  bindFlightsGlobeControls();
   attachToolsListeners();
   el('sbUsername').value = db.simbriefUsername || '';
   el('sbUsername').addEventListener('change', async () => {

@@ -88,9 +88,10 @@
         <div class="field"><label>Météo (résumé ou METAR)</label><textarea id="weather" placeholder="ex : Vent 250/12kt, CAVOK, QNH 1013"></textarea></div>
         <div class="field"><label>Notes opérationnelles</label><textarea id="notes" placeholder="ex : SID BANOX 4A, piste 27R, transpondeur assigné"></textarea></div>
 
-        <div class="btn-row">
+        <div class="btn-row" id="briefingSaveRow">
           <button class="btn primary block" onclick="sendBriefingToLogbook()">Enregistrer ce vol dans le logbook</button>
         </div>
+        <div class="hint" id="briefingSaveHint" style="display:none;">Vol en cours de suivi via le simulateur : une fois atterri, envoie le PIREP directement depuis le rapport de vol tracké ci-dessous (un seul envoi, trajet inclus).</div>
 
         <h2>Suivi du vol (SimConnect)</h2>
         <div class="field">
@@ -99,10 +100,14 @@
               <span class="status-dot" id="trkStatusDot"></span>
               <span id="trkStatusText">Non connecté</span>
             </div>
-            <button class="btn primary small" id="trkConnectBtn" onclick="toggleTrackerConnection()">Connecter au simulateur</button>
+            <button class="btn primary small" id="trkConnectBtn" onclick="toggleTrackerConnection()">Lancer le vol &amp; le tracker</button>
           </div>
           <div class="status-msg" id="trkStatusMsg"></div>
-          <div class="hint">Connecte-toi à ton simulateur (MSFS) pour suivre ce vol en direct : la carte, la télémétrie et le rapport détaillé se complètent ci-contre et ci-dessous au fil du vol, jusqu'à l'atterrissage.</div>
+          <div class="hint">Un seul clic connecte le simulateur (MSFS) et arme le suivi : la carte, la télémétrie et le rapport détaillé se complètent ci-contre et ci-dessous dès le décollage.</div>
+          <div class="btn-row hidden" id="trkStopRow" style="margin-top:10px;">
+            <button class="btn danger block" id="trkStopBtn" onclick="stopTrackingAndSendPirep()">Arrêter le vol &amp; envoyer le PIREP</button>
+          </div>
+          <div class="hint hidden" id="trkStopHint">Clôture le vol maintenant (sans attendre la détection automatique du parking) et enregistre directement le PIREP complet dans le logbook, avec tous les champs du briefing.</div>
         </div>
       </div>
 
@@ -157,9 +162,12 @@
           <div class="tstat"><div class="cap">Altitude max</div><div class="val" id="trkResMaxAlt">—</div></div>
           <div class="tstat"><div class="cap">Vitesse max</div><div class="val" id="trkResMaxIas">—</div></div>
           <div class="tstat"><div class="cap">Taux d'atterrissage</div><div class="val" id="trkResLanding">—</div></div>
+          <div class="tstat"><div class="cap">Rebonds</div><div class="val" id="trkResBounce">—</div></div>
+          <div class="tstat"><div class="cap">Virage max</div><div class="val" id="trkResMaxBank">—</div></div>
         </div>
-        <div class="btn-row" style="margin-top:14px;">
-          <button class="btn primary" onclick="applyTrackedFlightToLogbook()">Ajouter au logbook</button>
+        <div class="hint" style="margin-bottom:10px;">Trajet complet (tracé sur la carte), phases et statistiques du vol inclus automatiquement dans le PIREP.</div>
+        <div class="btn-row" style="margin-top:2px;">
+          <button class="btn primary" onclick="applyTrackedFlightToLogbook()">Envoyer le PIREP dans le logbook</button>
           <button class="btn" onclick="dismissTrackedFlight()">Ignorer ce vol</button>
         </div>
       </div>
@@ -423,6 +431,11 @@
           <div class="field"><label>Fréquence radio</label><input type="text" id="loLabel_radio" placeholder="Fréquence radio"></div>
           <div class="field"><label>Distance</label><input type="text" id="loLabel_distance" placeholder="Distance"></div>
           <div class="field"><label>Progression</label><input type="text" id="loLabel_progress" placeholder="Progression"></div>
+
+          <h2>Textes personnalisés libres</h2>
+          <div class="hint" style="margin-top:-4px; margin-bottom:10px;">Ajoute jusqu'à 2 textes libres à afficher sur l'overlay (ex : ton Discord, un sponsor…). Laisse le champ vide pour qu'il n'apparaisse pas.</div>
+          <div class="field"><label>Texte personnalisé 1</label><input type="text" id="loCustom1" placeholder="Laisser vide pour ne rien afficher"></div>
+          <div class="field"><label>Texte personnalisé 2</label><input type="text" id="loCustom2" placeholder="Laisser vide pour ne rien afficher"></div>
 
           <h2>Lien pour OBS</h2>
           <div class="field">
@@ -748,10 +761,12 @@
       <div class="card-col">
         <div class="eyebrow" style="margin-bottom:8px;">Statistiques — calculées à partir de ton logbook</div>
         <div class="stat-row" id="pfStatRow">
-          <div class="stat-card"><div class="cap">Vols enregistrés</div><div class="val" id="pfStatFlights">0</div></div>
-          <div class="stat-card"><div class="cap">Heures de vol</div><div class="val" id="pfStatHours">0h</div></div>
-          <div class="stat-card"><div class="cap">Distance totale</div><div class="val" id="pfStatDistance" style="font-size:18px;">0 NM</div></div>
-          <div class="stat-card"><div class="cap">Vol le plus long</div><div class="val" id="pfStatLongest" style="font-size:18px;">—</div></div>
+          <div class="stat-card" style="--stat-accent:var(--accent-ifr);"><span class="stat-icon">✈️</span><div class="cap">Vols enregistrés</div><div class="val" id="pfStatFlights">0</div></div>
+          <div class="stat-card" style="--stat-accent:var(--phosphor);"><span class="stat-icon">⏱️</span><div class="cap">Heures de vol</div><div class="val" id="pfStatHours">0h</div></div>
+          <div class="stat-card" style="--stat-accent:var(--accent-vfr);"><span class="stat-icon">🌍</span><div class="cap">Distance totale</div><div class="val" id="pfStatDistance" style="font-size:18px;">0 NM</div></div>
+          <div class="stat-card" style="--stat-accent:var(--accent-ifr);"><span class="stat-icon">🏆</span><div class="cap">Vol le plus long</div><div class="val" id="pfStatLongest" style="font-size:18px;">—</div></div>
+          <div class="stat-card" style="--stat-accent:var(--phosphor);"><span class="stat-icon">📊</span><div class="cap">Durée moyenne</div><div class="val" id="pfStatAvgDuration" style="font-size:18px;">—</div></div>
+          <div class="stat-card" style="--stat-accent:var(--accent-vfr);"><span class="stat-icon">🛬</span><div class="cap">Aéroports visités</div><div class="val" id="pfStatAirportCount" style="font-size:18px;">0</div></div>
         </div>
 
         <div class="card-panel">
@@ -778,6 +793,31 @@
         <div class="card-panel">
           <h3>Carrières</h3>
           <div id="pfCareersSummary" class="top-list"></div>
+        </div>
+
+        <div class="card-panel" id="flightsGlobePanel" style="padding-bottom:14px;">
+          <h3>Mes vols dans le monde</h3>
+          <div class="hint" style="margin-top:-6px; margin-bottom:12px;">Trajets de tous les vols enregistrés dans ton logbook, projetés sur un globe 3D. Glisse pour orienter, molette pour zoomer, survole un trajet ou un aéroport pour le détail.</div>
+          <div class="globe-filter-row">
+            <input type="text" id="fgSearch" placeholder="Filtrer par indicatif ou appareil">
+            <div class="toggle-group" id="fgRulesToggle" data-rules="all">
+              <button onclick="setFlightsGlobeRulesFilter('all')" class="active-ifr">Tous</button>
+              <button onclick="setFlightsGlobeRulesFilter('IFR')">IFR</button>
+              <button onclick="setFlightsGlobeRulesFilter('VFR')">VFR</button>
+            </div>
+            <select id="fgNetwork"><option value="all">Tous les réseaux</option></select>
+          </div>
+          <div class="globe-shell">
+            <div id="flightsGlobe"></div>
+            <div class="globe-legend">
+              <span><i class="dot ifr"></i> IFR</span>
+              <span><i class="dot vfr"></i> VFR</span>
+            </div>
+            <div class="globe-tooltip hidden" id="fgTooltip"></div>
+            <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
+            <span class="hud-corner bl"></span><span class="hud-corner br"></span>
+          </div>
+          <div class="status-msg" id="fgStatusMsg" style="margin-top:10px;"></div>
         </div>
       </div>
     </div>
@@ -870,6 +910,8 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

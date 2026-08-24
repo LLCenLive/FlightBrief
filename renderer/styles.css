@@ -149,9 +149,16 @@ input[type=color]{width:100%; height:38px; padding:2px; border:1px solid var(--h
 .notes-bar .txt{color:var(--text-primary);}
 
 .stat-row{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px;}
-.stat-card{background:var(--panel-bezel); border:1px solid var(--hairline); border-radius:12px; padding:14px 16px;}
-.stat-card .cap{font-family:var(--font-display); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-secondary);}
-.stat-card .val{font-family:var(--font-mono); font-size:24px; font-weight:600; margin-top:4px;}
+.stat-card{
+  background:linear-gradient(160deg, var(--panel-bezel), color-mix(in srgb, var(--panel-bezel) 82%, var(--stat-accent, var(--phosphor)) 18%));
+  border:1px solid var(--hairline); border-left:3px solid var(--stat-accent, var(--phosphor));
+  border-radius:12px; padding:14px 16px; position:relative; overflow:hidden;
+  transition:transform .15s ease, border-color .15s ease;
+}
+.stat-card:hover{transform:translateY(-2px); border-color:color-mix(in srgb, var(--stat-accent, var(--phosphor)) 45%, var(--hairline));}
+.stat-card .stat-icon{position:absolute; top:10px; right:12px; font-size:16px; opacity:.55;}
+.stat-card .cap{font-family:var(--font-display); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-secondary); padding-right:22px;}
+.stat-card .val{font-family:var(--font-mono); font-size:24px; font-weight:600; margin-top:4px; color:var(--stat-accent, var(--text-primary));}
 
 table{width:100%; border-collapse:collapse; font-size:12.5px;}
 th{text-align:left; font-family:var(--font-display); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-secondary); padding:8px 10px; border-bottom:1px solid var(--hairline);}
@@ -379,17 +386,48 @@ input.tool-output{color:var(--phosphor); border-color:color-mix(in srgb, var(--p
 .live-tracking-section .hint{margin:0;}
 #liveReportPanel h3{font-family:var(--font-display); font-size:13px; letter-spacing:.06em; margin:0 0 4px;}
 
+/* ---------------- Profil — globe 3D des vols déjà effectués ---------------- */
+.globe-shell{ position:relative; border-radius:12px; overflow:hidden; background:radial-gradient(circle at 50% 40%, #0d1620 0%, var(--cockpit-night) 72%); }
+.globe-shell #flightsGlobe{ width:100%; height:480px; cursor:grab; }
+.globe-shell #flightsGlobe:active{ cursor:grabbing; }
+.globe-filter-row{ display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.globe-filter-row input[type=text]{ flex:1; min-width:180px; }
+.globe-filter-row .toggle-group{ width:auto; flex:none; }
+.globe-filter-row .toggle-group button{ padding:9px 14px; }
+.globe-filter-row select{ width:auto; flex:none; min-width:160px; }
+.globe-legend{ position:absolute; top:14px; left:14px; z-index:452; display:flex; gap:14px; font-family:var(--font-display); font-size:11px; letter-spacing:.04em; color:var(--text-secondary); background:rgba(10,13,17,.55); border:1px solid var(--hairline); border-radius:8px; padding:6px 10px; backdrop-filter:blur(4px); }
+.globe-legend span{ display:flex; align-items:center; gap:6px; }
+.globe-legend .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+.globe-legend .dot.ifr{ background:var(--accent-ifr); box-shadow:0 0 6px var(--accent-ifr); }
+.globe-legend .dot.vfr{ background:var(--accent-vfr); box-shadow:0 0 6px var(--accent-vfr); }
+.globe-tooltip{ position:absolute; z-index:453; pointer-events:none; background:var(--panel-bezel); border:1px solid var(--hairline); border-radius:9px; padding:9px 12px; font-size:12px; line-height:1.6; box-shadow:0 12px 30px rgba(0,0,0,.4); max-width:220px; transform:translate(-50%,-115%); }
+.globe-tooltip .tt-title{ font-family:var(--font-mono); font-weight:700; font-size:13px; margin-bottom:2px; }
+.globe-tooltip .tt-title.ifr{ color:var(--accent-ifr); }
+.globe-tooltip .tt-title.vfr{ color:var(--accent-vfr); }
+.globe-tooltip .tt-line{ color:var(--text-secondary); }
+
+/* ---------------- Overlay Live — texte libre personnalisé ---------------- */
+.lo-item.lo-custom .lo-val{ font-family:var(--lo-font); font-weight:600; }
+
 /* ---------------- Footer ---------------- */
 .app-footer{text-align:center; padding:14px 20px 20px; font-size:11px; letter-spacing:.03em; color:var(--text-secondary); font-family:var(--font-display);}
 
 /* ---------------- Profil — stats ---------------- */
 #pfStatRow{grid-template-columns:repeat(4,1fr);}
-.top-list{display:flex; flex-direction:column; gap:8px;}
-.top-list .row{display:grid; grid-template-columns:110px 1fr 50px; align-items:center; gap:10px; font-size:12.5px;}
-.top-list .row .name{font-family:var(--font-mono); color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.top-list .row .bar-track{height:7px; background:var(--cockpit-night); border:1px solid var(--hairline); border-radius:5px; overflow:hidden;}
-.top-list .row .bar-fill{height:100%; background:var(--phosphor);}
-.top-list .row .count{font-family:var(--font-mono); color:var(--text-secondary); text-align:right;}
+.top-list{display:flex; flex-direction:column; gap:2px;}
+.top-list .row{display:grid; grid-template-columns:22px minmax(90px,140px) 1fr 64px; align-items:center; gap:10px; font-size:12px; padding:5px 4px; border-radius:6px; border-left:2px solid transparent;}
+.top-list .row.top-rank{border-left-color:var(--row-accent, var(--phosphor)); background:rgba(255,255,255,.025);}
+.top-list .row .rank{font-family:var(--font-display); font-weight:700; font-size:9.5px; width:20px; height:20px; border-radius:5px; border:1px solid var(--hairline); color:var(--text-secondary); display:flex; align-items:center; justify-content:center;}
+.top-list .row.top-rank .rank{border-color:color-mix(in srgb, var(--row-accent, var(--phosphor)) 50%, transparent); color:var(--row-accent, var(--phosphor)); background:color-mix(in srgb, var(--row-accent, var(--phosphor)) 14%, transparent);}
+.top-list .row .name{font-family:var(--font-mono); color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; letter-spacing:.01em;}
+.top-list .row.top-rank .name{color:var(--text-primary); font-weight:600;}
+/* Barre segmentée façon jauge cockpit (fuel/signal), pas un dégradé plein continu façon
+   dashboard SaaS générique — cohérent avec l'esthétique HUD/instrument du reste de l'appli. */
+.top-list .row .bar-track{height:9px; background:repeating-linear-gradient(90deg, var(--cockpit-night) 0 3px, rgba(255,255,255,.025) 3px 4px); border:1px solid var(--hairline); border-radius:2px; overflow:hidden;}
+.top-list .row .bar-fill{height:100%; background-image:repeating-linear-gradient(90deg, var(--row-accent, var(--phosphor)) 0 3px, color-mix(in srgb, var(--row-accent, var(--phosphor)) 40%, transparent) 3px 4px); transition:width .3s ease;}
+.top-list .row .count{font-family:var(--font-mono); color:var(--text-secondary); text-align:right; display:flex; justify-content:flex-end; align-items:baseline; gap:5px;}
+.top-list .row.top-rank .count{color:var(--text-primary);}
+.top-list .row .count .pct{font-size:9.5px; color:var(--text-secondary); opacity:.55; min-width:26px; text-align:right;}
 .top-list .empty{font-size:12.5px; color:var(--text-secondary);}
 
 /* ---------------- Visite guidée ---------------- */
