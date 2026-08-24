@@ -107,6 +107,12 @@ function createWindow() {
 
   mainWindow.on('maximize', () => mainWindow.webContents.send('win:maximized-change', true));
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('win:maximized-change', false));
+  // Sans ça, mainWindow garde une référence vers une fenêtre déjà détruite après la
+  // fermeture — inoffensif la plupart du temps, mais source d'erreurs sourdes si un
+  // handler IPC est appelé entre la fermeture et la fin réelle du process (cf. le
+  // filet de sécurité process.exit ci-dessous, qui peut laisser une fenêtre de temps
+  // avant que le process ne meure si SimConnect traîne à se libérer).
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 // Démarre le petit serveur HTTP local qui sert la source OBS. Avant : aucune gestion
@@ -167,7 +173,17 @@ app.on('window-all-closed', () => {
   tracker.disconnect();
   if (obsServer) { try { obsServer.close(); } catch (e) { /* déjà fermé */ } }
   if (liveOverlayServer) { try { liveOverlayServer.close(); } catch (e) { /* déjà fermé */ } }
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') {
+    app.quit();
+    // Filet de sécurité : si un vol était en cours de tracking au moment de la fermeture,
+    // le handle SimConnect natif (node-simconnect, hors de notre contrôle) peut rester
+    // ouvert un instant et empêcher le process de terminer complètement — obligeant
+    // jusqu'ici à le tuer depuis le Gestionnaire des tâches avant de pouvoir relancer
+    // l'appli (le verrou d'instance unique refusant la nouvelle instance tant que
+    // l'ancien process est encore vivant). On force donc la sortie du process 1,5 s après
+    // app.quit() si celui-ci n'a pas suffi entre-temps.
+    setTimeout(() => { app.exit(0); }, 1500);
+  }
 });
 
 app.on('before-quit', () => {
@@ -216,6 +232,7 @@ ipcMain.handle('tracker:connect', async () => {
 });
 ipcMain.handle('tracker:disconnect', () => { tracker.disconnect(); return true; });
 ipcMain.handle('tracker:isConnected', () => tracker.isConnected());
+ipcMain.handle('tracker:stopTracking', () => tracker.stopTracking());
 
 tracker.on('status', data => mainWindow && mainWindow.webContents.send('tracker:status', data));
 tracker.on('telemetry', data => mainWindow && mainWindow.webContents.send('tracker:telemetry', data));

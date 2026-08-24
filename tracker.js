@@ -26,6 +26,12 @@ const VARS = [
   { name: 'GROUND VELOCITY', unit: 'knots', key: 'gsKt' },
   { name: 'VERTICAL SPEED', unit: 'feet per minute', key: 'vsFpm' },
   { name: 'PLANE HEADING DEGREES TRUE', unit: 'degrees', key: 'headingDeg' },
+  // Angle d'inclinaison (roulis) et d'assiette (tangage), utilisés pour évaluer la
+  // qualité des virages (voir suivi de virage plus bas). Attention au signe SimConnect :
+  // à vérifier en vol réel selon l'appareil (convention pas toujours cohérente entre
+  // avions/add-ons) ; seule la valeur absolue du roulis est utilisée ci-dessous.
+  { name: 'PLANE BANK DEGREES', unit: 'degrees', key: 'bankDeg' },
+  { name: 'PLANE PITCH DEGREES', unit: 'degrees', key: 'pitchDeg' },
   { name: 'SIM ON GROUND', unit: 'bool', key: 'onGround' },
   { name: 'FUEL TOTAL QUANTITY WEIGHT', unit: 'pounds', key: 'fuelLbs' },
   { name: 'COM ACTIVE FREQUENCY:1', unit: 'MHz', key: 'comFreqMhz' },
@@ -47,6 +53,14 @@ const FINAL_APPROACH_MAX_SEC = 4 * 60;
 const APPROACH_AGL_FT = 3000;
 const APPROACH_MAX_SEC = 25 * 60;
 const VS_THRESHOLD_FPM = 300;
+
+// Détection des virages à partir de l'angle de roulis (bank). Un virage commence dès que
+// |bank| dépasse TURN_BANK_THRESHOLD_DEG et se termine quand il repasse en dessous. Les seuils
+// "serré"/"engagé" sont des repères génériques (vol de ligne/GA normal), à ajuster selon le
+// type d'appareil si besoin (un avion de voltige tolère bien plus que 45°).
+const TURN_BANK_THRESHOLD_DEG = 5;
+const STEEP_TURN_BANK_DEG = 30;    // au-delà : virage serré, à surveiller
+const AGGRESSIVE_TURN_BANK_DEG = 45; // au-delà : franchement inhabituel hors voltige
 
 function haversineNm(lat1, lon1, lat2, lon2) {
   const R = 3440.065; // rayon terrestre en NM
@@ -359,6 +373,16 @@ class FlightTracker extends EventEmitter {
     this._lastFuel = null;
     this._lastVs = 0;
     this._landingRate = null;
+    // Rebonds : le nombre de fois où l'avion redécolle brièvement après un premier toucher
+    // (touch-and-go non intentionnel compris). Le tout premier toucher (voir _processTelemetry,
+    // cas 'airborne') reste la référence pour landingRate/touchdownPoint/touchdownAt, même en
+    // cas de rebond — avant, chaque rebond écrasait ces valeurs avec le DERNIER impact.
+    this._bounceCount = 0;
+    // Virages : voir _trackBank. this._turns accumule chaque virage terminé de ce vol.
+    this._inTurn = false;
+    this._turnMaxBank = 0;
+    this._maxBankDeg = 0;
+    this._turns = [];
     this._lastPathTs = 0;
     this._stationarySince = null;
     this._liveDepGuess = null; // aéroport de départ deviné, mis en cache dès le 1er point du trajet
@@ -424,8 +448,25 @@ class FlightTracker extends EventEmitter {
       lat: data.lat, lon: data.lon, altFt: Math.round(data.altFt || 0),
       gsKt: Math.round(data.gsKt || 0), iasKt: Math.round(data.iasKt || 0),
       vsFpm: Math.round(data.vsFpm || 0), hdg: Math.round(data.headingDeg || 0),
+      bankDeg: Math.round((data.bankDeg || 0) * 10) / 10, pitchDeg: Math.round((data.pitchDeg || 0) * 10) / 10,
       onGround: data.onGround > 0.5, ts: now
     };
+  }
+
+  // Suivi du roulis en continu pendant que l'avion est en l'air : détecte le début/fin de
+  // chaque virage (|bank| qui repasse sous le seuil) et mémorise son inclinaison maximale.
+  // Volontairement séparé de l'échantillonnage du trajet (_point/AIR_SAMPLE_MS) : la détection
+  // tourne à chaque trame reçue (~1 Hz) pour ne pas rater un virage serré mais bref.
+  _trackBank(data) {
+    const bank = Math.abs(data.bankDeg || 0);
+    if (bank > TURN_BANK_THRESHOLD_DEG) {
+      if (!this._inTurn) { this._inTurn = true; this._turnMaxBank = bank; }
+      else if (bank > this._turnMaxBank) this._turnMaxBank = bank;
+    } else if (this._inTurn) {
+      this._inTurn = false;
+      this._turns.push({ maxBankDeg: Math.round(this._turnMaxBank) });
+      if (this._turnMaxBank > this._maxBankDeg) this._maxBankDeg = this._turnMaxBank;
+    }
   }
 
   _processTelemetry(data) {
@@ -472,6 +513,7 @@ class FlightTracker extends EventEmitter {
         this._maxIasKt = Math.max(this._maxIasKt, data.iasKt || 0);
         this._lastFuel = data.fuelLbs;
         this._lastVs = data.vsFpm || 0;
+        this._trackBank(data);
         if (now - this._lastPathTs >= AIR_SAMPLE_MS) {
           this._path.push({ ...this._point(data, now), phase: 'air' });
           this._lastPathTs = now;
@@ -479,19 +521,27 @@ class FlightTracker extends EventEmitter {
         }
         if (onGround) {
           this._phase = 'landed';
-          this._touchdownAt = now;
-          this._landingRate = Math.round(this._lastVs);
-          this._touchdownPoint = this._point(data, now);
-          this._path.push({ ...this._touchdownPoint, phase: 'touchdown' });
+          // Premier impact uniquement : si l'avion a déjà touché puis rebondi (voir le cas
+          // 'landed' juste en dessous), touchdownPoint/landingRate/touchdownAt sont déjà
+          // renseignés et ne doivent PAS être écrasés par ce nouvel impact.
+          if (!this._touchdownPoint) {
+            this._touchdownAt = now;
+            this._landingRate = Math.round(this._lastVs);
+            this._touchdownPoint = this._point(data, now);
+          }
+          this._path.push({ ...this._point(data, now), phase: 'touchdown' });
           this._lastPathTs = now;
           this._stationarySince = null;
           pathChanged = true;
-          this.emit('flight-landed', { landingRate: this._landingRate });
+          this.emit('flight-landed', { landingRate: this._landingRate, bounceCount: this._bounceCount });
         }
         break;
 
       case 'landed':
-        if (!onGround) { this._phase = 'airborne'; this._stationarySince = null; break; } // rebond / touch-and-go
+        // Rebond / touch-and-go : l'avion redécolle après un premier toucher. On repart en
+        // 'airborne' (qui pourra retracker un nouveau virage) sans toucher au 1er impact déjà
+        // mémorisé, et on compte le rebond pour le signaler dans le rapport de vol.
+        if (!onGround) { this._phase = 'airborne'; this._stationarySince = null; this._bounceCount++; break; }
         if (gs > STOPPED_GS_KT) {
           this._stationarySince = null;
           if (now - this._lastPathTs >= GROUND_SAMPLE_MS) {
@@ -577,6 +627,13 @@ class FlightTracker extends EventEmitter {
       ? computeTouchdownZone(this._touchdownPoint, arrAirport && arrAirport.icao, this._rendererDir)
       : null;
 
+    const turnStats = {
+      totalTurns: this._turns.length,
+      maxBankDeg: Math.round(this._maxBankDeg),
+      steepTurnCount: this._turns.filter(t => t.maxBankDeg >= STEEP_TURN_BANK_DEG).length,
+      aggressiveTurnCount: this._turns.filter(t => t.maxBankDeg >= AGGRESSIVE_TURN_BANK_DEG).length
+    };
+
     const result = {
       startedAt: new Date(this._start).toISOString(),
       endedAt: new Date(now).toISOString(),
@@ -587,6 +644,8 @@ class FlightTracker extends EventEmitter {
       maxIasKt: Math.round(this._maxIasKt),
       fuelUsedLbs,
       landingRateFpm: this._landingRate,
+      bounceCount: this._bounceCount,
+      turnStats,
       depGuess: depAirport,
       arrGuess: arrAirport,
       path: this._path,
