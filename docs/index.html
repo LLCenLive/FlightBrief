@@ -73,6 +73,49 @@
   .notes-bar{display:flex; gap:10px; border-top:1px solid var(--hairline); padding-top:12px; font-size:12px; color:var(--text-sec);}
   .notes-bar .tag{flex:none; font-family:var(--font-display); font-weight:700; font-size:9.5px; letter-spacing:.08em; color:var(--phosphor); background:var(--phosphor-dim); padding:3px 8px; border-radius:5px; height:fit-content;}
 
+  /* ---------------- Aperçu de l'interface ---------------- */
+  /* Recréation fidèle (pas une capture littérale) de l'onglet Profil, avec exactement
+     les mêmes classes de composants et jetons de couleur que renderer/styles.css —
+     pour que ce visuel évolue avec la vraie appli plutôt que de se périmer comme une
+     capture d'écran figée. */
+  .showcase{padding:10px 0 60px;}
+  .showcase h2{font-family:var(--font-display); font-size:26px; margin:10px 0 8px;}
+  .showcase > p{color:var(--text-sec); margin:0 0 30px; max-width:60ch;}
+  .app-shot{background:var(--night); border:1px solid var(--hairline); border-radius:16px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.5);}
+  .app-shot-bar{display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--panel-2); border-bottom:1px solid var(--hairline);}
+  .app-shot-dots{display:flex; gap:6px;}
+  .app-shot-dots span{width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.14);}
+  .app-shot-title{font-family:var(--font-display); font-weight:600; font-size:11.5px; color:var(--text-sec); letter-spacing:.02em;}
+  .app-shot-tabs{display:flex; gap:2px; padding:8px 10px; background:var(--night); border-bottom:1px solid var(--hairline); overflow-x:auto;}
+  .app-shot-tabs span{font-family:var(--font-display); font-weight:600; font-size:11px; letter-spacing:.03em; color:var(--text-sec); padding:7px 12px; border-radius:7px; white-space:nowrap;}
+  .app-shot-tabs span.active{background:var(--panel-2); color:var(--text);}
+  .app-shot-body{padding:22px 24px 26px; display:grid; grid-template-columns:1.1fr 1fr; gap:20px;}
+  @media (max-width:760px){ .app-shot-body{grid-template-columns:1fr;} }
+
+  .shot-globe-wrap{background:var(--panel); border:1px solid var(--hairline); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:12px;}
+  .shot-globe-wrap h4{font-family:var(--font-display); font-size:12px; letter-spacing:.04em; margin:0; color:var(--text);}
+  .shot-globe{position:relative; aspect-ratio:1; border-radius:50%; margin:6px auto; width:min(100%,220px);
+    background:radial-gradient(circle at 34% 30%, #16232b 0%, #0d1620 55%, #081018 100%);
+    box-shadow:inset 0 0 30px rgba(0,0,0,.55), 0 0 0 1px var(--hairline);}
+  .shot-globe svg{position:absolute; inset:0; width:100%; height:100%;}
+  .shot-stat-row{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .shot-stat{background:var(--panel); border:1px solid var(--hairline); border-left:3px solid var(--sa,var(--phosphor)); border-radius:10px; padding:10px 11px;}
+  .shot-stat .cap{font-family:var(--font-display); font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-sec);}
+  .shot-stat .val{font-family:var(--font-mono); font-size:17px; font-weight:600; color:var(--sa,var(--text)); margin-top:2px;}
+
+  .shot-lists{display:flex; flex-direction:column; gap:14px;}
+  .shot-list-card{background:var(--panel); border:1px solid var(--hairline); border-radius:12px; padding:14px 16px;}
+  .shot-list-card h4{font-family:var(--font-display); font-size:12px; letter-spacing:.04em; margin:0 0 10px; color:var(--text);}
+  .shot-row{display:grid; grid-template-columns:18px minmax(70px,110px) 1fr 50px; align-items:center; gap:8px; font-size:11.5px; padding:3px 0;}
+  .shot-row .rank{font-family:var(--font-display); font-weight:700; font-size:9px; width:18px; height:18px; border-radius:5px; border:1px solid var(--hairline); color:var(--text-sec); display:flex; align-items:center; justify-content:center;}
+  .shot-row.top .rank{border-color:color-mix(in srgb, var(--ra,var(--phosphor)) 50%, transparent); color:var(--ra,var(--phosphor)); background:color-mix(in srgb, var(--ra,var(--phosphor)) 14%, transparent);}
+  .shot-row .name{font-family:var(--font-mono); color:var(--text-sec); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .shot-row.top .name{color:var(--text); font-weight:600;}
+  .shot-row .track{height:7px; background:repeating-linear-gradient(90deg, var(--night) 0 2.5px, rgba(255,255,255,.025) 2.5px 3.5px); border:1px solid var(--hairline); border-radius:2px; overflow:hidden;}
+  .shot-row .fill{height:100%; background-image:repeating-linear-gradient(90deg, var(--ra,var(--phosphor)) 0 2.5px, color-mix(in srgb, var(--ra,var(--phosphor)) 40%, transparent) 2.5px 3.5px);}
+  .shot-row .cnt{font-family:var(--font-mono); color:var(--text-sec); text-align:right; font-size:11px;}
+  .shot-row .cnt i{font-style:normal; opacity:.55; font-size:9px; margin-left:3px;}
+
   /* ---------------- Téléchargement ---------------- */
   .dl-section{padding:10px 0 64px;}
   .dl-panel{background:var(--panel); border:1px solid var(--hairline); border-radius:16px; padding:30px 30px 26px;}
@@ -139,6 +182,7 @@
     <div class="brand"><span class="dot"></span> FlightBrief</div>
     <div class="links">
       <a href="#telecharger">Télécharger</a>
+      <a href="#apercu">Aperçu</a>
       <a href="#fonctionnalites">Fonctionnalités</a>
       <a href="#apropos">À propos</a>
       <a href="https://www.twitch.tv/LLCenLive" target="_blank" rel="noopener">Twitch</a>
@@ -187,6 +231,71 @@
     <div class="btn twitch-btn">Suivre la chaîne</div>
   </a>
 </div>
+
+<section class="showcase wrap" id="apercu">
+  <div class="eyebrow">Aperçu</div>
+  <h2>L'onglet Profil, en vrai</h2>
+  <p>Statistiques calculées automatiquement depuis ton logbook, et globe 3D de tous tes trajets déjà effectués — mêmes composants, mêmes couleurs que dans l'appli.</p>
+
+  <div class="app-shot" aria-hidden="true">
+    <div class="app-shot-bar">
+      <div class="app-shot-dots"><span></span><span></span><span></span></div>
+      <div class="app-shot-title">FlightBrief</div>
+      <div style="width:54px;"></div>
+    </div>
+    <div class="app-shot-tabs">
+      <span>Briefing</span><span>Logbook</span><span>Carrière</span><span>Outil Live</span><span>Outils</span><span>Admin</span><span class="active">Profil</span>
+    </div>
+    <div class="app-shot-body">
+      <div class="shot-globe-wrap">
+        <h4>Mes vols dans le monde</h4>
+        <div class="shot-globe">
+          <svg viewBox="0 0 200 200">
+            <g stroke="#54d6e8" stroke-width="1" opacity=".18" fill="none">
+              <ellipse cx="100" cy="100" rx="95" ry="38"/>
+              <ellipse cx="100" cy="100" rx="95" ry="70"/>
+              <ellipse cx="100" cy="100" rx="38" ry="95"/>
+              <ellipse cx="100" cy="100" rx="70" ry="95"/>
+              <circle cx="100" cy="100" r="95"/>
+            </g>
+            <g fill="none" stroke="#cfe9f2" stroke-width="1.4" opacity=".8">
+              <path d="M40,70 Q55,60 68,66 Q80,72 76,86 Q70,96 55,92 Q42,88 40,70 Z"/>
+              <path d="M120,50 Q145,44 160,58 Q168,70 155,82 Q140,92 128,80 Q118,66 120,50 Z"/>
+            </g>
+            <path d="M55,80 Q100,30 148,68" fill="none" stroke="#54d6e8" stroke-width="1.3" opacity=".55"/>
+            <path d="M62,88 Q100,140 145,74" fill="none" stroke="#ffb020" stroke-width="1.3" opacity=".55"/>
+            <path d="M55,80 Q90,58 128,80" fill="none" stroke="#54d6e8" stroke-width="1.3" opacity=".55"/>
+            <circle cx="55" cy="80" r="3.4" fill="#39e88f"/>
+            <circle cx="148" cy="68" r="4.6" fill="#39e88f"/>
+            <circle cx="128" cy="80" r="3.4" fill="#39e88f"/>
+            <circle cx="145" cy="74" r="3.4" fill="#39e88f"/>
+          </svg>
+        </div>
+        <div style="font-family:var(--font-mono); font-size:10.5px; color:var(--text-sec); text-align:center;">75 vols affichés sur 80 aéroports.</div>
+      </div>
+
+      <div class="shot-lists">
+        <div class="shot-stat-row">
+          <div class="shot-stat" style="--sa:var(--cyan);"><div class="cap">Vols</div><div class="val">75</div></div>
+          <div class="shot-stat" style="--sa:var(--phosphor);"><div class="cap">Heures</div><div class="val">211h</div></div>
+          <div class="shot-stat" style="--sa:var(--amber);"><div class="cap">Distance</div><div class="val">38.4k NM</div></div>
+        </div>
+        <div class="shot-list-card">
+          <h4>Appareils les plus utilisés</h4>
+          <div class="shot-row top" style="--ra:var(--cyan);"><span class="rank">1</span><span class="name">DIAMOND DA42</span><div class="track"><div class="fill" style="width:100%;"></div></div><span class="cnt">27<i>43%</i></span></div>
+          <div class="shot-row" style="--ra:var(--cyan);"><span class="rank">2</span><span class="name">A320-200</span><div class="track"><div class="fill" style="width:59%;"></div></div><span class="cnt">16<i>25%</i></span></div>
+          <div class="shot-row" style="--ra:var(--cyan);"><span class="rank">3</span><span class="name">A321-200</span><div class="track"><div class="fill" style="width:26%;"></div></div><span class="cnt">7<i>11%</i></span></div>
+        </div>
+        <div class="shot-list-card">
+          <h4>Aéroports les plus visités</h4>
+          <div class="shot-row top" style="--ra:var(--amber);"><span class="rank">1</span><span class="name">LEPA</span><div class="track"><div class="fill" style="width:100%;"></div></div><span class="cnt">5<i>29%</i></span></div>
+          <div class="shot-row" style="--ra:var(--amber);"><span class="rank">2</span><span class="name">EGJJ</span><div class="track"><div class="fill" style="width:60%;"></div></div><span class="cnt">3<i>18%</i></span></div>
+          <div class="shot-row" style="--ra:var(--amber);"><span class="rank">3</span><span class="name">EDDF</span><div class="track"><div class="fill" style="width:60%;"></div></div><span class="cnt">3<i>18%</i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section class="dl-section wrap" id="telecharger">
   <div class="dl-panel">
