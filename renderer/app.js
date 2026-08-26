@@ -1388,33 +1388,61 @@ function initTrackerListeners(){
       await applyTrackedFlightToLogbook(false);
       el('trkStatusMsg').textContent = 'Vol arrêté et PIREP envoyé dans le logbook (tous les champs complétés) ✓';
       el('trkStatusMsg').className = 'status-msg ok';
+      window.tracker.clearPendingFlight();
       return;
     }
 
     // Fin de vol détectée automatiquement (parking + délai écoulé) : on affiche le résumé
     // et on laisse la main pour envoyer le PIREP ou ignorer ce vol (ex. faux positif).
-    const dep = data.depGuess ? data.depGuess.icao : '----';
-    const arr = data.arrGuess ? data.arrGuess.icao : '----';
-    el('trkResRoute').textContent = `${dep} → ${arr}`;
-    el('trkResDuration').textContent = minToHhmm(data.durationMin);
-    el('trkResDistance').textContent = data.distanceNm + ' NM';
-    el('trkResMaxAlt').textContent = data.maxAltFt.toLocaleString('fr-FR') + ' ft';
-    el('trkResMaxIas').textContent = data.maxIasKt + ' kt';
-    el('trkResLanding').textContent = data.landingRateFpm != null ? data.landingRateFpm + ' ft/min' : '—';
-    el('trkResBounce').textContent = data.bounceCount ? `${data.bounceCount} rebond${data.bounceCount > 1 ? 's' : ''}` : 'Aucun';
-    el('trkResMaxBank').textContent = (data.turnStats && data.turnStats.maxBankDeg)
-      ? `${data.turnStats.maxBankDeg}°${data.turnStats.aggressiveTurnCount ? ' ⚠️' : (data.turnStats.steepTurnCount ? ' (serré)' : '')}`
-      : '—';
-    el('trkResultPanel').classList.remove('hidden');
-    // Rapport final complet (avec la vraie phase d'atterrissage) à la place du live partiel.
-    if(Array.isArray(data.phases) && data.phases.length){
-      el('liveTrackHint').textContent = `Vol terminé — ${minToHhmm(data.durationMin || 0)}, ${data.distanceNm || 0} NM parcourues.`;
-      el('liveReportPanel').classList.remove('hidden');
-      renderPhaseLegend(data.path, 'liveReportLegend');
-      renderPhaseTable(data.phases, 'liveReportPhaseRows');
-      renderProfileChart(data.path, 'liveReportProfile');
-    }
+    renderTrkResultPanel(data);
+    window.tracker.clearPendingFlight(); // le vol a atteint le renderer, plus besoin de la sauvegarde de secours
   });
+}
+
+// Remplit le panneau de résultat post-vol (stats + rapport détaillé). Factorisé pour être
+// réutilisé à la fois par la fin de vol normale (onFlightEnd ci-dessus) et par la récupération
+// d'un vol resté en sauvegarde de secours après un crash/fermeture inattendue (voir
+// checkForRecoverableFlight, appelée au démarrage de l'appli).
+function renderTrkResultPanel(data){
+  const dep = data.depGuess ? data.depGuess.icao : '----';
+  const arr = data.arrGuess ? data.arrGuess.icao : '----';
+  el('trkResRoute').textContent = `${dep} → ${arr}`;
+  el('trkResDuration').textContent = minToHhmm(data.durationMin);
+  el('trkResDistance').textContent = data.distanceNm + ' NM';
+  el('trkResMaxAlt').textContent = data.maxAltFt.toLocaleString('fr-FR') + ' ft';
+  el('trkResMaxIas').textContent = data.maxIasKt + ' kt';
+  el('trkResLanding').textContent = data.landingRateFpm != null ? data.landingRateFpm + ' ft/min' : '—';
+  el('trkResBounce').textContent = data.bounceCount ? `${data.bounceCount} rebond${data.bounceCount > 1 ? 's' : ''}` : 'Aucun';
+  el('trkResMaxBank').textContent = (data.turnStats && data.turnStats.maxBankDeg)
+    ? `${data.turnStats.maxBankDeg}°${data.turnStats.aggressiveTurnCount ? ' ⚠️' : (data.turnStats.steepTurnCount ? ' (serré)' : '')}`
+    : '—';
+  el('trkResultPanel').classList.remove('hidden');
+  // Rapport final complet (avec la vraie phase d'atterrissage) à la place du live partiel.
+  if(Array.isArray(data.phases) && data.phases.length){
+    el('liveTrackHint').textContent = `Vol terminé — ${minToHhmm(data.durationMin || 0)}, ${data.distanceNm || 0} NM parcourues.`;
+    el('liveReportPanel').classList.remove('hidden');
+    renderPhaseLegend(data.path, 'liveReportLegend');
+    renderPhaseTable(data.phases, 'liveReportPhaseRows');
+    renderProfileChart(data.path, 'liveReportProfile');
+  }
+}
+
+// Au démarrage : si une sauvegarde de secours existe (vol tracké puis appli fermée/plantée
+// avant l'envoi manuel du PIREP), on la propose immédiatement plutôt que de la perdre en
+// silence. "final:false" = vol interrompu en plein trajet (crash en vol) ; "final:true" =
+// vol correctement terminé mais jamais confirmé dans le logbook avant la fermeture.
+async function checkForRecoverableFlight(){
+  try {
+    const snapshot = await window.tracker.loadPendingFlight();
+    if(!snapshot || !snapshot.result) return;
+    _lastTrackedFlight = snapshot.result;
+    updateBriefingSaveVisibility();
+    renderTrkResultPanel(snapshot.result);
+    el('trkStatusMsg').textContent = snapshot.final
+      ? '⚠️ Vol récupéré après une fermeture inattendue — vérifie les infos puis envoie le PIREP (ou ignore-le ci-dessous).'
+      : '⚠️ Vol interrompu (crash/fermeture en plein trajet) — récupération partielle, certaines données (atterrissage, carburant) manquent. Vérifie avant d\'envoyer.';
+    el('trkStatusMsg').className = 'status-msg warn';
+  } catch(e) { /* pas de sauvegarde à récupérer, ou lecture impossible — on continue normalement */ }
 }
 
 // Remplit TOUS les champs du formulaire logbook à partir du vol tracké : les champs saisis
@@ -1476,6 +1504,7 @@ function dismissTrackedFlight(){
   _lastTrackedFlight = null;
   el('trkResultPanel').classList.add('hidden');
   updateBriefingSaveVisibility();
+  window.tracker.clearPendingFlight();
 }
 
 /* ---------------- Modale carte de trajet + relecture détaillée (depuis le logbook) ---------------- */
@@ -2880,6 +2909,7 @@ async function endTour(){
   bindAdminControls();
   renderThemePresets();
   initTrackerListeners();
+  checkForRecoverableFlight();
   initTrackMap();
   updateBriefingSaveVisibility();
   bindFlightsGlobeControls();

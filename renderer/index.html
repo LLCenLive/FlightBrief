@@ -55,7 +55,6 @@
             <input type="text" id="sbUsername" placeholder="ex : jdupont">
             <button class="btn primary small" onclick="importFromSimbrief()">Importer le dernier plan de vol</button>
           </div>
-          <div class="hint">Récupère ton dernier plan de vol SimBrief (aéroports, route, appareil, météo, durée) et l'applique directement aux champs ci-dessous. Ton pseudo est mémorisé automatiquement.</div>
           <div class="status-msg" id="sbStatus"></div>
         </div>
 
@@ -103,7 +102,6 @@
             <button class="btn primary small" id="trkConnectBtn" onclick="toggleTrackerConnection()">Lancer le vol &amp; le tracker</button>
           </div>
           <div class="status-msg" id="trkStatusMsg"></div>
-          <div class="hint">Un seul clic connecte le simulateur (MSFS) et arme le suivi : la carte, la télémétrie et le rapport détaillé se complètent ci-contre et ci-dessous dès le décollage.</div>
           <div class="btn-row hidden" id="trkStopRow" style="margin-top:10px;">
             <button class="btn danger block" id="trkStopBtn" onclick="stopTrackingAndSendPirep()">Arrêter le vol &amp; envoyer le PIREP</button>
           </div>
