@@ -11,7 +11,7 @@ let liveOverlayState = { config: null, telemetry: null }; // overlay Twitch pers
 let mainWindow = null;
 let obsServer = null;
 let liveOverlayServer = null;
-const tracker = new FlightTracker(path.join(__dirname, 'renderer'));
+const tracker = new FlightTracker(path.join(__dirname, 'renderer'), app.getPath('userData'));
 
 // Index des aéroports (OACI -> coordonnées), utilisé pour estimer la distance totale
 // du trajet (départ -> arrivée saisis dans le briefing) et donc la progression en %
@@ -233,6 +233,9 @@ ipcMain.handle('tracker:connect', async () => {
 ipcMain.handle('tracker:disconnect', () => { tracker.disconnect(); return true; });
 ipcMain.handle('tracker:isConnected', () => tracker.isConnected());
 ipcMain.handle('tracker:stopTracking', () => tracker.stopTracking());
+// Récupération après crash/fermeture inattendue : voir tracker.js _writeSnapshot/loadPendingSnapshot.
+ipcMain.handle('tracker:loadPendingFlight', () => tracker.loadPendingSnapshot());
+ipcMain.handle('tracker:clearPendingFlight', () => { tracker.clearPendingSnapshot(); return true; });
 
 tracker.on('status', data => mainWindow && mainWindow.webContents.send('tracker:status', data));
 tracker.on('telemetry', data => mainWindow && mainWindow.webContents.send('tracker:telemetry', data));

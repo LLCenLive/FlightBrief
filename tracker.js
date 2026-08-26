@@ -42,6 +42,12 @@ const AIRBORNE_SPEED_KT = 40;     // GS au-dessus duquel on considère l'avion e
 const STOPPED_GS_KT = 3;          // en dessous, on considère l'avion à l'arrêt (parqué)
 const MIN_FLIGHT_MIN = 2;         // durée minimale en vol pour enregistrer un vol
 const PARKED_TIMEOUT_MS = 25000;  // temps immobile après roulage avant de considérer le vol terminé
+// Juste après le décollage, le capteur SIM ON GROUND peut repasser brièvement à vrai (train qui
+// finit de se rétracter, rebond de suspension à la rotation) sans que l'avion touche vraiment le
+// sol. Sous ce délai, un contact au sol est ignoré comme bruit capteur plutôt que traité comme un
+// atterrissage — sinon il pollue le taux d'atterrissage/zone de toucher de tout le vol (voir le
+// mécanisme "premier impact conservé" utilisé pour gérer les rebonds réels à l'atterrissage).
+const MIN_AIRBORNE_BEFORE_LANDING_MS = 90000;
 const AIR_SAMPLE_MS = 5000;       // fréquence d'échantillonnage du trajet en vol
 const GROUND_SAMPLE_MS = 6000;    // fréquence d'échantillonnage au roulage
 
@@ -349,15 +355,55 @@ function computeLivePhases(fullPath, depElevFt, rendererDir) {
 }
 
 class FlightTracker extends EventEmitter {
-  constructor(rendererDir) {
+  constructor(rendererDir, userDataDir) {
     super();
     this._rendererDir = rendererDir;
+    // Dossier où sauvegarder une trace de secours du vol en cours, pour ne rien perdre en
+    // cas de crash / fermeture inattendue avant l'envoi manuel du PIREP (voir _writeSnapshot).
+    this._userDataDir = userDataDir || null;
     this._handle = null;
     this._connected = false;
+    this._lastSnapshotAt = 0;
     this._resetFlightState();
   }
 
+  _snapshotPath() {
+    if (!this._userDataDir) return null;
+    return path.join(this._userDataDir, 'pending-flight.json');
+  }
+
+  // Écrit sur disque le meilleur résultat connu du vol en cours (ou tout juste terminé).
+  // Volontairement silencieux en cas d'échec (jamais laisser une sauvegarde de secours
+  // faire planter le tracking réel) — best effort uniquement.
+  _writeSnapshot(result, final) {
+    const p = this._snapshotPath();
+    if (!p) return;
+    try {
+      fs.writeFileSync(p, JSON.stringify({ savedAt: Date.now(), final: !!final, result }));
+    } catch (e) { /* sauvegarde de secours best-effort, on ignore un échec d'écriture */ }
+  }
+
+  // Supprime la sauvegarde de secours (vol correctement envoyé au logbook, ou volontairement
+  // ignoré par l'utilisateur au redémarrage).
+  clearPendingSnapshot() {
+    const p = this._snapshotPath();
+    if (!p) return;
+    try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (e) { /* rien de plus à faire */ }
+  }
+
+  // Relit la sauvegarde de secours si elle existe, pour proposer sa récupération au
+  // démarrage de l'appli. Ne supprime rien elle-même — voir clearPendingSnapshot.
+  loadPendingSnapshot() {
+    const p = this._snapshotPath();
+    if (!p) return null;
+    try {
+      if (!fs.existsSync(p)) return null;
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch (e) { return null; }
+  }
+
   _resetFlightState() {
+    this._lastSnapshotAt = 0;
     this._phase = 'idle'; // idle -> ground (taxi/parqué) -> airborne -> landed (roulage) -> idle
     this._path = [];
     this._start = null;
@@ -416,6 +462,19 @@ class FlightTracker extends EventEmitter {
     handle.on('error', err => {
       console.error('[FlightBrief] [SimConnect] erreur:', err.message);
       this.emit('status', { connected: this._connected, error: err.message });
+    });
+    // Sans ce listener, une variable SimConnect invalide (mauvais nom/unité) fait échouer
+    // silencieusement TOUTE la remontée de télémétrie — aucune erreur visible nulle part,
+    // juste plus aucune donnée qui arrive. On journalise et on remonte un statut d'erreur
+    // explicite dès qu'une exception SimConnect survient, pour ne plus jamais avoir à
+    // deviner pourquoi le tracking ne réagit plus.
+    handle.on('exception', exc => {
+      const badVar = (exc && typeof exc.index === 'number' && VARS[exc.index]) ? VARS[exc.index].name : null;
+      console.error('[FlightBrief] [SimConnect] exception reçue', exc, badVar ? `(variable suspectée : ${badVar})` : '');
+      this.emit('status', {
+        connected: this._connected,
+        error: `Erreur SimConnect${badVar ? ' sur la variable ' + badVar : ''} (code ${exc && exc.exception}). Le tracking peut ne plus recevoir de données.`
+      });
     });
 
     this.emit('status', { connected: true, sim: recvOpen.applicationName });
@@ -520,6 +579,10 @@ class FlightTracker extends EventEmitter {
           pathChanged = true;
         }
         if (onGround) {
+          // Contact au sol trop tôt après le décollage : bruit capteur, on l'ignore
+          // complètement (pas de changement de phase, pas de sample "touchdown" dans le
+          // trajet) plutôt que de le traiter comme un atterrissage.
+          if (now - this._takeoffAt < MIN_AIRBORNE_BEFORE_LANDING_MS) break;
           this._phase = 'landed';
           // Premier impact uniquement : si l'avion a déjà touché puis rebondi (voir le cas
           // 'landed' juste en dessous), touchdownPoint/landingRate/touchdownAt sont déjà
@@ -600,6 +663,31 @@ class FlightTracker extends EventEmitter {
       path: this._path,
       phases
     });
+
+    // Sauvegarde de secours sur disque, au plus une fois par minute (pas à chaque mise à
+    // jour du trajet) : en cas de crash ou de fermeture inattendue en plein vol, il reste
+    // une trace récupérable au prochain lancement plutôt que de tout perdre. Marquée
+    // final:false — moins complète qu'un vol terminé normalement (pas de taux
+    // d'atterrissage, zone de toucher, carburant...), mais mieux que rien.
+    if (now - this._lastSnapshotAt >= 60000) {
+      this._lastSnapshotAt = now;
+      this._writeSnapshot({
+        startedAt: this._start ? new Date(this._start).toISOString() : null,
+        durationMin: this._start ? Math.round((now - this._start) / 60000) : 0,
+        totalDurationMin: this._start ? Math.round((now - this._start) / 60000) : 0,
+        distanceNm: Math.round(distanceNm),
+        maxAltFt: Math.round(this._maxAltFt),
+        maxIasKt: Math.round(this._maxIasKt),
+        landingRateFpm: null,
+        bounceCount: this._bounceCount,
+        turnStats: { totalTurns: this._turns.length, maxBankDeg: Math.round(this._maxBankDeg), steepTurnCount: 0, aggressiveTurnCount: 0 },
+        depGuess: this._liveDepGuess,
+        arrGuess: null,
+        path: this._path,
+        phases,
+        touchdown: null
+      }, false);
+    }
   }
 
   _terminateFlight() {
@@ -652,6 +740,10 @@ class FlightTracker extends EventEmitter {
       phases,
       touchdown: this._touchdownPoint ? { ...this._touchdownPoint, zone: touchdownZone } : null
     };
+    // Sauvegarde finale AVANT l'émission de l'événement : même si l'IPC vers le renderer
+    // échoue (fenêtre détruite, exception quelconque côté UI), le vol complet reste
+    // récupérable sur disque au prochain lancement plutôt que perdu silencieusement.
+    this._writeSnapshot(result, true);
     this.emit('flight-end', result);
     this._resetFlightState();
     return { ok: true };
