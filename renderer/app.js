@@ -1174,12 +1174,15 @@ function updatePlaneMarker(marker, latlng, headingDeg){
 
 // Ajoute un fond de carte sombre (CARTO Dark Matter) + contrôles Leaflet restylés,
 // nettement plus modernes que les tuiles OSM claires et les boutons par défaut.
+// Clé API CARTO Basemaps requise depuis leur passage en accès authentifié (fair use
+// jusqu'à 5M requêtes/mois) — sans elle, les tuiles raster ne se chargent plus du tout.
+const CARTO_BASEMAPS_API_KEY = 'cb1_2im1_1_fa460d4190b921c1db2ac2f8';
 function styleMapShell(map){
   map.zoomControl.setPosition('bottomright');
   map.attributionControl.setPrefix(false);
 }
 function darkTileLayer(){
-  return L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  return L.tileLayer(`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_BASEMAPS_API_KEY}`, {
     subdomains: 'abcd', maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
   });
