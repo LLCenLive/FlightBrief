@@ -224,6 +224,70 @@ tr:hover td{background:rgba(255,255,255,.02);}
   to{ opacity:1; transform:translateY(0) scale(1); }
 }
 
+/* ---------------- Tours terminés (section repliable) + fenêtre de détail ---------------- */
+.tours-done{margin-top:18px; border:1px solid var(--hairline); border-radius:12px; background:color-mix(in srgb, var(--panel-bezel) 60%, transparent);}
+.tours-done > summary{list-style:none; cursor:pointer; display:flex; align-items:center; gap:10px; padding:12px 16px; font-family:var(--font-display); font-weight:600; font-size:13px; letter-spacing:.04em; user-select:none;}
+.tours-done > summary::-webkit-details-marker{display:none;}
+.tours-done > summary:hover{color:var(--phosphor);}
+.tours-done .chev{width:8px; height:8px; border-right:2px solid var(--text-secondary); border-bottom:2px solid var(--text-secondary); transform:rotate(-45deg); transition:transform .18s ease; margin-right:2px;}
+.tours-done[open] .chev{transform:rotate(45deg);}
+.tours-done-count{font-family:var(--font-mono); font-size:11px; color:var(--phosphor); background:rgba(57,232,143,.12); padding:1px 8px; border-radius:20px;}
+.tours-done-list{display:flex; flex-direction:column; gap:8px; padding:0 12px 12px;}
+.tour-done-card{display:grid; grid-template-columns:minmax(160px, 1fr) auto auto; align-items:center; gap:18px; padding:12px 14px; background:var(--panel-bezel); border:1px solid var(--hairline); border-left:3px solid var(--phosphor); border-radius:10px; cursor:pointer; transition:border-color .15s, transform .15s;}
+.tour-done-card:hover{border-color:color-mix(in srgb, var(--phosphor) 45%, var(--hairline)); border-left-color:var(--phosphor); transform:translateY(-1px);}
+.tour-done-card .career-name{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-secondary); font-family:var(--font-display);}
+.tour-done-card .tour-name{font-family:var(--font-display); font-weight:700; font-size:14px; margin-top:2px;}
+.tdc-check{color:var(--phosphor); margin-right:6px;}
+.tdc-stats{display:flex; gap:18px; flex-wrap:wrap;}
+.tdc-stats > div{display:flex; flex-direction:column; gap:2px; min-width:70px;}
+.tdc-stats .k{font-family:var(--font-display); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-secondary);}
+.tdc-stats .v{font-family:var(--font-mono); font-size:13px; font-weight:600;}
+.tdc-open{font-family:var(--font-display); font-size:11px; color:var(--text-secondary);}
+.tour-done-card:hover .tdc-open{color:var(--phosphor);}
+#tourModalMap{width:100%; height:300px;}
+.telemetry-grid.tour-modal-stats{grid-template-columns:repeat(4,1fr);}
+.tstat .val.val-sm{font-size:12.5px; line-height:1.35;}
+.tstat .val sup, td sup{color:var(--text-secondary); font-size:.7em;}
+#tourModalTrack{padding:4px 2px 8px;}
+.tour-legs-table td.muted, .tour-legs-table .muted{color:var(--text-secondary);}
+.tour-legs-table tr.leg-todo td{opacity:.55;}
+.leg-state{display:inline-block; width:8px; height:8px; border-radius:50%; border:2px solid var(--hairline); margin-right:8px; vertical-align:middle;}
+.leg-state.done{background:var(--phosphor); border-color:var(--phosphor);}
+.grade-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle;}
+.ok-text{color:var(--phosphor);}
+.leaflet-tooltip.tour-map-label{background:rgba(10,13,17,.8); color:var(--text-primary); border:1px solid var(--hairline); border-radius:5px; font-family:var(--font-mono); font-size:10px; font-weight:600; padding:1px 5px; box-shadow:none;}
+.leaflet-tooltip.tour-map-label::before{display:none;}
+
+/* ---------------- Hangar ---------------- */
+.hangar-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(250px,1fr)); gap:14px; margin-bottom:18px;}
+.hangar-card{background:linear-gradient(170deg, var(--panel-bezel), color-mix(in srgb, var(--panel-bezel) 88%, var(--accent-ifr) 12%)); border:1px solid var(--hairline); border-radius:12px; padding:14px 16px; cursor:pointer; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; display:flex; flex-direction:column; gap:6px;}
+.hangar-card:hover{transform:translateY(-2px); border-color:color-mix(in srgb, var(--accent-ifr) 40%, var(--hairline));}
+.hangar-card.selected{border-color:var(--accent-ifr); box-shadow:0 0 0 1px var(--accent-ifr), 0 10px 30px rgba(84,214,232,.12);}
+.hc-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.hc-type{font-family:var(--font-mono); font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--accent-ifr); background:var(--accent-ifr-dim); padding:2px 8px; border-radius:5px;}
+.hc-reg{font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); border:1px solid var(--hairline); padding:1px 7px; border-radius:5px;}
+.hc-name{font-family:var(--font-display); font-weight:700; font-size:15px; margin-top:4px;}
+.hc-sub{font-size:11px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.hc-bar{height:6px; background:repeating-linear-gradient(90deg, var(--cockpit-night) 0 3px, rgba(255,255,255,.025) 3px 4px); border:1px solid var(--hairline); border-radius:2px; overflow:hidden; margin:4px 0 2px;}
+.hc-bar-fill{height:100%; background-image:repeating-linear-gradient(90deg, var(--accent-ifr) 0 3px, color-mix(in srgb, var(--accent-ifr) 40%, transparent) 3px 4px);}
+.hc-stats{display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; margin-top:4px;}
+.hc-stats > div{display:flex; flex-direction:column; gap:1px;}
+.hc-stats .k{font-family:var(--font-display); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-secondary);}
+.hc-stats .v{font-family:var(--font-mono); font-size:15px; font-weight:600;}
+.hc-stats .v small, .tstat .val small{font-size:10px; color:var(--text-secondary); font-weight:500;}
+.hc-stats .grade-dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:middle; font-style:normal;}
+.hc-foot{font-size:10.5px; color:var(--text-secondary); border-top:1px solid var(--hairline); padding-top:8px; margin-top:4px;}
+.hangar-add{align-items:center; justify-content:center; text-align:center; color:var(--text-secondary); border-style:dashed; background:transparent; min-height:180px; font-family:var(--font-display); font-size:12.5px;}
+.hangar-add .plus{font-size:28px; line-height:1; color:var(--accent-ifr); margin-bottom:6px;}
+.hangar-add:hover{color:var(--text-primary);}
+#hangarDetail{border-color:color-mix(in srgb, var(--accent-ifr) 35%, var(--hairline));}
+.hd-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px;}
+.hd-name{font-family:var(--font-display); font-weight:700; font-size:18px; margin:2px 0 2px;}
+.telemetry-grid.hd-stats{grid-template-columns:repeat(4,1fr);}
+.hd-cols{display:grid; grid-template-columns:1fr 1fr; gap:24px;}
+.hd-notes{font-size:12.5px; line-height:1.6; white-space:pre-wrap; background:rgba(255,255,255,.02); border:1px solid var(--hairline); border-radius:9px; padding:10px 12px;}
+#hgStatRow .stat-card .val{font-size:22px;}
+
 .admin-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
 .swatches{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
 .range-row{display:flex; align-items:center; gap:10px;}
@@ -406,6 +470,15 @@ input.tool-output{color:var(--phosphor); border-color:color-mix(in srgb, var(--p
 .globe-tooltip .tt-title.ifr{ color:var(--accent-ifr); }
 .globe-tooltip .tt-title.vfr{ color:var(--accent-vfr); }
 .globe-tooltip .tt-line{ color:var(--text-secondary); }
+.globe-tooltip .tt-small{ font-size:10.5px; line-height:1.5; }
+.globe-shell .globe-tooltip{ max-width:260px; }
+/* Étiquettes OACI (positionnées en JS, sans chevauchement — voir updateFlightsGlobeLabels) */
+.globe-labels{ position:absolute; inset:0; pointer-events:none; z-index:451; overflow:hidden; }
+.globe-label{ position:absolute; left:0; top:0; font-family:var(--font-mono); font-size:10.5px; font-weight:600; letter-spacing:.03em; line-height:16px; height:16px; padding:0 4px; border-radius:4px; color:var(--text-primary); background:rgba(10,13,17,.72); border:1px solid rgba(57,232,143,.25); white-space:nowrap; opacity:0; transition:opacity .15s ease; will-change:transform; }
+.globe-label.show{ opacity:1; }
+.globe-label.show.dim{ opacity:.25; }
+.globe-reset{ position:absolute; top:14px; right:36px; z-index:452; font-family:var(--font-display); font-size:11px; letter-spacing:.04em; color:var(--text-secondary); background:rgba(10,13,17,.55); border:1px solid var(--hairline); border-radius:8px; padding:6px 10px; cursor:pointer; backdrop-filter:blur(4px); }
+.globe-reset:hover{ color:var(--text-primary); border-color:var(--text-secondary); }
 
 /* ---------------- Overlay Live — texte libre personnalisé ---------------- */
 .lo-item.lo-custom .lo-val{ font-family:var(--lo-font); font-weight:600; }
@@ -473,3 +546,36 @@ input.tool-output{color:var(--phosphor); border-color:color-mix(in srgb, var(--p
 .lo-progress-fill{position:absolute; inset:0 auto 0 0; width:0%; background:var(--lo-accent); border-radius:4px; transition:width .6s ease;}
 .lo-bar.lo-empty:empty{padding:14px 18px;}
 .lo-bar.lo-empty:empty:after{content:"Active au moins un champ ci-contre pour voir l'aperçu."; font-size:12px; color:var(--lo-text-sec); font-family:var(--font-body);}
+
+/* ---------------- v1.3 — ajustements fenêtres étroites ---------------- */
+@media (max-width:1100px){
+  .telemetry-grid.hd-stats, .telemetry-grid.tour-modal-stats{grid-template-columns:repeat(2,1fr);}
+  .hd-cols{grid-template-columns:1fr;}
+  .tour-done-card{grid-template-columns:1fr; gap:10px;}
+  .tdc-open{display:none;}
+}
+
+/* ---------------- Admin — application mobile ---------------- */
+.mobile-panel{grid-column:1 / -1;}
+.mobile-pair{display:flex; gap:20px; align-items:flex-start; margin:12px 0 10px; flex-wrap:wrap;}
+.mobile-qr{flex:none; width:176px; height:176px; background:#fff; border-radius:10px; padding:6px; box-shadow:0 0 0 1px var(--hairline), 0 10px 30px rgba(0,0,0,.35);}
+.mobile-qr svg{width:100%; height:100%; display:block;}
+.mobile-pair-info{flex:1; min-width:260px;}
+.mobile-steps{margin:12px 0 0; padding-left:18px; font-size:12px; line-height:1.6; color:var(--text-secondary);}
+.mobile-steps li{margin-bottom:6px;}
+.mobile-steps b{color:var(--text-primary); font-weight:600;}
+
+/* ---------------- Briefing — trajet présent dans un tour ---------------- */
+.tour-match{display:flex; flex-direction:column; gap:6px; margin:-2px 0 12px;}
+.tm-none{font-size:11px; color:var(--text-secondary); padding:2px 2px;}
+.tm-item{display:flex; align-items:center; gap:9px; width:100%; text-align:left; background:rgba(57,232,143,.06); border:1px solid rgba(57,232,143,.28); border-radius:9px; padding:8px 10px; color:var(--text-primary); cursor:pointer; font-family:var(--font-body); font-size:12px; transition:border-color .15s, background .15s;}
+.tm-item:hover{border-color:var(--phosphor); background:rgba(57,232,143,.1);}
+.tm-icon{font-size:15px; flex:none;}
+.tm-text{flex:1; min-width:0; line-height:1.35;}
+.tm-text b{font-weight:600;}
+.tm-text small{display:block; font-size:10.5px; color:var(--text-secondary);}
+.tm-state{flex:none; font-family:var(--font-display); font-weight:700; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-secondary); background:rgba(255,255,255,.05); padding:3px 7px; border-radius:5px;}
+.tm-state.next{color:var(--accent-vfr); background:var(--accent-vfr-dim);}
+.tm-state.done{color:var(--phosphor); background:rgba(57,232,143,.14);}
+.tm-go{flex:none; font-family:var(--font-display); font-size:11px; color:var(--phosphor);}
+.tour-card.tour-flash{border-color:var(--phosphor); box-shadow:0 0 0 1px var(--phosphor), 0 0 24px rgba(57,232,143,.3); transition:box-shadow .3s, border-color .3s;}

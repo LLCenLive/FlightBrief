@@ -32,6 +32,7 @@
     <button data-view="briefing" class="active">Briefing</button>
     <button data-view="logbook">Logbook</button>
     <button data-view="career">Carrière</button>
+    <button data-view="hangar">Hangar</button>
     <button data-view="livetool">Outil Live</button>
     <button data-view="tools">Outils</button>
     <button data-view="admin">Admin</button>
@@ -71,6 +72,7 @@
           <div class="field"><label>Départ (OACI)</label><input type="text" id="depIcao" placeholder="LFPG" maxlength="4"></div>
           <div class="field"><label>Arrivée (OACI)</label><input type="text" id="arrIcao" placeholder="LFBO" maxlength="4"></div>
         </div>
+        <div class="tour-match hidden" id="briefingTourMatch"></div>
         <div class="row2">
           <div class="field"><label>Nom aéroport départ</label><input type="text" id="depName" placeholder="Paris CDG"></div>
           <div class="field"><label>Nom aéroport arrivée</label><input type="text" id="arrName" placeholder="Toulouse Blagnac"></div>
@@ -78,7 +80,7 @@
         <div class="field"><label>Route / points de passage</label><input type="text" id="routeText" placeholder="ex : LFPG BANOX UZ29 TOU LFBO"></div>
 
         <h2>Appareil &amp; conditions</h2>
-        <div class="field"><label>Appareil</label><input type="text" id="aircraft" placeholder="ex : A320neo — Air France"></div>
+        <div class="field"><label>Appareil</label><input type="text" id="aircraft" list="hangarAircraftList" placeholder="ex : A320neo — Air France"><datalist id="hangarAircraftList"></datalist></div>
         <div class="row2">
           <div class="field"><label>Niveau / Altitude</label><input type="text" id="altitude" placeholder="ex : FL350"></div>
           <div class="field"><label>Durée estimée</label><input type="text" id="duration" placeholder="ex : 1h05"></div>
@@ -204,7 +206,7 @@
         <div class="field"><label>Durée (hh:mm)</label><input type="text" id="lbDuration" placeholder="01:05"></div>
       </div>
       <div class="row3">
-        <div class="field"><label>Appareil</label><input type="text" id="lbAircraft" placeholder="A320neo"></div>
+        <div class="field"><label>Appareil</label><input type="text" id="lbAircraft" list="hangarAircraftList" placeholder="A320neo"></div>
         <div class="field">
           <label>Réseau</label>
           <input type="text" id="lbNetwork" list="networkList" placeholder="VATSIM, IVAO, Solo…">
@@ -215,7 +217,11 @@
           <select id="lbCareer"><option value="">Aucune</option></select>
         </div>
       </div>
-      <div class="row2">
+      <div class="row3">
+        <div class="field">
+          <label>Avion du hangar</label>
+          <select id="lbHangar"><option value="">Auto (d'après le nom)</option></select>
+        </div>
         <div class="field">
           <label>Statut PIREP</label>
           <select id="lbPirep">
@@ -255,7 +261,7 @@
     <div class="career-grid" id="careerGrid"></div>
 
     <div class="tours-section" id="toursSection">
-      <h3 class="tours-heading">Tours IVAO</h3>
+      <h3 class="tours-heading">Tours IVAO en cours</h3>
       <div id="toursList"></div>
     </div>
 
@@ -294,6 +300,44 @@
       <div class="btn-row">
         <button class="btn primary" onclick="saveCareer()">Enregistrer la carrière</button>
         <button class="btn" onclick="resetCareerForm()">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= HANGAR VIEW ================= -->
+  <div class="view" id="view-hangar">
+    <div class="page-head">
+      <h1>Hangar</h1>
+      <p>Tes avions et leurs statistiques, calculées à partir du logbook : heures de vol, distance, qualité des atterrissages… Les vols sont associés via le champ « Avion du hangar » du logbook, ou automatiquement grâce aux mots-clés de chaque avion.</p>
+    </div>
+
+    <div class="stat-row" id="hgStatRow">
+      <div class="stat-card" style="--stat-accent:var(--accent-ifr);"><span class="stat-icon">🛩️</span><div class="cap">Avions au hangar</div><div class="val" id="hgStatCount">0</div></div>
+      <div class="stat-card" style="--stat-accent:var(--phosphor);"><span class="stat-icon">⏱️</span><div class="cap">Heures sur ces avions</div><div class="val" id="hgStatHours">0h00</div></div>
+      <div class="stat-card" style="--stat-accent:var(--accent-vfr);"><span class="stat-icon">❔</span><div class="cap">Vols sans avion associé</div><div class="val" id="hgStatUnassigned">0</div></div>
+    </div>
+
+    <div class="hangar-grid" id="hangarGrid"></div>
+
+    <div class="card-panel hidden" id="hangarDetail"></div>
+
+    <div class="card-panel" id="hangarFormPanel">
+      <h3 id="hangarFormTitle">Ajouter un avion</h3>
+      <div class="row3">
+        <div class="field"><label>Nom</label><input type="text" id="hgName" placeholder="ex : A320neo"></div>
+        <div class="field"><label>Code OACI</label><input type="text" id="hgType" placeholder="ex : A20N" maxlength="4" style="text-transform:uppercase;"></div>
+        <div class="field"><label>Éditeur</label><input type="text" id="hgDeveloper" list="hgDevList" placeholder="ex : Fenix, iniBuilds, PMDG…">
+          <datalist id="hgDevList"><option value="Asobo"><option value="Fenix"><option value="iniBuilds"><option value="PMDG"><option value="FlyByWire"><option value="Headwind"><option value="Aerosoft"><option value="Leonardo"><option value="Just Flight"><option value="Black Square"><option value="Carenado"><option value="Hans Hartmann"></datalist>
+        </div>
+      </div>
+      <div class="field">
+        <label>Mots-clés (séparés par des virgules)</label>
+        <input type="text" id="hgKeys" placeholder="ex : Fenix A320, A320neo, F-HBNA">
+        <div class="hint">Les vols du logbook dont le champ « Appareil » (ou l'avion détecté dans le simulateur) contient l'un de ces mots sont rattachés automatiquement à cet avion. Le nom et le code OACI comptent aussi comme mots-clés.</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveHangarAircraft()">Enregistrer l'avion</button>
+        <button class="btn" onclick="resetHangarForm()">Annuler</button>
       </div>
     </div>
   </div>
@@ -716,6 +760,37 @@
         <div class="field"><input type="text" id="dataPathDisplay" readonly style="font-size:11px;"></div>
         <div class="btn-row"><button class="btn block" onclick="resetTheme()">Réinitialiser le thème par défaut</button></div>
       </div>
+
+      <div class="card-panel mobile-panel" id="mobilePanel">
+        <h3>📱 Application mobile</h3>
+        <p class="hint" style="margin:-4px 0 10px;">Ton logbook, tes carrières, tes tours et ton hangar sur ton téléphone, <b>même hors ligne</b>. L'appli garde une copie des données sur le téléphone : tu la mets à jour d'un appui sur « Synchroniser » quand tu es sur le <b>même Wi-Fi</b> que ce PC (FlightBrief ouvert). Rien ne passe par Internet.</p>
+        <div class="switch-row"><span>Activer l'accès depuis le téléphone</span><label class="switch"><input type="checkbox" id="mobileEnabled"><span class="slider"></span></label></div>
+        <div class="status-msg" id="mobileStatusMsg"></div>
+        <div id="mobileDetails" class="hidden">
+          <div class="mobile-pair">
+            <div class="mobile-qr" id="mobileQr"></div>
+            <div class="mobile-pair-info">
+              <div class="field">
+                <label>Adresse à ouvrir sur le téléphone</label>
+                <select id="mobileUrlSelect"></select>
+              </div>
+              <div class="btn-row">
+                <button class="btn small" onclick="copyMobileLink()">Copier le lien</button>
+                <button class="btn small" onclick="regenMobileToken()" title="Invalide les liens déjà installés sur tes appareils">Nouveau lien</button>
+              </div>
+              <ol class="mobile-steps">
+                <li>Scanne le QR code avec l'appareil photo du téléphone (sur iPhone, ouvre le lien dans <b>Safari</b>).</li>
+                <li>La page qui s'ouvre te guide pour <b>approuver le certificat de ce PC</b> — à faire une seule fois. Il est limité à FlightBrief sur ton réseau local.</li>
+                <li>Ouvre l'appli puis ajoute-la à l'écran d'accueil (<b>iPhone</b> : Partager → « Sur l'écran d'accueil » · <b>Android</b> : menu ⋮ → « Installer l'application »).</li>
+                <li>Ensuite, l'icône s'ouvre partout, sans PC ni Wi-Fi. Touche <b>Synchroniser</b> de retour chez toi pour la mettre à jour.</li>
+              </ol>
+              <div class="status-msg warn hidden" id="mobileMdnsMsg"></div>
+            </div>
+          </div>
+          <div class="hint">Au premier lancement, Windows peut demander d'autoriser FlightBrief sur le réseau : accepte pour les <b>réseaux privés</b>. Si plusieurs adresses sont proposées, choisis celle de ta box (souvent 192.168.x.x).</div>
+          <div class="hint" id="mobileCaInfo"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -795,7 +870,7 @@
 
         <div class="card-panel" id="flightsGlobePanel" style="padding-bottom:14px;">
           <h3>Mes vols dans le monde</h3>
-          <div class="hint" style="margin-top:-6px; margin-bottom:12px;">Trajets de tous les vols enregistrés dans ton logbook, projetés sur un globe 3D. Glisse pour orienter, molette pour zoomer, survole un trajet ou un aéroport pour le détail.</div>
+          <div class="hint" style="margin-top:-6px; margin-bottom:12px;">Trajets de tous les vols enregistrés dans ton logbook, projetés sur un globe 3D. Glisse pour orienter, molette pour zoomer, survole un aéroport pour isoler ses trajets, double-clic dessus pour zoomer.</div>
           <div class="globe-filter-row">
             <input type="text" id="fgSearch" placeholder="Filtrer par indicatif ou appareil">
             <div class="toggle-group" id="fgRulesToggle" data-rules="all">
@@ -807,10 +882,12 @@
           </div>
           <div class="globe-shell">
             <div id="flightsGlobe"></div>
+            <div class="globe-labels" id="fgLabels"></div>
             <div class="globe-legend">
               <span><i class="dot ifr"></i> IFR</span>
               <span><i class="dot vfr"></i> VFR</span>
             </div>
+            <button class="globe-reset" onclick="resetFlightsGlobeView()" title="Revenir à la vue d'ensemble">⟲ Vue d'ensemble</button>
             <div class="globe-tooltip hidden" id="fgTooltip"></div>
             <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
             <span class="hud-corner bl"></span><span class="hud-corner br"></span>
@@ -824,6 +901,41 @@
 </main>
 
 <footer class="app-footer">Application Vibe codée par LLCenLive avec Claude Sonnet 5</footer>
+
+<!-- ================= MODALE DÉTAIL D'UN TOUR (carrière) =================
+     Placée AVANT la modale de trajet : le bouton "Carte" d'une étape ouvre la modale
+     de trajet par-dessus celle-ci. -->
+<div class="modal-overlay hidden" id="tourModalOverlay" onclick="if(event.target===this) closeTourModal()">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <div>
+        <h3 id="tourModalTitle">Tour</h3>
+        <div class="hint" id="tourModalSub" style="margin-top:3px;"></div>
+      </div>
+      <div class="row-actions">
+        <button class="icon-btn" onclick="editTourFromModal()">Modifier</button>
+        <button class="icon-btn" onclick="deleteTourFromModal()">Supprimer</button>
+        <button class="icon-btn" onclick="closeTourModal()">Fermer</button>
+      </div>
+    </div>
+    <div class="telemetry-grid tour-modal-stats" id="tourModalStats"></div>
+    <div class="map-shell" style="margin-top:14px;">
+      <div id="tourModalMap"></div>
+      <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
+      <span class="hud-corner bl"></span><span class="hud-corner br"></span>
+    </div>
+    <h4 class="modal-subhead">Progression <span class="hint" style="text-transform:none; letter-spacing:0;">— clique sur une étape pour la valider ou revenir en arrière</span></h4>
+    <div class="tour-track" id="tourModalTrack"></div>
+    <h4 class="modal-subhead">Étapes &amp; vols associés du logbook</h4>
+    <div style="overflow-x:auto;">
+      <table class="phase-table tour-legs-table">
+        <thead><tr><th>#</th><th>Étape</th><th>Date</th><th>Indicatif</th><th>Appareil</th><th>Durée</th><th>Distance</th><th>Toucher</th><th></th></tr></thead>
+        <tbody id="tourModalLegRows"></tbody>
+      </table>
+    </div>
+    <div class="hint" id="tourModalNotes" style="margin-top:8px;"></div>
+  </div>
+</div>
 
 <!-- ================= MODALE CARTE DE TRAJET (logbook) ================= -->
 <div class="modal-overlay hidden" id="routeModalOverlay" onclick="if(event.target===this) closeRouteModal()">
@@ -910,6 +1022,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="fb-shared.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

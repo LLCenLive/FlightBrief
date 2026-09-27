@@ -12,7 +12,16 @@ contextBridge.exposeInMainWorld('api', {
   onObsServerError: (cb) => ipcRenderer.on('obs:serverError', (_, msg) => cb(msg)),
   onLiveOverlayServerError: (cb) => ipcRenderer.on('liveOverlay:serverError', (_, msg) => cb(msg)),
   pushLiveOverlayUpdate: (data) => ipcRenderer.send('live:updateOverlay', data),
-  lookupAirport: (icao) => ipcRenderer.invoke('airport:lookup', icao)
+  lookupAirport: (icao) => ipcRenderer.invoke('airport:lookup', icao),
+  airportIndexInfo: () => ipcRenderer.invoke('airport:indexInfo')
+});
+
+// Compagnon mobile (PWA servie sur le réseau local, voir main.js / server.js)
+contextBridge.exposeInMainWorld('mobile', {
+  setEnabled: (enabled) => ipcRenderer.invoke('mobile:setEnabled', !!enabled),
+  getStatus: () => ipcRenderer.invoke('mobile:getStatus'),
+  regenToken: () => ipcRenderer.invoke('mobile:regenToken'),
+  onStatus: (cb) => ipcRenderer.on('mobile:status', (_, s) => cb(s))
 });
 
 contextBridge.exposeInMainWorld('winCtl', {

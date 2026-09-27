@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FlightBrief</title>
+<meta name="theme-color" content="#0a0d11">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FlightBrief">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<script>
+  // Le manifeste embarque le jeton d'accès dans start_url : l'icône installée sur
+  // l'écran d'accueil rouvre donc l'appli déjà "appairée".
+  (function(){
+    var t = new URLSearchParams(location.search).get('t');
+    if(t){
+      var l = document.createElement('link');
+      l.rel = 'manifest'; l.href = '/manifest.webmanifest?t=' + encodeURIComponent(t);
+      document.head.appendChild(l);
+    }
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/mobile.css">
+</head>
+<body>
+
+<header class="appbar">
+  <img src="/icon-192.png" alt="">
+  <div class="title" id="appTitle">FlightBrief</div>
+  <button class="sync-pill loading" id="syncPill" onclick="syncNow(true)" title="Synchroniser avec FlightBrief sur ton PC"><span class="dot"></span><span id="syncText">Synchro…</span></button>
+</header>
+
+<div id="gate" class="hidden"></div>
+
+<main id="appMain">
+  <div id="syncNotice"></div>
+  <div id="liveSlot"></div>
+
+  <section class="view active" id="view-logbook"></section>
+  <section class="view" id="view-career"></section>
+  <section class="view" id="view-hangar"></section>
+  <section class="view" id="view-live"></section>
+  <section class="view" id="view-profile"></section>
+</main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-tab="logbook" class="active">
+    <svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/><path d="M9 8h6"/></svg>
+    Logbook
+  </button>
+  <button data-tab="career">
+    <svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/></svg>
+    Carrière
+  </button>
+  <button data-tab="live" class="tab-live">
+    <svg viewBox="0 0 24 24"><path d="M12 2.5l2.2 6.4 6.8 3.3v1.9l-6.8-1.6v4.3l2.6 2v1.6L12 19.3l-4.8 1.1v-1.6l2.6-2v-4.3l-6.8 1.6v-1.9l6.8-3.3z"/></svg>
+    <span>En vol</span><i class="live-dot"></i>
+  </button>
+  <button data-tab="hangar">
+    <svg viewBox="0 0 24 24"><path d="M3 20V9l9-5 9 5v11"/><path d="M7 20v-6h10v6"/><path d="M3 20h18"/></svg>
+    Hangar
+  </button>
+  <button data-tab="profile">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+    Profil
+  </button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<div class="sheet" id="sheet">
+  <div class="sheet-bar">
+    <button class="back" onclick="history.back()">‹ Retour</button>
+    <div class="t" id="sheetTitle"></div>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/fb-shared.js"></script>
+<script src="/mobile.js"></script>
+</body>
+</html>

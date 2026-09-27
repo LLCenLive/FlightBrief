@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Installer FlightBrief sur ce téléphone</title>
+<meta name="theme-color" content="#0a0d11">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<style>
+  :root{ --bg:#0a0d11; --panel:#12171c; --hairline:rgba(231,237,242,.09); --text:#e7edf2; --text-2:#8a96a2; --ok:#39e88f; --ifr:#54d6e8; --vfr:#ffb020; --danger:#ff5c5c; }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font:15px/1.55 -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif; padding:calc(18px + env(safe-area-inset-top)) 16px 40px;}
+  header{display:flex; align-items:center; gap:12px; margin-bottom:6px;}
+  header img{width:44px; height:44px; border-radius:11px;}
+  h1{font-size:20px; margin:0;}
+  .lead{color:var(--text-2); margin:8px 0 18px; font-size:14px;}
+  .step{background:var(--panel); border:1px solid var(--hairline); border-radius:16px; padding:14px 16px; margin-bottom:12px;}
+  .step h2{font-size:15.5px; margin:0 0 6px; display:flex; align-items:center; gap:10px;}
+  .num{flex:none; width:26px; height:26px; border-radius:50%; background:rgba(84,214,232,.14); color:var(--ifr); font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center;}
+  .step.done .num{background:rgba(57,232,143,.16); color:var(--ok);}
+  .step.done h2::after{content:'✓'; color:var(--ok); margin-left:auto; font-weight:700;}
+  .step p, .step li{font-size:14px; color:var(--text-2);}
+  .step ol{padding-left:20px; margin:8px 0;}
+  .step li{margin-bottom:5px;}
+  b, .hl{color:var(--text);}
+  .btn{display:block; width:100%; text-align:center; text-decoration:none; background:rgba(84,214,232,.15); color:var(--ifr); border:0; border-radius:12px; padding:13px 14px; font:700 15px/1.2 inherit; font-family:inherit; margin-top:10px; cursor:pointer;}
+  .btn.primary{background:var(--ok); color:#06120b;}
+  .btn[disabled]{opacity:.45; pointer-events:none;}
+  .status{margin-top:10px; font-size:13.5px; padding:9px 11px; border-radius:10px; background:rgba(255,255,255,.04);}
+  .status.ok{color:var(--ok); background:rgba(57,232,143,.08);}
+  .status.warn{color:var(--vfr); background:rgba(255,176,32,.08);}
+  .status.err{color:var(--danger); background:rgba(255,92,92,.08);}
+  .mono{font-family:ui-monospace, 'SF Mono', Menlo, monospace; font-size:12px; word-break:break-all;}
+  .note{font-size:12.5px; color:var(--text-2); margin-top:14px; line-height:1.55;}
+  .hidden{display:none !important;}
+  .banner{background:rgba(255,176,32,.1); border:1px solid rgba(255,176,32,.35); color:var(--vfr); border-radius:12px; padding:10px 12px; font-size:13.5px; margin-bottom:12px;}
+</style>
+</head>
+<body>
+<header>
+  <img src="/icon-192.png" alt="">
+  <h1>FlightBrief sur ton téléphone</h1>
+</header>
+<p class="lead">3 étapes, à faire une seule fois. Ensuite l'appli s'ouvre même sans ton PC et sans Wi-Fi : tu la mets à jour d'un appui sur « Synchroniser » quand tu es chez toi.</p>
+
+<div class="banner hidden" id="badLink">Lien incomplet ou expiré. Rescanne le QR code affiché dans FlightBrief sur ton PC (Admin → Application mobile).</div>
+<div class="banner hidden" id="notSafari">Sur iPhone, ouvre cette page dans <b>Safari</b> (bouton « Ouvrir dans Safari » ou icône boussole) : l'installation du certificat et l'ajout à l'écran d'accueil ne fonctionnent que dans Safari.</div>
+
+<section class="step" id="step1">
+  <h2><span class="num">1</span>Installer le certificat de ton PC</h2>
+  <p>Il permet au téléphone d'échanger en toute sécurité avec FlightBrief sur ton PC. Il est limité à FlightBrief sur ton réseau local et ne sert à rien d'autre.</p>
+  <a class="btn" id="dlCert" href="/flightbrief-ca.crt">Télécharger le certificat</a>
+  <div id="howIos" class="hidden">
+    <ol>
+      <li>Touche <b>Autoriser</b> quand Safari propose de télécharger un profil.</li>
+      <li>Ouvre <b>Réglages</b> → <b>Profil téléchargé</b> (en haut) → <b>Installer</b>.</li>
+      <li>Puis <b>Réglages → Général → Informations → Réglages de confiance des certificats</b> et active <b id="caName1">FlightBrief local</b>.</li>
+    </ol>
+  </div>
+  <div id="howAndroid" class="hidden">
+    <ol>
+      <li>Ouvre le fichier téléchargé (si rien ne s'ouvre : <b>Paramètres → Sécurité → Chiffrement et identifiants → Installer un certificat → Certificat CA</b>).</li>
+      <li>Confirme l'installation et donne-lui un nom, par exemple « FlightBrief ».</li>
+    </ol>
+  </div>
+  <div id="howOther" class="hidden"><p>Installe ce certificat comme <b>autorité de certification de confiance</b> sur cet appareil.</p></div>
+</section>
+
+<section class="step" id="step2">
+  <h2><span class="num">2</span>Vérifier la connexion sécurisée</h2>
+  <p>Reviens ici une fois le certificat approuvé.</p>
+  <button class="btn" id="checkBtn">Vérifier</button>
+  <div class="status" id="checkStatus">Pas encore vérifié.</div>
+</section>
+
+<section class="step" id="step3">
+  <h2><span class="num">3</span>Ouvrir et installer l'appli</h2>
+  <a class="btn primary" id="openApp" href="#" disabled>Ouvrir FlightBrief</a>
+  <ol id="homeIos" class="hidden">
+    <li>Dans l'appli qui s'ouvre (dans Safari), touche <b>Partager</b> <span aria-hidden="true">⬆︎</span>.</li>
+    <li>Choisis <b>Sur l'écran d'accueil</b>, puis <b>Ajouter</b>.</li>
+    <li>Lance FlightBrief depuis l'icône : la première synchro se fait toute seule.</li>
+  </ol>
+  <ol id="homeAndroid" class="hidden">
+    <li>Dans Chrome, menu <b>⋮</b> → <b>Installer l'application</b> (ou « Ajouter à l'écran d'accueil »).</li>
+    <li>Lance FlightBrief depuis l'icône : la première synchro se fait toute seule.</li>
+  </ol>
+</section>
+
+<p class="note" id="fpNote"></p>
+
+<script>
+(function(){
+  var t = new URLSearchParams(location.search).get('t') || '';
+  var ua = navigator.userAgent;
+  var isIos = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(ua);
+  var isIosNotSafari = isIos && /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua);
+  var info = null, appUrl = null;
+  function $(id){ return document.getElementById(id); }
+  $(isIos ? 'howIos' : isAndroid ? 'howAndroid' : 'howOther').classList.remove('hidden');
+  $(isAndroid ? 'homeAndroid' : 'homeIos').classList.remove('hidden');
+  if(isIosNotSafari) $('notSafari').classList.remove('hidden');
+
+  function status(text, kind){ var s = $('checkStatus'); s.textContent = text; s.className = 'status ' + (kind || ''); }
+  function ping(host, ms){
+    return new Promise(function(resolve){
+      var done = false, ctrl = ('AbortController' in window) ? new AbortController() : null;
+      var timer = setTimeout(function(){ if(!done){ done = true; if(ctrl) ctrl.abort(); resolve(false); } }, ms);
+      fetch('https://' + host + ':' + info.httpsPort + '/api/ping', { cache:'no-store', signal: ctrl ? ctrl.signal : undefined })
+        .then(function(r){ return r.json(); })
+        .then(function(j){ if(!done){ done = true; clearTimeout(timer); resolve(!!(j && j.ok)); } })
+        .catch(function(){ if(!done){ done = true; clearTimeout(timer); resolve(false); } });
+    });
+  }
+  function enableApp(host){
+    appUrl = 'https://' + host + ':' + info.httpsPort + '/?t=' + encodeURIComponent(t);
+    var a = $('openApp'); a.href = appUrl; a.removeAttribute('disabled');
+    $('step1').classList.add('done'); $('step2').classList.add('done');
+  }
+  var checking = false;
+  async function check(manual){
+    if(!info || checking) return;
+    checking = true;
+    if(manual) status('Vérification…');
+    // 1) Nom fixe flightbrief.local (idéal : l'appli installée ne dépend pas de l'IP du PC)
+    if(await ping(info.hostname, 3500)){
+      enableApp(info.hostname);
+      status('✓ Connexion sécurisée établie avec ton PC (' + info.hostname + ').', 'ok');
+      checking = false; return true;
+    }
+    // 2) Adresse IP du PC : le certificat est reconnu, mais le nom .local ne répond pas sur ce réseau
+    for(var i = 0; i < info.ips.length; i++){
+      if(await ping(info.ips[i], 3000)){
+        enableApp(info.ips[i]);
+        status('✓ Certificat reconnu. Le nom ' + info.hostname + ' ne répond pas sur ce réseau : l\'appli utilisera l\'adresse ' + info.ips[i] + '. Pour éviter de la réinstaller, fixe l\'adresse IP de ton PC dans ta box (bail DHCP statique).', 'warn');
+        checking = false; return true;
+      }
+    }
+    if(manual) status(isIos
+      ? 'Pas encore : vérifie que le profil est installé ET que le certificat est activé dans « Réglages de confiance des certificats ».'
+      : 'Pas encore : le téléphone ne fait pas encore confiance au certificat. Termine l\'étape 1 puis réessaie.', 'err');
+    checking = false; return false;
+  }
+  $('checkBtn').addEventListener('click', function(){ check(true); });
+  $('openApp').addEventListener('click', function(e){ if(!appUrl) e.preventDefault(); });
+
+  if(!t){ $('badLink').classList.remove('hidden'); return; }
+  fetch('/api/setup-info?t=' + encodeURIComponent(t), { cache:'no-store' })
+    .then(function(r){ if(r.status === 401) throw new Error('401'); return r.json(); })
+    .then(function(j){
+      info = j;
+      if(j.caName){ $('caName1').textContent = j.caName; }
+      if(j.caFingerprint) $('fpNote').innerHTML = 'Certificat : <b>' + j.caName + '</b><br><span class="mono">SHA-256 ' + j.caFingerprint + '</span>';
+      // Déjà configuré ? (ex. retour sur la page après l'étape 1) -> vérification silencieuse,
+      // puis nouvelle tentative régulière tant que ce n'est pas bon.
+      check(false).then(function(ok){
+        if(ok) return;
+        var n = 0, iv = setInterval(function(){ if(++n > 40 || appUrl){ clearInterval(iv); return; } if(!document.hidden) check(false); }, 4000);
+      });
+    })
+    .catch(function(){ $('badLink').classList.remove('hidden'); });
+})();
+</script>
+</body>
+</html>

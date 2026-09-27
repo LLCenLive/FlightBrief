@@ -1,6 +1,6 @@
 # FlightBrief
 
-FlightBrief est une application de bureau (Windows / macOS / Linux) pour les créateurs de contenu et streamers de simulation aérienne. Elle affiche un briefing de vol clair et personnalisable, tient un logbook, suit une progression de carrière (compagnie virtuelle, IVAO, VATSIM), suit un vol en direct via SimConnect, et expose le tout comme **sources navigateur OBS** en local — sans dépendre d'un fichier ouvert manuellement dans un onglet.
+FlightBrief est une application Windows (avec un compagnon mobile consultable hors ligne) pour les créateurs de contenu et streamers de simulation aérienne. Elle affiche un briefing de vol clair et personnalisable, tient un logbook, suit une progression de carrière (compagnie virtuelle, IVAO, VATSIM), suit un vol en direct via SimConnect, et expose le tout comme **sources navigateur OBS** en local — sans dépendre d'un fichier ouvert manuellement dans un onglet.
 
 ## Fonctionnalités
 
@@ -19,7 +19,7 @@ FlightBrief est une application de bureau (Windows / macOS / Linux) pour les cr�
 
 ## Installation (utilisateurs)
 
-Télécharge l'installeur correspondant à ton système depuis la page [Releases](../../releases) du dépôt (ou depuis la page de téléchargement du projet si elle est publiée — voir `docs/index.html`), puis lance-le comme n'importe quel logiciel.
+Télécharge **un seul fichier**, `FlightBrief-Setup-<version>.exe`, depuis la [page de téléchargement](https://llcenlive.github.io/FlightBrief/) ou la page [Releases](../../releases), puis double-clique dessus : l'installation se fait en un clic (raccourci sur le Bureau, tes données sont conservées lors des mises à jour). L'installeur n'étant pas signé, Windows SmartScreen peut demander de cliquer sur « Informations complémentaires → Exécuter quand même ».
 
 ## Développement
 
@@ -51,7 +51,7 @@ npm run dist:mac
 npm run dist:linux
 ```
 
-Les installeurs sont produits dans `dist/`. Note : la génération d'un installeur macOS (`.dmg`) signé nécessite d'être lancée sur macOS ; sans machine Apple, tu peux tout de même construire les versions Windows et Linux depuis n'importe quel OS pris en charge par `electron-builder`. Le dépôt inclut aussi un workflow GitHub Actions (`.github/workflows/build.yml`) qui construit automatiquement les trois plateformes et les attache à une Release dès qu'un tag `v*` est poussé — voir plus bas.
+Les installeurs sont produits dans `dist/`. Note : la génération d'un installeur macOS (`.dmg`) signé nécessite d'être lancée sur macOS ; sans machine Apple, tu peux tout de même construire les versions Windows et Linux depuis n'importe quel OS pris en charge par `electron-builder`. Le dépôt inclut aussi un workflow GitHub Actions (`.github/workflows/build.yml`) qui construit l'installeur Windows et attache uniquement ce `.exe` à une Release dès qu'un tag `v*` est poussé — voir plus bas.
 
 ## Structure du projet
 

@@ -87,7 +87,7 @@ const defaultUserProfile = {
   onboarded:false, tourDone:false
 };
 
-let db = { logbook: [], careers: [], theme: {...defaultTheme}, simbriefUsername: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, custom:{...defaultLiveOverlay.custom}, style:{...defaultLiveOverlay.style}}, userProfile: {...defaultUserProfile} };
+let db = { logbook: [], careers: [], hangar: [], mobile: { enabled:false }, theme: {...defaultTheme}, simbriefUsername: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, custom:{...defaultLiveOverlay.custom}, style:{...defaultLiveOverlay.style}}, userProfile: {...defaultUserProfile} };
 
 async function loadDb(){
   try{
@@ -95,6 +95,8 @@ async function loadDb(){
     if(stored){
       db.logbook = stored.logbook || [];
       db.careers = stored.careers || [];
+      db.hangar = stored.hangar || [];
+      db.mobile = { enabled:false, ...(stored.mobile || {}) };
       db.theme = {...defaultTheme, ...(stored.theme || {})};
       db.simbriefUsername = stored.simbriefUsername || '';
       const storedLo = stored.liveOverlay || {};
@@ -157,7 +159,8 @@ function switchView(name){
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
   if(name === 'career') renderCareers();
-  if(name === 'logbook') { populateCareerSelect(); renderLogbook(); }
+  if(name === 'hangar') renderHangar();
+  if(name === 'logbook') { populateCareerSelect(); populateHangarSelect(); renderLogbook(); }
   if(name === 'profil') {
     fillUserProfileForm('pf', db.userProfile);
     renderProfileStats();
@@ -224,7 +227,63 @@ function render(){
   el('outWeather').textContent = el('weather').value || '—';
   el('outNotes').textContent = el('notes').value || 'Aucune note particulière.';
   renderRoute();
+  renderBriefingTourMatch();
   pushLiveStateThrottled();
+}
+
+/* ---------------- Ce trajet fait-il partie d'un tour ? ----------------
+   Dès que départ + arrivée sont saisis (à la main ou via SimBrief), on cherche ce trajet
+   dans les étapes de tous les tours. Un clic ouvre directement le tour dans Carrière. */
+function findToursForRoute(dep, arr){
+  const out = [];
+  if(!dep || !arr) return out;
+  db.careers.forEach(c => (c.tours || []).forEach(t => (t.legs || []).forEach((l, i) => {
+    if((l.dep || '').toUpperCase() !== dep || (l.arr || '').toUpperCase() !== arr) return;
+    const nextIdx = t.legs.findIndex(x => !x.done);
+    out.push({ c, t, index: i, leg: l, isNext: nextIdx === i, complete: FBShared.tourIsComplete(t) });
+  })));
+  // Priorité : la prochaine étape d'un tour en cours, puis les étapes non faites, puis le reste.
+  return out.sort((a, b) => (b.isNext - a.isNext) || (a.leg.done - b.leg.done) || (a.complete - b.complete));
+}
+function renderBriefingTourMatch(){
+  const box = el('briefingTourMatch');
+  if(!box) return;
+  const dep = (el('depIcao').value || '').trim().toUpperCase();
+  const arr = (el('arrIcao').value || '').trim().toUpperCase();
+  if(dep.length < 3 || arr.length < 3){ box.innerHTML = ''; box.className = 'tour-match hidden'; return; }
+  const matches = findToursForRoute(dep, arr);
+  box.className = 'tour-match';
+  if(!matches.length){
+    box.innerHTML = `<div class="tm-none">Ce trajet ne fait partie d'aucun de tes tours.</div>`;
+    return;
+  }
+  box.innerHTML = matches.map(m => {
+    const state = m.leg.done ? '<span class="tm-state done">✓ Déjà faite</span>'
+      : m.isNext ? '<span class="tm-state next">Prochaine étape</span>'
+      : '<span class="tm-state">À faire</span>';
+    return `<button class="tm-item" onclick="openTourFromBriefing('${m.c.id}','${m.t.id}')" title="Ouvrir ce tour dans l'onglet Carrière">
+      <span class="tm-icon">🧭</span>
+      <span class="tm-text"><b>Étape ${m.index + 1}/${m.t.legs.length}</b> de « ${escapeHtml(m.t.name)} »<small>${escapeHtml(m.c.name)}${m.complete ? ' · tour terminé' : ''}</small></span>
+      ${state}
+      <span class="tm-go">Voir ›</span>
+    </button>`;
+  }).join('');
+}
+function openTourFromBriefing(careerId, tourId){
+  const c = db.careers.find(x => x.id === careerId);
+  const t = c && (c.tours || []).find(x => x.id === tourId);
+  switchView('career');
+  if(t && FBShared.tourIsComplete(t)){ _toursDoneOpen = true; renderTours(); }
+  // Mise en évidence du tour dans la liste, puis ouverture de son détail.
+  setTimeout(() => {
+    const card = document.querySelector(`.tour-card[data-tour-id="${tourId}"]`);
+    if(card){
+      card.scrollIntoView({ behavior:'smooth', block:'center' });
+      card.classList.add('tour-flash');
+      setTimeout(() => card.classList.remove('tour-flash'), 1800);
+    }
+    openTourModal(careerId, tourId);
+  }, 80);
 }
 
 let _planeIconEl = null;
@@ -724,6 +783,8 @@ function resetLogbookForm(){
   ['lbCallsign','lbDep','lbArr','lbDuration','lbAircraft','lbNetwork','lbRemarks'].forEach(id => el(id).value = '');
   el('lbDate').value = new Date().toISOString().slice(0,10);
   el('lbCareer').value = '';
+  populateHangarSelect();
+  el('lbHangar').value = '';
   el('lbPirep').value = 'none';
   setLbRules('VFR');
 }
@@ -740,6 +801,7 @@ async function saveLogbookEntry(){
     durationMin: parseDurationToMin(el('lbDuration').value.trim()),
     network: el('lbNetwork').value.trim(),
     careerId: el('lbCareer').value || null,
+    aircraftId: el('lbHangar').value || null,
     pirep: el('lbPirep').value,
     remarks: el('lbRemarks').value.trim()
   };
@@ -775,6 +837,8 @@ function editLogbookEntry(id){
   el('lbNetwork').value = f.network;
   populateCareerSelect();
   el('lbCareer').value = f.careerId || '';
+  populateHangarSelect();
+  el('lbHangar').value = (f.aircraftId && db.hangar.some(a => a.id === f.aircraftId)) ? f.aircraftId : '';
   el('lbPirep').value = f.pirep;
   el('lbRemarks').value = f.remarks;
   setLbRules(f.rules);
@@ -834,6 +898,9 @@ function sendBriefingToLogbook(){
   el('lbRemarks').value = el('notes').value;
   populateCareerSelect();
   el('lbCareer').value = '';
+  populateHangarSelect();
+  const hgSuggest = FBShared.suggestHangarAircraft(db.hangar, el('aircraft').value);
+  el('lbHangar').value = hgSuggest ? hgSuggest.id : '';
   el('lbPirep').value = 'none';
   setLbRules(state.rules);
   switchView('logbook');
@@ -933,6 +1000,7 @@ function renderCareers(){
   }
   renderTours();
   populateTourCareerSelect();
+  renderBriefingTourMatch();
 }
 
 /* =========================================================
@@ -941,39 +1009,63 @@ function renderCareers(){
 let editingTourId = null; // { careerId, tourId } ou null
 let _justCompletedTourId = null;
 
+let _toursDoneOpen = false; // état replié/déplié de la section "Tours terminés", conservé entre deux rendus
+let _tourCoordsRequested = new Set(); // OACI déjà demandés à l'index local pour les distances des tours
+
+// Timeline horizontale d'un tour (réutilisée dans la liste ET dans la fenêtre de détail).
+function tourTrackHtml(c, t){
+  const done = t.legs.filter(l => l.done).length;
+  const nodes = [{ icao: t.legs[0].dep, done: t.legs[0].done || done > 0 }];
+  let html = `<div class="tour-node ${nodes[0].done ? 'done':''}"><div class="dot"></div><div class="icao">${escapeHtml(nodes[0].icao || '----')}</div></div>`;
+  t.legs.forEach((l, i) => {
+    html += `<div class="tour-leg ${l.done ? 'done':''}"></div>`;
+    html += `<div class="tour-node ${l.done ? 'done':''}" onclick="toggleTourLeg('${c.id}','${t.id}',${i})" title="Étape ${escapeHtml(l.dep)} → ${escapeHtml(l.arr)} — valide aussi les étapes précédentes">
+      <div class="dot"></div><div class="icao">${escapeHtml(l.arr || '----')}</div>
+    </div>`;
+  });
+  return html;
+}
+
+// Charge en tâche de fond les coordonnées des aéroports des tours (pour les distances
+// orthodromiques des étapes non trackées), puis relance un rendu une seule fois.
+function ensureTourCoords(tours){
+  const missing = [];
+  tours.forEach(({ t }) => t.legs.forEach(l => [l.dep, l.arr].forEach(icao => {
+    const k = (icao || '').toUpperCase();
+    if(k && _airportCoordCache[k] === undefined && !_tourCoordsRequested.has(k)){ missing.push(k); _tourCoordsRequested.add(k); }
+  })));
+  if(missing.length) resolveAirportCoords(missing).then(() => { renderTours(); refreshTourModalIfOpen(); });
+}
+
 function renderTours(){
   const container = el('toursList');
 
-  // Le innerHTML est reconstruit à chaque rendu (nouvelles données) : sans ça, le
-  // scroll horizontal de chaque piste de tour revient à 0 à chaque clic. On le
-  // sauvegarde donc avant reconstruction, puis on le restaure juste après.
+  // Le innerHTML est reconstruit à chaque rendu : on sauvegarde le scroll horizontal de
+  // chaque piste de tour avant reconstruction, puis on le restaure juste après.
   const scrollPositions = {};
   container.querySelectorAll('.tour-card[data-tour-id]').forEach(card => {
     const track = card.querySelector('.tour-track');
     if(track) scrollPositions[card.dataset.tourId] = track.scrollLeft;
   });
 
-  const ivaoCareers = db.careers.filter(c => c.type === 'IVAO' && c.tours && c.tours.length);
-  if(!ivaoCareers.length){
+  const all = [];
+  db.careers.filter(c => c.type === 'IVAO' && c.tours && c.tours.length)
+    .forEach(c => c.tours.forEach(t => { if(t.legs && t.legs.length) all.push({ c, t }); }));
+  if(!all.length){
     container.innerHTML = '<div class="tours-empty">Aucun tour IVAO pour le moment. Crée une carrière de type IVAO puis ajoute un tour ci-dessous.</div>';
     return;
   }
-  container.innerHTML = ivaoCareers.map(c => c.tours.map(t => {
+  ensureTourCoords(all);
+
+  // Un tour tout juste terminé reste affiché le temps de son animation, puis bascule
+  // dans la section repliée "Tours terminés".
+  const active = all.filter(({ t }) => !FBShared.tourIsComplete(t) || t.id === _justCompletedTourId);
+  const completed = all.filter(({ t }) => FBShared.tourIsComplete(t) && t.id !== _justCompletedTourId)
+    .map(x => ({ ...x, stats: FBShared.tourStats(x.c, x.t, db.logbook, cachedAirportLookup) }))
+    .sort((a, b) => (b.stats.completedAt || '').localeCompare(a.stats.completedAt || ''));
+
+  const activeHtml = active.length ? active.map(({ c, t }) => {
     const done = t.legs.filter(l => l.done).length;
-
-    // Construction de la timeline : premier noeud = départ de la 1ère étape,
-    // puis un noeud par arrivée d'étape. Chaque segment reflète l'état "done".
-    const nodes = [{ icao: t.legs[0].dep, done: t.legs[0].done || done > 0 }];
-    t.legs.forEach(l => nodes.push({ icao: l.arr, done: l.done }));
-
-    let trackHtml = `<div class="tour-node ${nodes[0].done ? 'done':''}"><div class="dot"></div><div class="icao">${escapeHtml(nodes[0].icao || '----')}</div></div>`;
-    t.legs.forEach((l, i) => {
-      trackHtml += `<div class="tour-leg ${l.done ? 'done':''}"></div>`;
-      trackHtml += `<div class="tour-node ${l.done ? 'done':''}" onclick="toggleTourLeg('${c.id}','${t.id}',${i})" title="Étape ${escapeHtml(l.dep)} → ${escapeHtml(l.arr)} — valide aussi les étapes précédentes">
-        <div class="dot"></div><div class="icao">${escapeHtml(l.arr || '----')}</div>
-      </div>`;
-    });
-
     const justCompleted = _justCompletedTourId === t.id;
     return `<div class="tour-card ${justCompleted ? 'just-completed':''}" data-tour-id="${t.id}">
       <div class="tour-card-head">
@@ -983,14 +1075,45 @@ function renderTours(){
         </div>
         <div class="tour-progress">${done}/${t.legs.length} étapes</div>
         <div class="tour-card-actions">
+          <button class="icon-btn" onclick="openTourModal('${c.id}','${t.id}')">Détails</button>
           <button class="icon-btn" onclick="startEditTour('${c.id}','${t.id}')">Modifier</button>
           <button class="icon-btn" onclick="deleteTour('${c.id}','${t.id}')">Supprimer</button>
         </div>
       </div>
-      ${justCompleted ? '<div class="tour-complete-badge">✓ Tour terminé</div>' : ''}
-      <div class="tour-track">${trackHtml}</div>
+      ${justCompleted ? '<div class="tour-complete-badge">✓ Tour terminé — rangé dans « Tours terminés »</div>' : ''}
+      <div class="tour-track">${tourTrackHtml(c, t)}</div>
     </div>`;
-  }).join('')).join('');
+  }).join('') : '<div class="tours-empty">Aucun tour en cours — tous tes tours sont terminés 🎉</div>';
+
+  const completedHtml = completed.length ? `
+    <details class="tours-done" id="toursDone" ${_toursDoneOpen ? 'open' : ''}>
+      <summary>
+        <span class="chev"></span>
+        <span class="tours-done-title">Tours terminés</span>
+        <span class="tours-done-count">${completed.length}</span>
+      </summary>
+      <div class="tours-done-list">
+        ${completed.map(({ c, t, stats }) => `
+          <div class="tour-done-card" onclick="openTourModal('${c.id}','${t.id}')" title="Voir le détail du tour">
+            <div class="tdc-titles">
+              <div class="career-name">${escapeHtml(c.name)}</div>
+              <div class="tour-name"><span class="tdc-check">✓</span>${escapeHtml(t.name)}</div>
+            </div>
+            <div class="tdc-stats">
+              <div><span class="k">Terminé le</span><span class="v">${FBShared.fmtDateFr(stats.completedAt)}</span></div>
+              <div><span class="k">Étapes</span><span class="v">${stats.legCount}</span></div>
+              <div><span class="k">Temps de vol</span><span class="v">${stats.linkedCount ? FBShared.fmtHm(stats.totalMin) : '—'}</span></div>
+              <div><span class="k">Distance</span><span class="v">${stats.distanceNm ? FBShared.fmtNm(stats.distanceNm) : '—'}</span></div>
+              <div><span class="k">Durée</span><span class="v">${stats.elapsedDays != null ? stats.elapsedDays + ' j' : '—'}</span></div>
+            </div>
+            <span class="tdc-open">Détails ›</span>
+          </div>`).join('')}
+      </div>
+    </details>` : '';
+
+  container.innerHTML = activeHtml + completedHtml;
+  const details = el('toursDone');
+  if(details) details.addEventListener('toggle', () => { _toursDoneOpen = details.open; });
 
   container.querySelectorAll('.tour-card[data-tour-id]').forEach(card => {
     const saved = scrollPositions[card.dataset.tourId];
@@ -1000,10 +1123,10 @@ function renderTours(){
 
   if(_justCompletedTourId){
     const id = _justCompletedTourId;
-    _justCompletedTourId = null;
     setTimeout(() => {
-      const card = container.querySelector(`.tour-card[data-tour-id="${id}"]`);
-      if(card){ card.classList.remove('just-completed'); card.querySelector('.tour-complete-badge')?.remove(); }
+      if(_justCompletedTourId !== id) return;
+      _justCompletedTourId = null;
+      renderTours(); // bascule du tour dans la section "Tours terminés"
     }, 2600);
   }
 }
@@ -1059,7 +1182,11 @@ async function saveTour(){
     // Conserve l'état "done" des étapes identiques (même dep;arr, même position).
     const mergedLegs = legs.map((l, i) => {
       const prev = previousLegs[i];
-      return (prev && prev.dep === l.dep && prev.arr === l.arr) ? { ...l, done: prev.done } : l;
+      if(!(prev && prev.dep === l.dep && prev.arr === l.arr)) return l;
+      const kept = { ...l, done: prev.done };
+      if(prev.doneAt) kept.doneAt = prev.doneAt;
+      if(prev.flightId) kept.flightId = prev.flightId;
+      return kept;
     });
     if(oldCareer && oldCareer.id !== careerId){
       oldCareer.tours = (oldCareer.tours||[]).filter(t => t.id !== editingTourId.tourId);
@@ -1068,6 +1195,8 @@ async function saveTour(){
     targetCareer.tours = targetCareer.tours || [];
     const existingIdx = targetCareer.tours.findIndex(t => t.id === editingTourId.tourId);
     const tourObj = { id: editingTourId.tourId, name, legs: mergedLegs };
+    if(oldTour && oldTour.startedAt) tourObj.startedAt = oldTour.startedAt;
+    if(FBShared.tourIsComplete(tourObj)) tourObj.completedAt = (oldTour && oldTour.completedAt) || new Date().toISOString();
     if(existingIdx > -1) targetCareer.tours[existingIdx] = tourObj;
     else targetCareer.tours.push(tourObj);
   } else {
@@ -1085,17 +1214,32 @@ async function toggleTourLeg(careerId, tourId, legIndex){
   const tour = career && (career.tours||[]).find(t => t.id === tourId);
   if(!tour) return;
   const wasDone = tour.legs[legIndex].done;
+  const wasComplete = FBShared.tourIsComplete(tour);
+  const nowIso = new Date().toISOString();
   if(!wasDone){
-    // Cliquer sur une étape valide aussi automatiquement toutes celles qui précèdent
-    for(let i=0;i<=legIndex;i++) tour.legs[i].done = true;
+    // Cliquer sur une étape valide aussi automatiquement toutes celles qui précèdent.
+    // On mémorise la date de validation + le vol du logbook correspondant (s'il existe
+    // déjà), pour les statistiques du tour une fois terminé.
+    for(let i=0;i<=legIndex;i++){
+      if(!tour.legs[i].done){ tour.legs[i].done = true; tour.legs[i].doneAt = nowIso; }
+    }
+    if(!tour.startedAt) tour.startedAt = nowIso;
+    const matched = FBShared.tourLegFlights(career, tour, db.logbook);
+    tour.legs.forEach((l, i) => { if(l.done && !l.flightId && matched[i]) l.flightId = matched[i].id; });
   } else {
     // Recliquer dessus revient en arrière : dévalide cette étape et toutes celles qui suivent
-    for(let i=legIndex;i<tour.legs.length;i++) tour.legs[i].done = false;
+    for(let i=legIndex;i<tour.legs.length;i++){
+      tour.legs[i].done = false;
+      delete tour.legs[i].doneAt;
+      delete tour.legs[i].flightId;
+    }
   }
-  const nowAllDone = tour.legs.every(l => l.done) && tour.legs.length > 0;
-  if(nowAllDone) _justCompletedTourId = tourId;
+  const nowAllDone = FBShared.tourIsComplete(tour);
+  if(nowAllDone && !wasComplete){ _justCompletedTourId = tourId; tour.completedAt = nowIso; }
+  if(!nowAllDone) delete tour.completedAt;
   await saveDbNow();
   renderCareers();
+  refreshTourModalIfOpen();
 }
 
 async function deleteTour(careerId, tourId){
@@ -1104,8 +1248,365 @@ async function deleteTour(careerId, tourId){
   if(!career) return;
   career.tours = (career.tours||[]).filter(t => t.id !== tourId);
   if(editingTourId && editingTourId.tourId === tourId) resetTourForm();
+  if(_tourModalRef && _tourModalRef.tourId === tourId) closeTourModal();
   await saveDbNow();
   renderCareers();
+}
+
+/* ---------------- Fenêtre de détail d'un tour (en cours ou terminé) ---------------- */
+let _tourModalRef = null; // { careerId, tourId }
+let tourModalMap = null, tourModalLayers = [];
+
+function openTourModal(careerId, tourId){
+  _tourModalRef = { careerId, tourId };
+  el('tourModalOverlay').classList.remove('hidden');
+  renderTourModal();
+}
+function closeTourModal(){
+  el('tourModalOverlay').classList.add('hidden');
+  _tourModalRef = null;
+}
+function refreshTourModalIfOpen(){
+  if(_tourModalRef && !el('tourModalOverlay').classList.contains('hidden')) renderTourModal();
+}
+function editTourFromModal(){
+  if(!_tourModalRef) return;
+  const { careerId, tourId } = _tourModalRef;
+  closeTourModal();
+  startEditTour(careerId, tourId);
+}
+function deleteTourFromModal(){
+  if(!_tourModalRef) return;
+  deleteTour(_tourModalRef.careerId, _tourModalRef.tourId);
+}
+
+async function renderTourModal(){
+  const ref = _tourModalRef;
+  if(!ref) return;
+  const c = db.careers.find(x => x.id === ref.careerId);
+  const t = c && (c.tours || []).find(x => x.id === ref.tourId);
+  if(!t){ closeTourModal(); return; }
+  await resolveAirportCoords(Array.from(new Set(t.legs.flatMap(l => [l.dep, l.arr]).filter(Boolean).map(x => x.toUpperCase()))));
+  if(_tourModalRef !== ref) return;
+
+  const s = FBShared.tourStats(c, t, db.logbook, cachedAirportLookup);
+  const complete = FBShared.tourIsComplete(t);
+  const F = FBShared;
+  el('tourModalTitle').textContent = t.name;
+  el('tourModalSub').innerHTML = `${escapeHtml(c.name)} · ${complete
+    ? `<span class="ok-text">✓ Terminé le ${F.fmtDateFr(s.completedAt)}</span>`
+    : `En cours — ${s.doneCount}/${s.legCount} étapes validées`}`;
+
+  const topAircraft = Object.entries(s.aircraft).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+  el('tourModalStats').innerHTML = `
+    <div class="tstat"><div class="cap">Étapes</div><div class="val">${s.doneCount}/${s.legCount}</div></div>
+    <div class="tstat"><div class="cap">Temps de vol</div><div class="val">${s.linkedCount ? F.fmtHm(s.totalMin) : '—'}</div></div>
+    <div class="tstat"><div class="cap">Distance du tour</div><div class="val">${s.distanceNm ? F.fmtNm(s.distanceNm) + (s.distanceEstimatedCount ? '<sup>*</sup>' : '') : '—'}</div></div>
+    <div class="tstat"><div class="cap">Durée pour le boucler</div><div class="val">${complete && s.elapsedDays != null ? s.elapsedDays + ' jour' + (s.elapsedDays > 1 ? 's' : '') : '—'}</div></div>
+    <div class="tstat"><div class="cap">Commencé le</div><div class="val">${F.fmtDateFr(s.startDate)}</div></div>
+    <div class="tstat"><div class="cap">Terminé le</div><div class="val">${complete ? F.fmtDateFr(s.completedAt) : '—'}</div></div>
+    <div class="tstat"><div class="cap">Toucher moyen</div><div class="val">${F.fmtFpm(s.avgLandingFpm)}</div></div>
+    <div class="tstat"><div class="cap">Appareil${topAircraft.length > 1 ? 's' : ''}</div><div class="val val-sm">${topAircraft.length ? escapeHtml(topAircraft.slice(0, 2).join(', ')) + (topAircraft.length > 2 ? ` +${topAircraft.length - 2}` : '') : '—'}</div></div>
+  `;
+  el('tourModalTrack').innerHTML = tourTrackHtml(c, t);
+
+  el('tourModalLegRows').innerHTML = s.legs.map(({ index, leg, flight: f, distanceNm, distanceEstimated, landingFpm }) => {
+    const grade = F.landingGrade(landingFpm);
+    const date = f ? f.date : (leg.doneAt ? String(leg.doneAt).slice(0, 10) : null);
+    return `<tr class="${leg.done ? '' : 'leg-todo'}">
+      <td class="muted">${index + 1}</td>
+      <td><span class="leg-state ${leg.done ? 'done' : ''}"></span>${escapeHtml(leg.dep)} → ${escapeHtml(leg.arr)}</td>
+      <td>${F.fmtDateFr(date)}</td>
+      <td>${f ? escapeHtml(f.callsign || '—') : '<span class="muted">—</span>'}</td>
+      <td>${f ? escapeHtml(f.aircraft || '—') : '<span class="muted">—</span>'}</td>
+      <td>${f ? F.fmtHm(f.durationMin) : '<span class="muted">—</span>'}</td>
+      <td>${distanceNm != null ? F.fmtNm(distanceNm) + (distanceEstimated ? '<sup>*</sup>' : '') : '—'}</td>
+      <td>${landingFpm != null ? `<span class="grade-dot" style="background:${grade.color}" title="${grade.label}"></span>${F.fmtFpm(landingFpm)}` : '<span class="muted">—</span>'}</td>
+      <td>${f && f.trackData ? `<button class="icon-btn" onclick="openRouteModal('${f.id}')">Carte</button>` : (leg.done && !f ? '<span class="muted" title="Aucun vol du logbook avec ce départ et cette arrivée">non trouvé</span>' : '')}</td>
+    </tr>`;
+  }).join('');
+
+  const notes = [];
+  if(s.distanceEstimatedCount) notes.push('* distance orthodromique départ → arrivée (étape sans vol tracké).');
+  const missing = s.legs.filter(x => x.leg.done && !x.flight).length;
+  if(missing) notes.push(`${missing} étape${missing > 1 ? 's' : ''} validée${missing > 1 ? 's' : ''} sans vol correspondant dans le logbook (même OACI de départ et d'arrivée) : temps de vol et atterrissage incomplets.`);
+  el('tourModalNotes').textContent = notes.join(' ');
+
+  // Carte : trajet réel pour les étapes trackées, grand cercle sinon.
+  setTimeout(() => {
+    if(!window.L || _tourModalRef !== ref) return;
+    if(!tourModalMap){
+      tourModalMap = L.map('tourModalMap', { attributionControl:true, zoomControl:true });
+      darkTileLayer().addTo(tourModalMap);
+      styleMapShell(tourModalMap);
+    }
+    tourModalLayers.forEach(l => tourModalMap.removeLayer(l));
+    tourModalLayers = [];
+    const bounds = [];
+    s.legs.forEach(({ leg, flight: f }) => {
+      const a = cachedAirportLookup(leg.dep), b = cachedAirportLookup(leg.arr);
+      const path = f && f.trackData && Array.isArray(f.trackData.path) && f.trackData.path.length > 1
+        ? f.trackData.path.map(p => [p.lat, p.lon]) : (a && b ? FBShared.greatCirclePoints(a, b, 40) : null);
+      if(!path) return;
+      const color = leg.done ? '#39e88f' : '#7c8894';
+      if(leg.done) tourModalLayers.push(L.polyline(path, { color, weight: 7, opacity: .15, className: 'route-glow' }).addTo(tourModalMap));
+      tourModalLayers.push(L.polyline(path, { color, weight: 2.4, opacity: .95, dashArray: leg.done ? null : '5 6' }).addTo(tourModalMap));
+      path.forEach(p => bounds.push(p));
+    });
+    const seen = new Set();
+    t.legs.forEach(leg => [leg.dep, leg.arr].forEach(icao => {
+      const k = (icao || '').toUpperCase(); if(seen.has(k)) return; seen.add(k);
+      const info = cachedAirportLookup(k); if(!info) return;
+      const m = L.circleMarker([info.lat, info.lon], { radius: 4.5, color: '#0a0d11', weight: 2, fillColor: '#e7edf2', fillOpacity: 1 })
+        .bindTooltip(k, { permanent: t.legs.length <= 14, direction: 'top', className: 'tour-map-label', offset: [0, -4] })
+        .addTo(tourModalMap);
+      tourModalLayers.push(m);
+      bounds.push([info.lat, info.lon]);
+    }));
+    tourModalMap.invalidateSize();
+    if(bounds.length > 1) tourModalMap.fitBounds(L.latLngBounds(bounds), { padding: [28, 28] });
+    else if(bounds.length === 1) tourModalMap.setView(bounds[0], 8);
+    else tourModalMap.setView([46.6, 2.4], 4);
+  }, 40);
+}
+
+/* =========================================================
+   HANGAR — avions de l'utilisateur + statistiques par avion
+   ---------------------------------------------------------
+   Un avion = { id, name, icaoType, developer, matchKeys, addedAt } (v1.3.1 : fiche simplifiée).
+   Association des vols : champ "Avion du hangar" du logbook (f.aircraftId), sinon
+   automatique par mots-clés (voir FBShared.assignFlightsToHangar).
+   ========================================================= */
+let editingHangarId = null;
+let _hangarSelectedId = null;
+let _hangarShowAllFlights = false;
+let _hangarCoordsRequested = false;
+
+function populateHangarSelect(){
+  const sel = el('lbHangar');
+  if(sel){
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Auto (d\'après les mots-clés)</option>' + db.hangar.map(a =>
+      `<option value="${a.id}">${escapeHtml(a.name)}${a.icaoType ? ' · ' + escapeHtml(a.icaoType) : ''}</option>`).join('');
+    sel.value = db.hangar.some(a => a.id === current) ? current : '';
+  }
+  const list = el('hangarAircraftList');
+  if(list) list.innerHTML = db.hangar.map(a => `<option value="${escapeHtml(a.name)}">`).join('');
+}
+
+// Choisir un avion du hangar dans le formulaire du logbook remplit le champ "Appareil" s'il
+// est vide (et inversement, taper le nom exact d'un avion du hangar le sélectionne).
+function bindHangarLogbookControls(){
+  el('lbHangar').addEventListener('change', () => {
+    const a = db.hangar.find(x => x.id === el('lbHangar').value);
+    if(a && !el('lbAircraft').value.trim()) el('lbAircraft').value = a.name;
+  });
+  el('lbAircraft').addEventListener('change', () => {
+    if(el('lbHangar').value) return;
+    const v = el('lbAircraft').value.trim().toLowerCase();
+    const a = db.hangar.find(x => x.name.trim().toLowerCase() === v);
+    if(a) el('lbHangar').value = a.id;
+  });
+}
+
+function resetHangarForm(){
+  editingHangarId = null;
+  el('hangarFormTitle').textContent = 'Ajouter un avion';
+  ['hgName','hgType','hgDeveloper','hgKeys'].forEach(id => el(id).value = '');
+}
+
+async function saveHangarAircraft(){
+  const name = el('hgName').value.trim();
+  if(!name){ alert('Indique au moins un nom pour cet avion.'); return; }
+  const prev = editingHangarId ? db.hangar.find(a => a.id === editingHangarId) : null;
+  const aircraft = {
+    id: editingHangarId || 'a' + Date.now(),
+    name,
+    icaoType: el('hgType').value.trim().toUpperCase(),
+    developer: el('hgDeveloper').value.trim(),
+    matchKeys: el('hgKeys').value.trim(),
+    addedAt: prev ? prev.addedAt : new Date().toISOString()
+  };
+  if(prev) db.hangar[db.hangar.indexOf(prev)] = aircraft;
+  else db.hangar.push(aircraft);
+  await saveDbNow();
+  _hangarSelectedId = aircraft.id;
+  resetHangarForm();
+  populateHangarSelect();
+  renderHangar();
+  const detail = el('hangarDetail');
+  if(detail) detail.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function editHangarAircraft(id){
+  const a = db.hangar.find(x => x.id === id);
+  if(!a) return;
+  editingHangarId = id;
+  el('hangarFormTitle').textContent = 'Modifier l\'avion';
+  el('hgName').value = a.name || '';
+  el('hgType').value = a.icaoType || '';
+  el('hgDeveloper').value = a.developer || '';
+  // Anciennes fiches (v1.3.0) : l'immatriculation rejoint les mots-clés.
+  el('hgKeys').value = [a.matchKeys, a.registration].filter(Boolean).join(', ');
+  el('hangarFormPanel').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function deleteHangarAircraft(id){
+  const a = db.hangar.find(x => x.id === id);
+  if(!a || !confirm(`Retirer « ${a.name} » du hangar ? Les vols restent dans le logbook.`)) return;
+  db.hangar = db.hangar.filter(x => x.id !== id);
+  db.logbook.forEach(f => { if(f.aircraftId === id) f.aircraftId = null; });
+  if(_hangarSelectedId === id) _hangarSelectedId = null;
+  if(editingHangarId === id) resetHangarForm();
+  await saveDbNow();
+  populateHangarSelect();
+  renderHangar();
+}
+
+function selectHangarAircraft(id){
+  _hangarSelectedId = _hangarSelectedId === id ? null : id;
+  _hangarShowAllFlights = false;
+  renderHangar();
+  if(_hangarSelectedId) setTimeout(() => el('hangarDetail').scrollIntoView({ behavior:'smooth', block:'start' }), 30);
+}
+
+// Coordonnées de tous les aéroports du logbook (distances orthodromiques des vols non
+// trackés) : chargées une fois en tâche de fond, puis nouveau rendu.
+function ensureHangarCoords(){
+  if(_hangarCoordsRequested) return;
+  _hangarCoordsRequested = true;
+  const icaos = Array.from(new Set(db.logbook.flatMap(f => [f.dep, f.arr]).filter(Boolean).map(x => x.toUpperCase())))
+    .filter(k => _airportCoordCache[k] === undefined);
+  if(icaos.length) resolveAirportCoords(icaos).then(() => {
+    _hangarCoordsRequested = false;
+    if(el('view-hangar').classList.contains('active')) renderHangar();
+  });
+  else _hangarCoordsRequested = false;
+}
+
+function renderHangar(){
+  ensureHangarCoords();
+  const assign = FBShared.assignFlightsToHangar(db.hangar, db.logbook);
+  const statsById = {};
+  db.hangar.forEach(a => { statsById[a.id] = FBShared.aircraftStats(assign[a.id].flights, cachedAirportLookup); });
+  const F = FBShared;
+
+  const totalMin = db.hangar.reduce((s, a) => s + statsById[a.id].totalMin, 0);
+  el('hgStatCount').textContent = db.hangar.length;
+  el('hgStatHours').textContent = F.fmtHm(totalMin);
+  el('hgStatUnassigned').textContent = assign._unassigned.length;
+
+  const maxMin = Math.max(1, ...db.hangar.map(a => statsById[a.id].totalMin));
+  const sorted = [...db.hangar].sort((a, b) => statsById[b.id].totalMin - statsById[a.id].totalMin || a.name.localeCompare(b.name));
+  el('hangarGrid').innerHTML = sorted.map(a => {
+    const s = statsById[a.id];
+    const grade = F.landingGrade(s.avgLandingFpm);
+    return `<div class="hangar-card ${_hangarSelectedId === a.id ? 'selected' : ''}" onclick="selectHangarAircraft('${a.id}')">
+      <div class="hc-head">
+        <span class="hc-type">${escapeHtml(a.icaoType || 'Avion')}</span>
+        ${a.developer ? `<span class="hc-reg">${escapeHtml(a.developer)}</span>` : ''}
+      </div>
+      <div class="hc-name">${escapeHtml(a.name)}</div>
+      <div class="hc-bar"><div class="hc-bar-fill" style="width:${Math.round((s.totalMin / maxMin) * 100)}%"></div></div>
+      <div class="hc-stats">
+        <div><span class="k">Heures</span><span class="v">${F.fmtHm(s.totalMin)}</span></div>
+        <div><span class="k">Vols</span><span class="v">${s.flights}</span></div>
+        <div><span class="k">Distance</span><span class="v">${s.distanceNm ? Math.round(s.distanceNm).toLocaleString('fr-FR') : '—'}<small> NM</small></span></div>
+        <div><span class="k">Toucher moy.</span><span class="v">${s.avgLandingFpm != null ? `<i class="grade-dot" style="background:${grade.color}"></i>${Math.round(Math.abs(s.avgLandingFpm))}` : '—'}${s.avgLandingFpm != null ? '<small> fpm</small>' : ''}</span></div>
+      </div>
+      <div class="hc-foot">${s.lastDate ? 'Dernier vol le ' + F.fmtDateFr(s.lastDate) : 'Aucun vol pour le moment'}</div>
+    </div>`;
+  }).join('') + `<div class="hangar-card hangar-add" onclick="resetHangarForm(); el('hangarFormPanel').scrollIntoView({behavior:'smooth', block:'center'}); el('hgName').focus();">
+      <div class="plus">+</div><div>Ajouter un avion</div>
+    </div>`;
+
+  const detail = el('hangarDetail');
+  const a = _hangarSelectedId && db.hangar.find(x => x.id === _hangarSelectedId);
+  if(!a){ detail.classList.add('hidden'); detail.innerHTML = ''; return; }
+  detail.classList.remove('hidden');
+  renderHangarDetail(detail, a, assign[a.id], statsById[a.id]);
+}
+
+function renderHangarDetail(detail, a, group, s){
+  const F = FBShared;
+  const flights = [...group.flights].sort((x, y) => (y.date || '').localeCompare(x.date || ''));
+  const gradeTotal = F.LANDING_GRADES.reduce((n, g) => n + s.grades[g.key], 0);
+  const gradeMax = Math.max(1, ...F.LANDING_GRADES.map(g => s.grades[g.key]));
+  const rulesTotal = s.vfr + s.ifr;
+
+  detail.innerHTML = `
+    <div class="hd-head">
+      <div>
+        <div class="eyebrow">${escapeHtml([a.icaoType, a.developer].filter(Boolean).join(' · ') || 'Avion')}</div>
+        <div class="hd-name">${escapeHtml(a.name)}</div>
+      </div>
+      <div class="row-actions">
+        <button class="icon-btn" onclick="editHangarAircraft('${a.id}')">Modifier</button>
+        <button class="icon-btn" onclick="deleteHangarAircraft('${a.id}')">Retirer</button>
+        <button class="icon-btn" onclick="selectHangarAircraft('${a.id}')">Fermer</button>
+      </div>
+    </div>
+
+    <div class="telemetry-grid hd-stats">
+      <div class="tstat"><div class="cap">Vols</div><div class="val">${s.flights}</div></div>
+      <div class="tstat"><div class="cap">Heures de vol</div><div class="val">${F.fmtHm(s.totalMin)}</div></div>
+      <div class="tstat"><div class="cap">Durée moyenne</div><div class="val">${s.avgMin != null ? F.fmtHm(s.avgMin) : '—'}</div></div>
+      <div class="tstat"><div class="cap">Distance parcourue</div><div class="val">${s.distanceNm ? F.fmtNm(s.distanceNm) + (s.distanceEstimatedCount ? '<sup>*</sup>' : '') : '—'}</div></div>
+      <div class="tstat"><div class="cap">Distance moyenne / vol</div><div class="val">${s.avgDistanceNm != null ? F.fmtNm(s.avgDistanceNm) : '—'}</div></div>
+      <div class="tstat"><div class="cap">Taux moyen au toucher</div><div class="val">${F.fmtFpm(s.avgLandingFpm)}</div></div>
+      <div class="tstat"><div class="cap">Meilleur toucher</div><div class="val">${s.bestLanding ? F.fmtFpm(s.bestLanding.fpm) : '—'}</div></div>
+      <div class="tstat"><div class="cap">Toucher le plus dur</div><div class="val">${s.worstLanding ? F.fmtFpm(s.worstLanding.fpm) : '—'}</div></div>
+      <div class="tstat"><div class="cap">Rebonds</div><div class="val">${s.landingCount ? `${s.bounceTotal} <small>(${s.flightsWithBounce}/${s.trackedCount} vols)</small>` : '—'}</div></div>
+      <div class="tstat"><div class="cap">Altitude max atteinte</div><div class="val">${s.maxAltFt != null ? s.maxAltFt.toLocaleString('fr-FR') + ' ft' : '—'}</div></div>
+      <div class="tstat"><div class="cap">Vitesse max (IAS)</div><div class="val">${s.maxIasKt != null ? s.maxIasKt + ' kt' : '—'}</div></div>
+      <div class="tstat"><div class="cap">Conso. moyenne</div><div class="val">${s.fuelPerHourLbs != null ? Math.round(s.fuelPerHourLbs).toLocaleString('fr-FR') + ' lbs/h' : '—'}</div></div>
+      <div class="tstat"><div class="cap">Premier vol</div><div class="val">${F.fmtDateFr(s.firstDate)}</div></div>
+      <div class="tstat"><div class="cap">Dernier vol</div><div class="val">${F.fmtDateFr(s.lastDate)}</div></div>
+      <div class="tstat"><div class="cap">VFR / IFR</div><div class="val">${rulesTotal ? `${s.vfr} / ${s.ifr}` : '—'}</div></div>
+      <div class="tstat"><div class="cap">Vols trackés</div><div class="val">${s.trackedCount}/${s.flights}</div></div>
+    </div>
+
+    <div class="hd-cols">
+      <div>
+        <h4 class="modal-subhead">Qualité des atterrissages</h4>
+        ${gradeTotal ? `<div class="top-list">${F.LANDING_GRADES.map(g => `
+          <div class="row" style="--row-accent:${g.color};">
+            <span class="rank" style="border-color:${g.color}55; color:${g.color};">●</span>
+            <span class="name">${g.label}</span>
+            <div class="bar-track"><div class="bar-fill" style="width:${Math.round((s.grades[g.key] / gradeMax) * 100)}%"></div></div>
+            <span class="count">${s.grades[g.key]}<span class="pct">${Math.round((s.grades[g.key] / gradeTotal) * 100)}%</span></span>
+          </div>`).join('')}</div>` : '<div class="hint">Aucun atterrissage mesuré : les taux de toucher viennent des vols trackés via SimConnect.</div>'}
+      </div>
+      <div>
+        <h4 class="modal-subhead">Aéroports les plus fréquentés</h4>
+        <div class="top-list" id="hdTopAirports"></div>
+      </div>
+    </div>
+
+
+    <h4 class="modal-subhead">Vols (${flights.length})</h4>
+    ${flights.length ? `<div style="overflow-x:auto;"><table class="phase-table">
+      <thead><tr><th>Date</th><th>Indicatif</th><th>Trajet</th><th>Durée</th><th>Distance</th><th>Toucher</th><th>Lien</th><th></th></tr></thead>
+      <tbody>${flights.slice(0, _hangarShowAllFlights ? flights.length : 25).map(f => {
+        const lr = F.flightLandingRate(f), g = F.landingGrade(lr);
+        const d = F.flightDistance(f, cachedAirportLookup);
+        return `<tr>
+          <td>${F.fmtDateFr(f.date)}</td>
+          <td>${escapeHtml(f.callsign || '—')}</td>
+          <td>${escapeHtml(f.dep || '----')} → ${escapeHtml(f.arr || '----')}</td>
+          <td>${F.fmtHm(f.durationMin)}</td>
+          <td>${d.nm != null ? F.fmtNm(d.nm) + (d.estimated ? '<sup>*</sup>' : '') : '—'}</td>
+          <td>${lr != null ? `<span class="grade-dot" style="background:${g.color}"></span>${F.fmtFpm(lr)}` : '—'}</td>
+          <td><span class="pill ${f.aircraftId === a.id ? 'ok' : 'pending'}" title="${f.aircraftId === a.id ? 'Choisi dans le logbook' : 'Associé automatiquement par mot-clé'}">${f.aircraftId === a.id ? 'Manuel' : 'Auto'}</span></td>
+          <td>${f.trackData ? `<button class="icon-btn" onclick="openRouteModal('${f.id}')">Carte</button>` : ''}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>${flights.length > 25 && !_hangarShowAllFlights ? `<div class="btn-row"><button class="btn small" onclick="_hangarShowAllFlights = true; renderHangar();">Afficher les ${flights.length} vols</button></div>` : ''}` : '<div class="hint">Aucun vol associé. Choisis cet avion dans le champ « Avion du hangar » en enregistrant un vol, ou ajoute des mots-clés qui correspondent au champ « Appareil » de tes vols.</div>'}
+    <div class="hint" style="margin-top:8px;">${[
+      s.distanceEstimatedCount ? '* distance orthodromique départ → arrivée (vol non tracké).' : '',
+      group.autoCount ? `${group.autoCount} vol${group.autoCount > 1 ? 's' : ''} associé${group.autoCount > 1 ? 's' : ''} automatiquement par mot-clé.` : ''
+    ].filter(Boolean).join(' ')}</div>
+  `;
+  renderTopListFromCounts('hdTopAirports', s.airports, 5, 'var(--accent-vfr)');
 }
 
 /* =========================================================
@@ -1460,7 +1961,12 @@ function populateLogbookFieldsFromTrackedFlight(data){
   const arr = el('arrIcao').value.trim().toUpperCase() || (data.arrGuess ? data.arrGuess.icao : '');
   el('lbDep').value = dep;
   el('lbArr').value = arr;
-  el('lbAircraft').value = el('aircraft').value.trim();
+  // Appareil : celui saisi dans le Briefing, sinon l'avion du hangar reconnu d'après le nom
+  // détecté dans le simulateur, sinon ce nom brut.
+  const hgMatch = FBShared.suggestHangarAircraft(db.hangar, el('aircraft').value, data.simAircraft);
+  el('lbAircraft').value = el('aircraft').value.trim() || (hgMatch ? hgMatch.name : (data.simAircraft || ''));
+  populateHangarSelect();
+  el('lbHangar').value = hgMatch ? hgMatch.id : '';
   setLbRules(state.rules === 'IFR' ? 'IFR' : 'VFR');
   el('lbDuration').value = minToHhmm(data.durationMin);
   el('lbNetwork').value = '';
@@ -1485,7 +1991,8 @@ function populateLogbookFieldsFromTrackedFlight(data){
     distanceNm: data.distanceNm, maxAltFt: data.maxAltFt, maxIasKt: data.maxIasKt,
     landingRateFpm: data.landingRateFpm, fuelUsedLbs: data.fuelUsedLbs,
     bounceCount: data.bounceCount, turnStats: data.turnStats,
-    depGuess: data.depGuess, arrGuess: data.arrGuess
+    depGuess: data.depGuess, arrGuess: data.arrGuess,
+    simAircraft: data.simAircraft || null
   };
 }
 
@@ -2386,13 +2893,32 @@ function renderProfileStats(){
 
 /* =========================================================
    PROFIL — globe 3D des vols déjà effectués (logbook)
+   ---------------------------------------------------------
+   v1.3 — lisibilité au zoom dans les zones denses :
+   • points aéroports en sprites à taille CONSTANTE à l'écran (ils ne gonflent plus
+     quand on zoome, ce qui les faisait se chevaucher en Europe), avec liseré sombre
+     pour séparer deux aéroports voisins ;
+   • arcs beaucoup plus bas pour les vols courts (avant : 15 unités de "bosse" minimum,
+     d'où le nœud de lignes au-dessus de l'Europe) ;
+   • trajets identiques dédoublonnés (un seul arc, plus opaque selon le nombre de vols) ;
+   • étiquettes OACI qui apparaissent en zoomant, sans jamais se chevaucher ;
+   • survol d'un aéroport = ses trajets en surbrillance, le reste s'estompe ;
+   • double-clic sur un aéroport = zoom centré dessus, bouton "Vue d'ensemble" ;
+   • rotation/zoom ralentis automatiquement quand on est proche du sol.
    ========================================================= */
 let flightsGlobeScene = null, flightsGlobeCamera = null, flightsGlobeRenderer = null, flightsGlobeControls = null;
 let flightsGlobeGroup = null, flightsGlobeContentGroup = null, flightsGlobeRaycaster = null;
+let flightsGlobeSphere = null; // sphère pleine : sert d'écran pour ignorer ce qui est caché derrière
 let _flightsGlobeMeshes = []; // arcs + points aéroports, pour le hover/click
+let _flightsGlobeArcs = [], _flightsGlobeDots = [], _flightsGlobeLabels = [];
 let _flightsGlobeFilters = { rules: 'all', search: '', network: 'all' };
 let _airportCoordCache = {}; // ICAO -> {icao,name,lat,lon,elevFt} | null, mémorisé entre 2 rendus
+let _flightsGlobeHighlight = null; // clé de ce qui est actuellement mis en évidence
+let _flightsGlobeFly = null; // animation de caméra en cours (double-clic / vue d'ensemble)
+let _flightsGlobeViewKey = ''; // pour ne recalculer les étiquettes que si la vue a bougé
 const GLOBE_RADIUS = 100;
+const GLOBE_DEFAULT_DISTANCE = 260;
+const GLOBE_FOV = 45;
 
 // Conversion latitude/longitude -> position 3D sur la sphère (convention Three.js standard),
 // réutilisée pour les points aéroports et les arcs de trajet.
@@ -2422,18 +2948,15 @@ function initFlightsGlobe(){
   const w = container.clientWidth || 600, h = container.clientHeight || 480;
 
   flightsGlobeScene = new THREE.Scene();
-  flightsGlobeCamera = new THREE.PerspectiveCamera(45, w / h, 0.1, 2000);
-  flightsGlobeCamera.position.set(0, 0, 260);
+  flightsGlobeCamera = new THREE.PerspectiveCamera(GLOBE_FOV, w / h, 0.1, 2000);
+  flightsGlobeCamera.position.set(0, 0, GLOBE_DEFAULT_DISTANCE);
 
   flightsGlobeRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   flightsGlobeRenderer.setSize(w, h);
   flightsGlobeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   container.appendChild(flightsGlobeRenderer.domElement);
 
-  // Éclairage léger pour donner un vrai relief 3D à la sphère (avant : matériau Basic
-  // plat, sans ombrage, donc peu lisible en silhouette). Une lumière directionnelle fixe
-  // (indépendante de la rotation, comme un "soleil" de studio) + un peu d'ambiante pour
-  // ne jamais avoir de face totalement noire.
+  // Éclairage léger pour donner un vrai relief 3D à la sphère.
   flightsGlobeScene.add(new THREE.AmbientLight(0x8fb8c9, 0.55));
   const globeSun = new THREE.DirectionalLight(0xffffff, 1.1);
   globeSun.position.set(120, 90, 160);
@@ -2442,26 +2965,20 @@ function initFlightsGlobe(){
   flightsGlobeControls = new THREE.OrbitControls(flightsGlobeCamera, flightsGlobeRenderer.domElement);
   flightsGlobeControls.enableDamping = true;
   flightsGlobeControls.dampingFactor = 0.08;
-  flightsGlobeControls.minDistance = 130;
+  // On peut maintenant descendre bien plus près du sol (8 unités ≈ 500 km) : les points
+  // gardent leur taille à l'écran, donc un zoom fort écarte réellement les aéroports voisins.
+  flightsGlobeControls.minDistance = GLOBE_RADIUS + 8;
   flightsGlobeControls.maxDistance = 520;
   flightsGlobeControls.rotateSpeed = 0.5;
   flightsGlobeControls.enablePan = false;
-  // Dès que l'utilisateur commence à interagir (clic + glisser, molette, tactile), on coupe
-  // la rotation automatique pour de bon — sinon elle continue de tourner sous les doigts de
-  // l'utilisateur et se bat visuellement avec le drag manuel.
-  flightsGlobeControls.addEventListener('start', () => { _flightsGlobeAutoRotate = false; });
+  flightsGlobeControls.addEventListener('start', () => { _flightsGlobeAutoRotate = false; _flightsGlobeFly = null; });
 
-  // Sphère sombre + maillage filaire façon HUD, cohérent avec l'esthétique sombre/cockpit
-  // du reste de l'appli, complétée par le tracé des côtes (voir loadFlightsGlobeCoastlines)
-  // pour que les continents restent reconnaissables sans recourir à une texture réaliste.
   flightsGlobeGroup = new THREE.Group();
-  flightsGlobeGroup.add(new THREE.Mesh(
+  flightsGlobeSphere = new THREE.Mesh(
     new THREE.SphereGeometry(GLOBE_RADIUS - 0.6, 64, 48),
-    // MeshPhong (et non plus Basic) pour que la sphère réagisse à l'éclairage ci-dessus —
-    // donne un vrai dégradé jour/nuit qui aide à percevoir le relief/la rotation, plutôt
-    // qu'une silhouette plate uniformément sombre.
     new THREE.MeshPhongMaterial({ color: 0x0d1620, emissive: 0x050a10, shininess: 4, transparent: true, opacity: .95 })
-  ));
+  );
+  flightsGlobeGroup.add(flightsGlobeSphere);
   flightsGlobeGroup.add(new THREE.Mesh(
     new THREE.SphereGeometry(GLOBE_RADIUS + 6, 32, 24),
     new THREE.MeshBasicMaterial({ color: 0x39e88f, transparent: true, opacity: .035, side: THREE.BackSide })
@@ -2476,17 +2993,13 @@ function initFlightsGlobe(){
   addFlightsGlobeGraticule();
 
   flightsGlobeRaycaster = new THREE.Raycaster();
-  flightsGlobeRaycaster.params.Line = { threshold: 2.2 }; // tolérance de survol des arcs (fins)
+  flightsGlobeRaycaster.params.Line = { threshold: 2 };
 
   container.addEventListener('mousemove', onFlightsGlobePointerMove);
-  container.addEventListener('mouseleave', hideFlightsGlobeTooltip);
-  // Clic (souris ou tactile) = arrêt définitif de la rotation automatique, même sans
-  // glisser (ex. simple clic pour examiner le globe immobile).
+  container.addEventListener('mouseleave', () => { hideFlightsGlobeTooltip(); setFlightsGlobeHighlight(null); });
   container.addEventListener('pointerdown', () => { _flightsGlobeAutoRotate = false; });
+  container.addEventListener('dblclick', onFlightsGlobeDblClick);
   window.addEventListener('resize', resizeFlightsGlobe);
-  // Coupe aussi le rendu quand la fenêtre est réduite/masquée (ex. en arrière-plan pendant
-  // qu'on vole/stream) : le globe n'est de toute façon visible que sur l'onglet Profil, pas
-  // la peine de continuer à faire tourner le GPU pour rien.
   document.addEventListener('visibilitychange', () => {
     if(document.hidden) pauseFlightsGlobe();
     else if(el('view-profil') && el('view-profil').classList.contains('active')) resumeFlightsGlobe();
@@ -2495,10 +3008,7 @@ function initFlightsGlobe(){
   resumeFlightsGlobe();
 }
 
-// Charge une fois le tracé simplifié des côtes (renderer/data/coastlines.json, ~130 lignes
-// dérivées de Natural Earth 110m, entièrement local/hors-ligne) et le dessine comme des
-// lignes posées sur la sphère, dans le même esprit HUD filaire que le reste du globe —
-// pour rendre les continents reconnaissables sans texture terrestre réaliste.
+// Tracé simplifié des côtes (renderer/data/coastlines.json, dérivé de Natural Earth 110m).
 let _flightsGlobeCoastlinesLoaded = false;
 async function loadFlightsGlobeCoastlines(){
   if(_flightsGlobeCoastlinesLoaded || !flightsGlobeGroup) return;
@@ -2507,47 +3017,34 @@ async function loadFlightsGlobeCoastlines(){
     const res = await fetch('data/coastlines.json');
     const lines = await res.json();
     const coastR = GLOBE_RADIUS - 0.15;
-    // Plus lumineux et plus opaque qu'avant (0x8fb8c9/.55) pour que les continents restent
-    // lisibles même en rotation ou avec plusieurs arcs de trajet superposés par-dessus.
-    const material = new THREE.LineBasicMaterial({ color: 0xcfe9f2, transparent: true, opacity: .8 });
-    // Halo légèrement plus large et plus terne en dessous, pour un effet de "glow" qui
-    // rattrape la finesse d'1 px des lignes WebGL (lineWidth n'est pas honoré sur la plupart
-    // des GPU/ANGLE) sans avoir à recourir à un shader dédié.
-    const glowMaterial = new THREE.LineBasicMaterial({ color: 0x54d6e8, transparent: true, opacity: .22 });
+    // Un peu moins opaques qu'avant (.8 -> .55) : au zoom, les côtes restent lisibles
+    // mais ne rivalisent plus avec les points et les trajets, qui sont l'information utile.
+    const material = new THREE.LineBasicMaterial({ color: 0xcfe9f2, transparent: true, opacity: .55 });
+    const glowMaterial = new THREE.LineBasicMaterial({ color: 0x54d6e8, transparent: true, opacity: .16 });
     const coastGroup = new THREE.Group();
     lines.forEach(line => {
       if(!Array.isArray(line) || line.length < 2) return;
       const points = line.map(([lon, lat]) => latLonToVector3(lat, lon, coastR));
-      const geo = new THREE.BufferGeometry().setFromPoints(points);
-      coastGroup.add(new THREE.Line(geo, material));
+      coastGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material));
       const glowPoints = line.map(([lon, lat]) => latLonToVector3(lat, lon, coastR - 0.35));
       coastGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(glowPoints), glowMaterial));
     });
     flightsGlobeGroup.add(coastGroup);
-  }catch(e){ /* fichier de côtes indisponible -> globe filaire seul, sans bloquer le reste */ }
+  }catch(e){ /* fichier de côtes indisponible -> globe seul, sans bloquer le reste */ }
 }
 
-// Quadrillage latitude/longitude (tous les 30°, + équateur et méridien de Greenwich un peu
-// plus marqués) : repère visuel pour situer un trajet/aéroport sur le globe, absent avant
-// (seul le wireframe de la sphère donnait une notion très vague d'orientation).
+// Quadrillage latitude/longitude discret (tous les 30°).
 function addFlightsGlobeGraticule(){
   if(!flightsGlobeGroup) return;
   const r = GLOBE_RADIUS + 0.05;
   const graticule = new THREE.Group();
-  // Volontairement très discret : sert de repère d'orientation, pas de décor — trop marqué,
-  // il rentre en concurrence visuelle avec les côtes et les arcs de trajet (retour terrain :
-  // combiné à l'ancien maillage filaire de la sphère, l'effet "ballon de foot" rendait le
-  // globe illisible). Un seul jeu de lignes, pas de doublon avec un wireframe de sphère.
   const normalMat = new THREE.LineBasicMaterial({ color: 0x3d6b7a, transparent: true, opacity: .1 });
   const majorMat = new THREE.LineBasicMaterial({ color: 0x54d6e8, transparent: true, opacity: .2 });
-
-  // Parallèles (latitude constante)
   for(let lat = -60; lat <= 60; lat += 30){
     const pts = [];
     for(let lon = -180; lon <= 180; lon += 5) pts.push(latLonToVector3(lat, lon, r));
     graticule.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lat === 0 ? majorMat : normalMat));
   }
-  // Méridiens (longitude constante)
   for(let lon = -180; lon < 180; lon += 30){
     const pts = [];
     for(let lat = -90; lat <= 90; lat += 5) pts.push(latLonToVector3(lat, lon, r));
@@ -2563,15 +3060,14 @@ function resizeFlightsGlobe(){
   flightsGlobeCamera.aspect = w / h;
   flightsGlobeCamera.updateProjectionMatrix();
   flightsGlobeRenderer.setSize(w, h);
+  _flightsGlobeViewKey = '';
+  updateFlightsGlobeDotScales(true);
 }
 
-// Boucle de rendu du globe : ne tourne QUE pendant que l'onglet Profil est réellement affiché
-// (et la fenêtre visible) — avant, elle continuait indéfiniment en arrière-plan dès la 1ère
-// visite de l'onglet, consommant du GPU en continu (perte de FPS potentielle côté simu/stream,
-// notamment sur un setup avec un seul GPU partagé entre MSFS et l'encodage OBS).
+// Boucle de rendu : ne tourne QUE pendant que l'onglet Profil est affiché (voir switchView).
 let _flightsGlobeAnimHandle = null;
 function resumeFlightsGlobe(){
-  if(_flightsGlobeAnimHandle || !flightsGlobeRenderer) return; // déjà en cours, ou pas encore initialisé
+  if(_flightsGlobeAnimHandle || !flightsGlobeRenderer) return;
   animateFlightsGlobe();
 }
 function pauseFlightsGlobe(){
@@ -2580,8 +3076,19 @@ function pauseFlightsGlobe(){
 
 function animateFlightsGlobe(){
   _flightsGlobeAnimHandle = requestAnimationFrame(animateFlightsGlobe);
-  if(flightsGlobeControls) flightsGlobeControls.update();
-  if(flightsGlobeGroup && _flightsGlobeAutoRotate) flightsGlobeGroup.rotation.y += 0.0006; // légère rotation continue, coupée au 1er clic
+  stepFlightsGlobeFly();
+  if(flightsGlobeControls){
+    // Plus on est près du sol, plus la rotation est lente : avant, un glisser de souris
+    // à fort zoom faisait défiler un continent entier d'un coup.
+    const alt = flightsGlobeCamera.position.length() - GLOBE_RADIUS;
+    const k = Math.max(0.06, Math.min(1.2, alt / (GLOBE_DEFAULT_DISTANCE - GLOBE_RADIUS)));
+    flightsGlobeControls.rotateSpeed = 0.5 * k;
+    flightsGlobeControls.zoomSpeed = 0.5 + 0.5 * Math.min(1, k);
+    flightsGlobeControls.update();
+  }
+  if(flightsGlobeGroup && _flightsGlobeAutoRotate) flightsGlobeGroup.rotation.y += 0.0006;
+  updateFlightsGlobeDotScales(false);
+  updateFlightsGlobeLabels();
   if(flightsGlobeRenderer && flightsGlobeScene && flightsGlobeCamera) flightsGlobeRenderer.render(flightsGlobeScene, flightsGlobeCamera);
 }
 
@@ -2589,8 +3096,6 @@ function flightsGlobeColor(rules){
   return rules === 'VFR' ? 0xffb020 : 0x54d6e8; // mêmes teintes que --accent-vfr / --accent-ifr
 }
 
-// Filtre "tous les vols", "certains appareils/indicatifs" (recherche libre), "certain
-// réseau" ou "certain type de vol" (IFR/VFR) — appliqué aux vols déjà enregistrés dans le logbook.
 function filteredFlightsGlobeData(){
   const q = (_flightsGlobeFilters.search || '').trim().toUpperCase();
   return db.logbook.filter(f => {
@@ -2605,31 +3110,99 @@ function filteredFlightsGlobeData(){
   });
 }
 
-// Résout les coordonnées de chaque OACI via l'index local (main process), avec cache
-// mémoire pour éviter de refaire l'aller-retour IPC à chaque changement de filtre.
+// Résout les coordonnées de chaque OACI via l'index local (main process), avec cache mémoire.
 async function resolveAirportCoords(icaoList){
   const results = {};
   await Promise.all(icaoList.map(async icao => {
     if(_airportCoordCache[icao] !== undefined){ results[icao] = _airportCoordCache[icao]; return; }
-    let info = null;
+    let info = null, failed = false;
     try{ info = (window.api && window.api.lookupAirport) ? await window.api.lookupAirport(icao) : null; }
-    catch(e){ info = null; }
-    _airportCoordCache[icao] = info;
+    catch(e){ info = null; failed = true; }
+    // Un échec technique (IPC) n'est PAS mémorisé comme "aéroport inconnu" : on retentera.
+    if(!failed && info) _airportCoordCache[icao] = info;
+    else if(!failed) _airportCoordCache[icao] = null;
     results[icao] = info;
   }));
   return results;
 }
+// Lecture synchrone du cache (après resolveAirportCoords) — utilisée par les calculs partagés.
+function cachedAirportLookup(icao){
+  const v = _airportCoordCache[String(icao || '').toUpperCase()];
+  return v || null;
+}
 
-// Arc de grand cercle stylisé : point milieu élevé au-dessus de la sphère (d'autant plus
-// haut que la distance parcourue est grande), pour bien distinguer les trajets superposés.
+// Arc de grand cercle stylisé. Hauteur proportionnelle à la distance, SANS plancher fixe :
+// un saut de puce Paris–Lyon reste collé au sol au lieu de faire une grande boucle.
 function buildArcPoints(startLatLon, endLatLon, radius){
   const startVec = latLonToVector3(startLatLon.lat, startLatLon.lon, radius);
   const endVec = latLonToVector3(endLatLon.lat, endLatLon.lon, radius);
   const distance = startVec.distanceTo(endVec);
   const mid = startVec.clone().add(endVec).multiplyScalar(0.5);
-  const bulge = radius * 0.15 + distance * 0.18;
+  const bulge = Math.min(radius * 0.32, 0.4 + distance * 0.26);
+  if(mid.length() < 1e-6) mid.set(0, radius, 0); // antipodes : cas dégénéré
   mid.normalize().multiplyScalar(radius + bulge);
-  return new THREE.QuadraticBezierCurve3(startVec, mid, endVec).getPoints(48);
+  const segments = Math.max(12, Math.min(64, Math.round(distance * 0.8)));
+  return new THREE.QuadraticBezierCurve3(startVec, mid, endVec).getPoints(segments);
+}
+
+/* ---------------- Sprites des points aéroports ---------------- */
+let _globeDotTexture = null, _globeHubTexture = null;
+function globeDotTexture(){
+  if(_globeDotTexture) return _globeDotTexture;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.beginPath(); ctx.arc(32, 32, 30, 0, Math.PI * 2); ctx.fillStyle = 'rgba(6,10,14,.95)'; ctx.fill(); // liseré sombre
+  ctx.beginPath(); ctx.arc(32, 32, 22, 0, Math.PI * 2); ctx.fillStyle = '#39e88f'; ctx.fill();
+  ctx.beginPath(); ctx.arc(27, 27, 7, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fill(); // reflet
+  _globeDotTexture = new THREE.CanvasTexture(c);
+  return _globeDotTexture;
+}
+function globeHubTexture(){
+  if(_globeHubTexture) return _globeHubTexture;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 10, 32, 32, 32);
+  g.addColorStop(0, 'rgba(57,232,143,.55)'); g.addColorStop(1, 'rgba(57,232,143,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  ctx.beginPath(); ctx.arc(32, 32, 24, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(57,232,143,.7)'; ctx.lineWidth = 2; ctx.stroke();
+  _globeHubTexture = new THREE.CanvasTexture(c);
+  return _globeHubTexture;
+}
+// Taille des sprites en pixels écran -> échelle Three.js (sprites sans atténuation de taille).
+function globePxToSpriteScale(px){
+  const container = el('flightsGlobe');
+  const h = (container && container.clientHeight) || 480;
+  return px * 2 * Math.tan((GLOBE_FOV / 2) * Math.PI / 180) / h;
+}
+let _flightsGlobeLastScaleKey = '';
+function updateFlightsGlobeDotScales(force){
+  if(!flightsGlobeCamera || !_flightsGlobeDots.length) return;
+  const dist = flightsGlobeCamera.position.length();
+  // Légère croissance au zoom (x1 à x1.35) pour garder le "relief" sans jamais retomber
+  // dans le chevauchement : bien moins que la croissance x5 d'avant (taille en unités monde).
+  const zoomBoost = Math.pow(Math.max(1, (GLOBE_DEFAULT_DISTANCE - GLOBE_RADIUS) / Math.max(4, dist - GLOBE_RADIUS)), 0.16);
+  const key = zoomBoost.toFixed(3) + '|' + ((el('flightsGlobe') || {}).clientHeight || 0);
+  if(!force && key === _flightsGlobeLastScaleKey) return;
+  _flightsGlobeLastScaleKey = key;
+  const boost = Math.min(1.35, zoomBoost);
+  _flightsGlobeDots.forEach(d => {
+    const s = globePxToSpriteScale(d.userData.px * boost);
+    d.scale.set(s, s, 1);
+    if(d.userData.halo){ const hs = s * 2.3; d.userData.halo.scale.set(hs, hs, 1); }
+  });
+}
+
+function clearFlightsGlobeContent(){
+  while(flightsGlobeContentGroup.children.length){
+    const m = flightsGlobeContentGroup.children.pop();
+    if(m.geometry && !m.isSprite) m.geometry.dispose(); // la géométrie des sprites est partagée par Three.js
+    if(m.material) m.material.dispose(); // les textures (partagées) ne sont pas libérées par dispose()
+  }
+  _flightsGlobeMeshes = []; _flightsGlobeArcs = []; _flightsGlobeDots = [];
+  const labels = el('fgLabels'); if(labels) labels.innerHTML = '';
+  _flightsGlobeLabels = [];
+  _flightsGlobeHighlight = null;
+  _flightsGlobeViewKey = '';
 }
 
 async function renderFlightsGlobeArcs(){
@@ -2638,12 +3211,7 @@ async function renderFlightsGlobeArcs(){
 
   const flights = filteredFlightsGlobeData();
   if(!flights.length){
-    while(flightsGlobeContentGroup.children.length){
-      const m = flightsGlobeContentGroup.children.pop();
-      if(m.geometry) m.geometry.dispose();
-      if(m.material) m.material.dispose();
-    }
-    _flightsGlobeMeshes = [];
+    clearFlightsGlobeContent();
     if(statusEl){ statusEl.textContent = 'Aucun vol avec départ/arrivée renseignés ne correspond aux filtres actuels.'; statusEl.className = 'status-msg'; }
     return;
   }
@@ -2652,72 +3220,196 @@ async function renderFlightsGlobeArcs(){
   const icaos = Array.from(new Set(flights.flatMap(f => [f.dep, f.arr]).filter(Boolean).map(x => x.toUpperCase())));
   const coords = await resolveAirportCoords(icaos);
 
-  // Nettoyage des arcs/points précédents (fait après la résolution des coordonnées pour
-  // éviter un globe vide pendant le chargement lors d'un changement de filtre rapide).
-  while(flightsGlobeContentGroup.children.length){
-    const m = flightsGlobeContentGroup.children.pop();
-    if(m.geometry) m.geometry.dispose();
-    if(m.material) m.material.dispose();
-  }
-  _flightsGlobeMeshes = [];
+  clearFlightsGlobeContent();
 
-  const airportUsage = {}; // ICAO -> { info, count }
-  let arcsDrawn = 0;
-
+  // 1) Regroupement par trajet (A–B et B–A = même arc) : 10 allers-retours LFPG–LFBO ne
+  //    dessinent plus 10 lignes superposées, mais un seul arc plus lumineux.
+  const routes = {};
+  const airportUsage = {}; // ICAO -> { info, count, icao }
   flights.forEach(f => {
-    const dep = coords[(f.dep || '').toUpperCase()];
-    const arr = coords[(f.arr || '').toUpperCase()];
+    const depK = f.dep.toUpperCase(), arrK = f.arr.toUpperCase();
+    const dep = coords[depK], arr = coords[arrK];
     if(!dep || !arr) return;
-    const points = buildArcPoints(dep, arr, GLOBE_RADIUS);
-    const line = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({ color: flightsGlobeColor(f.rules), transparent: true, opacity: .5 })
-    );
-    line.userData.flight = f;
-    flightsGlobeContentGroup.add(line);
-    _flightsGlobeMeshes.push(line);
-    arcsDrawn++;
-
-    [[f.dep, dep], [f.arr, arr]].forEach(([icao, info]) => {
-      const key = icao.toUpperCase();
-      if(!airportUsage[key]) airportUsage[key] = { info, count: 0, icao: key };
-      airportUsage[key].count++;
+    const key = [depK, arrK].sort().join('|');
+    if(!routes[key]) routes[key] = { key, a: depK, b: arrK, aInfo: dep, bInfo: arr, flights: [], ifr: 0, vfr: 0 };
+    routes[key].flights.push(f);
+    if(f.rules === 'VFR') routes[key].vfr++; else routes[key].ifr++;
+    [[depK, dep], [arrK, arr]].forEach(([icao, info]) => {
+      if(!airportUsage[icao]) airportUsage[icao] = { info, count: 0, icao };
+      airportUsage[icao].count++;
     });
   });
 
-  // Taille du point proportionnelle au nombre de vols (racine carrée pour un rapport de
-  // taille raisonnable même entre l'aéroport de base et une escale visitée une fois) —
-  // avant, tous les points faisaient la même taille, rendant les hubs peu visibles.
-  const maxUsage = Math.max(1, ...Object.values(airportUsage).map(a => a.count));
-  const dotMat = new THREE.MeshBasicMaterial({ color: 0x39e88f });
-  Object.values(airportUsage).forEach(a => {
-    const radius = 0.8 + Math.sqrt(a.count / maxUsage) * 1.6;
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 12), dotMat);
-    mesh.position.copy(latLonToVector3(a.info.lat, a.info.lon, GLOBE_RADIUS + 1));
-    mesh.userData.airport = a;
-    flightsGlobeContentGroup.add(mesh);
-    _flightsGlobeMeshes.push(mesh);
-    // Halo discret pour les aéroports les plus fréquentés (hubs), qui ressortent
-    // maintenant nettement au premier coup d'œil plutôt que de se fondre dans la masse.
-    if(a.count / maxUsage > 0.5){
-      const halo = new THREE.Mesh(
-        new THREE.SphereGeometry(radius + 1.4, 12, 12),
-        new THREE.MeshBasicMaterial({ color: 0x39e88f, transparent: true, opacity: .18 })
-      );
-      halo.position.copy(mesh.position);
-      // Pas ajouté à _flightsGlobeMeshes : purement décoratif, ne doit pas interférer avec
-      // le raycast de survol (qui doit toujours cibler le point plein en priorité).
-      flightsGlobeContentGroup.add(halo);
-    }
+  const routeList = Object.values(routes);
+  const maxRoute = Math.max(1, ...routeList.map(r => r.flights.length));
+  routeList.forEach(r => {
+    const same = r.a === r.b; // tour de piste / vol local : pas d'arc, juste le point
+    if(same) return;
+    const rules = r.vfr > r.ifr ? 'VFR' : 'IFR';
+    const baseOpacity = 0.3 + 0.55 * Math.sqrt(r.flights.length / maxRoute);
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(buildArcPoints(r.aInfo, r.bInfo, GLOBE_RADIUS)),
+      new THREE.LineBasicMaterial({ color: flightsGlobeColor(rules), transparent: true, opacity: baseOpacity })
+    );
+    line.userData.route = r;
+    line.userData.baseOpacity = baseOpacity;
+    flightsGlobeContentGroup.add(line);
+    _flightsGlobeMeshes.push(line);
+    _flightsGlobeArcs.push(line);
   });
 
+  // 2) Points aéroports : sprites à taille fixe à l'écran (6 à 15 px selon la fréquentation).
+  const airports = Object.values(airportUsage);
+  const maxUsage = Math.max(1, ...airports.map(a => a.count));
+  airports.sort((a, b) => a.count - b.count); // les plus fréquentés dessinés en dernier (au-dessus)
+  airports.forEach((a, i) => {
+    const ratio = Math.sqrt(a.count / maxUsage);
+    const px = 6 + ratio * 9;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: globeDotTexture(), sizeAttenuation: false, depthWrite: false, transparent: true }));
+    sprite.position.copy(latLonToVector3(a.info.lat, a.info.lon, GLOBE_RADIUS + 0.6));
+    sprite.renderOrder = 10 + i;
+    sprite.userData.airport = a;
+    sprite.userData.px = px;
+    if(a.count / maxUsage > 0.5 && airports.length > 2){
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: globeHubTexture(), sizeAttenuation: false, depthWrite: false, transparent: true, opacity: .8 }));
+      halo.position.copy(sprite.position);
+      halo.renderOrder = 5;
+      flightsGlobeContentGroup.add(halo);
+      sprite.userData.halo = halo; // décoratif : jamais dans _flightsGlobeMeshes (pas de raycast)
+    }
+    flightsGlobeContentGroup.add(sprite);
+    _flightsGlobeMeshes.push(sprite);
+    _flightsGlobeDots.push(sprite);
+  });
+  updateFlightsGlobeDotScales(true);
+
+  // 3) Étiquettes OACI (HTML par-dessus le canvas, positionnées à chaque changement de vue).
+  const labelsEl = el('fgLabels');
+  if(labelsEl){
+    const byImportance = [...airports].sort((a, b) => b.count - a.count);
+    labelsEl.innerHTML = byImportance.map(a => `<span class="globe-label" data-icao="${escapeHtml(a.icao)}">${escapeHtml(a.icao)}</span>`).join('');
+    const nodes = labelsEl.querySelectorAll('.globe-label');
+    _flightsGlobeLabels = byImportance.map((a, i) => ({
+      airport: a, node: nodes[i],
+      local: latLonToVector3(a.info.lat, a.info.lon, GLOBE_RADIUS + 0.6),
+      w: a.icao.length * 7.2 + 10
+    }));
+  }
+
+  if(statusEl && flights.length && !airports.length){
+    // Diagnostic explicite plutôt qu'un globe vide sans explication.
+    let why = '';
+    try{
+      const info = window.api && window.api.airportIndexInfo ? await window.api.airportIndexInfo() : null;
+      if(info && !info.count) why = `l'index des aéroports (renderer/data/airports.json) n'a pas pu être chargé${info.error ? ' : ' + info.error : ''}.`;
+      else why = `aucun des codes du logbook n'a été trouvé dans l'index (${(info && info.count) || '?'} aéroports). Exemples : ${icaos.slice(0, 5).map(x => '« ' + x + ' »').join(', ')}.`;
+    }catch(e){ why = 'recherche des aéroports impossible.'; }
+    statusEl.innerHTML = `⚠️ Aucun aéroport placé sur le globe : ${escapeHtml(why)} <a href="#" onclick="retryFlightsGlobe(); return false;">Réessayer</a>`;
+    statusEl.className = 'status-msg warn';
+    return;
+  }
   if(statusEl){
-    const airportCount = Object.keys(airportUsage).length;
-    statusEl.textContent = arcsDrawn
-      ? `${arcsDrawn} vol${arcsDrawn > 1 ? 's' : ''} affiché${arcsDrawn > 1 ? 's' : ''} sur ${airportCount} aéroport${airportCount > 1 ? 's' : ''}.`
+    const airportCount = airports.length;
+    statusEl.textContent = flights.length
+      ? `${flights.length} vol${flights.length > 1 ? 's' : ''} · ${routeList.length} trajet${routeList.length > 1 ? 's' : ''} distinct${routeList.length > 1 ? 's' : ''} · ${airportCount} aéroport${airportCount > 1 ? 's' : ''}. Double-clic sur un aéroport pour zoomer dessus.`
       : "Aucun des vols filtrés n'a pu être placé sur le globe (aéroport introuvable dans l'index local).";
     statusEl.className = 'status-msg';
   }
+}
+
+/* ---------------- Étiquettes OACI sans chevauchement ---------------- */
+const _globeTmpVec = typeof THREE !== 'undefined' ? new THREE.Vector3() : null;
+const _globeTmpVec2 = typeof THREE !== 'undefined' ? new THREE.Vector3() : null;
+function updateFlightsGlobeLabels(){
+  if(!_flightsGlobeLabels.length || !flightsGlobeCamera || !flightsGlobeGroup) return;
+  const container = el('flightsGlobe');
+  if(!container) return;
+  const W = container.clientWidth, H = container.clientHeight;
+  const cam = flightsGlobeCamera.position;
+  const viewKey = `${cam.x.toFixed(2)},${cam.y.toFixed(2)},${cam.z.toFixed(2)},${flightsGlobeGroup.rotation.y.toFixed(4)},${W},${H},${_flightsGlobeHighlight || ''}`;
+  if(viewKey === _flightsGlobeViewKey) return;
+  _flightsGlobeViewKey = viewKey;
+  // Matrices à jour AVANT la projection (sinon décalage d'une image, visible quand la
+  // rotation s'arrête : les étiquettes restaient figées à côté de leur point).
+  flightsGlobeScene.updateMatrixWorld();
+  flightsGlobeCamera.updateMatrixWorld(); // la caméra n'est pas dans la scène : sa matrice inverse doit être recalculée ici
+
+  const alt = cam.length() - GLOBE_RADIUS;
+  // Loin : aucune étiquette (le globe entier est visible, elles seraient illisibles).
+  // Moyen : seulement les plus fréquentés. Près : toutes celles qui tiennent sans se chevaucher.
+  const maxLabels = alt > 230 ? 0 : alt > 140 ? 10 : alt > 70 ? 30 : 400;
+  const camDir = _globeTmpVec2.copy(cam).normalize();
+  const placed = [];
+  let shown = 0;
+  const hl = _flightsGlobeHighlight;
+  const hlAirports = hl && hl.startsWith('ap:') ? flightsGlobeConnectedAirports(hl.slice(3)) : (hl && hl.startsWith('rt:') ? new Set(hl.slice(3).split('|')) : null);
+
+  _flightsGlobeLabels.forEach(l => {
+    const world = _globeTmpVec.copy(l.local).applyMatrix4(flightsGlobeContentGroup.matrixWorld);
+    const facing = world.clone().normalize().dot(camDir);
+    const forced = hlAirports && hlAirports.has(l.airport.icao); // toujours afficher ceux mis en évidence
+    let visible = facing > 0.25 && (forced || shown < maxLabels);
+    let x = 0, y = 0;
+    if(visible){
+      const p = world.project(flightsGlobeCamera);
+      x = (p.x * 0.5 + 0.5) * W; y = (-p.y * 0.5 + 0.5) * H;
+      if(x < 0 || x > W || y < 0 || y > H) visible = false;
+    }
+    if(visible){
+      const box = { x1: x + 7, y1: y - 8, x2: x + 7 + l.w, y2: y + 8 };
+      if(!forced && placed.some(b => box.x1 < b.x2 && box.x2 > b.x1 && box.y1 < b.y2 && box.y2 > b.y1)) visible = false;
+      else { placed.push(box); shown++; }
+    }
+    if(visible){
+      l.node.style.transform = `translate(${Math.round(x + 7)}px, ${Math.round(y - 8)}px)`;
+      l.node.classList.add('show');
+      l.node.classList.toggle('dim', !!hlAirports && !hlAirports.has(l.airport.icao));
+    } else {
+      l.node.classList.remove('show');
+    }
+  });
+
+  // Points situés sur la face cachée : masqués (sinon ils "saignent" à travers la sphère
+  // semi-transparente et parasitent le survol).
+  _flightsGlobeDots.forEach(d => {
+    d.getWorldPosition(_globeTmpVec);
+    const vis = _globeTmpVec.normalize().dot(camDir) > -0.02;
+    d.visible = vis;
+    if(d.userData.halo) d.userData.halo.visible = vis;
+  });
+}
+
+// Aéroports reliés à un aéroport donné (lui compris), pour la surbrillance au survol.
+function flightsGlobeConnectedAirports(icao){
+  const set = new Set([icao]);
+  _flightsGlobeArcs.forEach(a => { const r = a.userData.route; if(r.a === icao) set.add(r.b); if(r.b === icao) set.add(r.a); });
+  return set;
+}
+
+// Surbrillance : survol d'un aéroport -> ses trajets à 100 %, les autres presque effacés ;
+// survol d'un trajet -> ce trajet seul. null = retour à l'affichage normal.
+function setFlightsGlobeHighlight(key){
+  if(key === _flightsGlobeHighlight) return;
+  _flightsGlobeHighlight = key;
+  _flightsGlobeViewKey = '';
+  const apIcao = key && key.startsWith('ap:') ? key.slice(3) : null;
+  const rtKey = key && key.startsWith('rt:') ? key.slice(3) : null;
+  const related = apIcao ? flightsGlobeConnectedAirports(apIcao) : (rtKey ? new Set(rtKey.split('|')) : null);
+  _flightsGlobeArcs.forEach(a => {
+    const r = a.userData.route;
+    let on;
+    if(apIcao) on = r.a === apIcao || r.b === apIcao;
+    else if(rtKey) on = r.key === rtKey;
+    a.material.opacity = key ? (on ? 1 : 0.07) : a.userData.baseOpacity;
+  });
+  _flightsGlobeDots.forEach(d => {
+    d.material.opacity = related ? (related.has(d.userData.airport.icao) ? 1 : 0.35) : 1;
+  });
+}
+
+function retryFlightsGlobe(){
+  Object.keys(_airportCoordCache).forEach(k => { if(_airportCoordCache[k] === null) delete _airportCoordCache[k]; });
+  renderFlightsGlobeArcs();
 }
 
 function setFlightsGlobeRulesFilter(rules){
@@ -2731,8 +3423,6 @@ function setFlightsGlobeRulesFilter(rules){
   renderFlightsGlobeArcs();
 }
 
-// Liste des réseaux réellement présents dans le logbook (VATSIM, IVAO, Solo, etc.),
-// reconstruite à chaque affichage de l'onglet pour rester à jour.
 function populateFlightsGlobeNetworkFilter(){
   const sel = el('fgNetwork');
   if(!sel) return;
@@ -2743,53 +3433,118 @@ function populateFlightsGlobeNetworkFilter(){
   _flightsGlobeFilters.network = sel.value;
 }
 
-function onFlightsGlobePointerMove(evt){
-  if(!flightsGlobeRaycaster || !flightsGlobeCamera || !_flightsGlobeMeshes.length){ hideFlightsGlobeTooltip(); return; }
+// Raycast commun (survol + double-clic) : ignore tout ce qui se trouve derrière la sphère,
+// et donne la priorité aux aéroports sur les arcs (un point est une cible bien plus petite).
+function flightsGlobePick(evt){
+  if(!flightsGlobeRaycaster || !flightsGlobeCamera || !_flightsGlobeMeshes.length) return null;
   const container = el('flightsGlobe');
   const ndc = globePointerToNDC(evt, container);
   flightsGlobeRaycaster.setFromCamera(ndc, flightsGlobeCamera);
-  const hits = flightsGlobeRaycaster.intersectObjects(_flightsGlobeMeshes);
-  if(hits.length){
-    const obj = hits[0].object;
-    if(obj.userData.flight) showFlightsGlobeFlightTooltip(obj.userData.flight, evt, container);
-    else if(obj.userData.airport) showFlightsGlobeAirportTooltip(obj.userData.airport, evt, container);
+  // Tolérance de survol des arcs proportionnelle à l'altitude (fine au zoom, large de loin).
+  const alt = flightsGlobeCamera.position.length() - GLOBE_RADIUS;
+  flightsGlobeRaycaster.params.Line.threshold = Math.max(0.12, alt * 0.011);
+  const sphereHit = flightsGlobeSphere ? flightsGlobeRaycaster.intersectObject(flightsGlobeSphere)[0] : null;
+  const maxDist = sphereHit ? sphereHit.distance + 1.2 : Infinity;
+  const hits = flightsGlobeRaycaster.intersectObjects(_flightsGlobeMeshes.filter(m => m.visible)).filter(h => h.distance <= maxDist);
+  if(!hits.length) return null;
+  return hits.find(h => h.object.userData.airport) || hits[0];
+}
+
+function onFlightsGlobePointerMove(evt){
+  const container = el('flightsGlobe');
+  const hit = flightsGlobePick(evt);
+  if(hit){
+    const obj = hit.object;
+    if(obj.userData.route){
+      showFlightsGlobeRouteTooltip(obj.userData.route, evt, container);
+      setFlightsGlobeHighlight('rt:' + obj.userData.route.key);
+    } else if(obj.userData.airport){
+      showFlightsGlobeAirportTooltip(obj.userData.airport, evt, container);
+      setFlightsGlobeHighlight('ap:' + obj.userData.airport.icao);
+    }
     container.style.cursor = 'pointer';
   } else {
     hideFlightsGlobeTooltip();
+    setFlightsGlobeHighlight(null);
     container.style.cursor = 'grab';
   }
 }
 
-function showFlightsGlobeFlightTooltip(f, evt, container){
+function positionFlightsGlobeTooltip(tip, evt, container){
+  const rect = container.getBoundingClientRect();
+  const x = evt.clientX - rect.left, y = evt.clientY - rect.top;
+  tip.style.left = Math.max(135, Math.min(rect.width - 135, x)) + 'px';
+  tip.style.top = y + 'px';
+  // Près du haut du globe, l'infobulle passe sous le curseur au lieu d'être coupée.
+  tip.style.transform = y < 150 ? 'translate(-50%, 18px)' : 'translate(-50%, -115%)';
+}
+function showFlightsGlobeRouteTooltip(r, evt, container){
   const tip = el('fgTooltip');
   if(!tip) return;
-  const rect = container.getBoundingClientRect();
-  tip.style.left = (evt.clientX - rect.left) + 'px';
-  tip.style.top = (evt.clientY - rect.top) + 'px';
+  positionFlightsGlobeTooltip(tip, evt, container);
+  const recent = [...r.flights].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 4);
+  const nm = FBShared.haversineNm(r.aInfo.lat, r.aInfo.lon, r.bInfo.lat, r.bInfo.lon);
   tip.innerHTML = `
-    <div class="tt-title ${f.rules === 'VFR' ? 'vfr' : 'ifr'}">${escapeHtml(f.callsign || '—')}</div>
-    <div class="tt-line">${escapeHtml(f.dep)} → ${escapeHtml(f.arr)}</div>
-    <div class="tt-line">${escapeHtml(f.aircraft || '—')} · ${f.rules || '—'}</div>
-    <div class="tt-line">${escapeHtml(f.date || '—')} · ${minToHhmm(f.durationMin || 0)}${f.network ? ' · ' + escapeHtml(f.network) : ''}</div>
+    <div class="tt-title ${r.vfr > r.ifr ? 'vfr' : 'ifr'}">${escapeHtml(r.a)} ↔ ${escapeHtml(r.b)}</div>
+    <div class="tt-line">${r.flights.length} vol${r.flights.length > 1 ? 's' : ''} · ${Math.round(nm).toLocaleString('fr-FR')} NM</div>
+    ${recent.map(f => `<div class="tt-line tt-small">${escapeHtml(FBShared.fmtDateFr(f.date))} · ${escapeHtml(f.callsign || '—')} · ${escapeHtml(f.aircraft || '—')}</div>`).join('')}
+    ${r.flights.length > recent.length ? `<div class="tt-line tt-small">+ ${r.flights.length - recent.length} autre(s)</div>` : ''}
   `;
   tip.classList.remove('hidden');
 }
 function showFlightsGlobeAirportTooltip(a, evt, container){
   const tip = el('fgTooltip');
   if(!tip) return;
-  const rect = container.getBoundingClientRect();
-  tip.style.left = (evt.clientX - rect.left) + 'px';
-  tip.style.top = (evt.clientY - rect.top) + 'px';
+  positionFlightsGlobeTooltip(tip, evt, container);
+  const connected = flightsGlobeConnectedAirports(a.icao).size - 1;
   tip.innerHTML = `
     <div class="tt-title">${escapeHtml(a.icao)}</div>
     <div class="tt-line">${escapeHtml((a.info && a.info.name) || '')}</div>
-    <div class="tt-line">${a.count} vol${a.count > 1 ? 's' : ''} départ/arrivée</div>
+    <div class="tt-line">${a.count} départ${a.count > 1 ? 's' : ''}/arrivée${a.count > 1 ? 's' : ''} · ${connected} destination${connected > 1 ? 's' : ''}</div>
+    <div class="tt-line tt-small">Double-clic pour zoomer</div>
   `;
   tip.classList.remove('hidden');
 }
 function hideFlightsGlobeTooltip(){
   const tip = el('fgTooltip');
   if(tip) tip.classList.add('hidden');
+}
+
+/* ---------------- Déplacements de caméra animés ---------------- */
+function flyFlightsGlobeTo(dirWorld, distance){
+  if(!flightsGlobeCamera) return;
+  _flightsGlobeAutoRotate = false;
+  _flightsGlobeFly = {
+    fromDir: flightsGlobeCamera.position.clone().normalize(),
+    toDir: dirWorld.clone().normalize(),
+    fromDist: flightsGlobeCamera.position.length(),
+    toDist: Math.max(flightsGlobeControls.minDistance, Math.min(flightsGlobeControls.maxDistance, distance)),
+    t: 0
+  };
+}
+function stepFlightsGlobeFly(){
+  const fly = _flightsGlobeFly;
+  if(!fly) return;
+  fly.t = Math.min(1, fly.t + 0.035);
+  const e = fly.t < 0.5 ? 2 * fly.t * fly.t : 1 - Math.pow(-2 * fly.t + 2, 2) / 2; // easeInOutQuad
+  const dir = fly.fromDir.clone().lerp(fly.toDir, e);
+  if(dir.lengthSq() < 1e-6) dir.copy(fly.toDir);
+  dir.normalize();
+  flightsGlobeCamera.position.copy(dir.multiplyScalar(fly.fromDist + (fly.toDist - fly.fromDist) * e));
+  flightsGlobeCamera.lookAt(0, 0, 0);
+  if(fly.t >= 1) _flightsGlobeFly = null;
+}
+function onFlightsGlobeDblClick(evt){
+  const hit = flightsGlobePick(evt);
+  if(!hit || !hit.object.userData.airport) return;
+  const world = new THREE.Vector3();
+  hit.object.getWorldPosition(world);
+  const alt = flightsGlobeCamera.position.length() - GLOBE_RADIUS;
+  flyFlightsGlobeTo(world, GLOBE_RADIUS + Math.max(12, Math.min(45, alt * 0.45)));
+}
+function resetFlightsGlobeView(){
+  if(!flightsGlobeCamera) return;
+  flyFlightsGlobeTo(flightsGlobeCamera.position.clone(), GLOBE_DEFAULT_DISTANCE);
 }
 
 function bindFlightsGlobeControls(){
@@ -2810,6 +3565,93 @@ function bindFlightsGlobeControls(){
 }
 
 /* =========================================================
+   APPLICATION MOBILE — activation du serveur local + QR code d'appairage
+   ========================================================= */
+let _mobileStatus = null;
+
+function renderMobileQr(url){
+  const box = el('mobileQr');
+  if(!box) return;
+  if(!url || typeof qrcode !== 'function'){ box.innerHTML = ''; return; }
+  try{
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  }catch(e){ box.innerHTML = '<div class="hint">QR code indisponible — copie le lien.</div>'; }
+}
+
+function applyMobileStatus(st){
+  _mobileStatus = st;
+  const enabled = !!db.mobile.enabled;
+  el('mobileEnabled').checked = enabled;
+  const msg = el('mobileStatusMsg');
+  const details = el('mobileDetails');
+  if(!enabled || !st){
+    msg.textContent = 'Désactivé — ton logbook n\'est visible que sur ce PC.';
+    msg.className = 'status-msg';
+    details.classList.add('hidden');
+    return;
+  }
+  if(st.error){
+    msg.textContent = st.error;
+    msg.className = 'status-msg err';
+    details.classList.add('hidden');
+    return;
+  }
+  if(!st.urls || !st.urls.length){
+    msg.textContent = "Activé, mais aucune connexion réseau locale détectée sur ce PC (Wi-Fi / Ethernet).";
+    msg.className = 'status-msg warn';
+    details.classList.add('hidden');
+    return;
+  }
+  msg.textContent = `Activé ✓ — installation sur le port ${st.port}, appli sécurisée (HTTPS) sur ${st.hostname}:${st.httpsPort}.`;
+  const mdnsMsg = el('mobileMdnsMsg');
+  if(mdnsMsg){ mdnsMsg.textContent = st.mdnsError || ''; mdnsMsg.classList.toggle('hidden', !st.mdnsError); }
+  const caInfo = el('mobileCaInfo');
+  if(caInfo) caInfo.innerHTML = st.caName ? `Certificat local : <b>${escapeHtml(st.caName)}</b> — empreinte SHA-256 <span style="font-family:var(--font-mono); font-size:10px;">${escapeHtml(st.caFingerprint || '')}</span>` : '';
+  msg.className = 'status-msg ok';
+  details.classList.remove('hidden');
+  const sel = el('mobileUrlSelect');
+  const previous = sel.value;
+  sel.innerHTML = st.urls.map(u => `<option value="${escapeHtml(u.url)}">${escapeHtml(u.url.replace(/\/setup\?t=.*/, ''))} — ${escapeHtml(u.iface)}</option>`).join('');
+  sel.value = st.urls.some(u => u.url === previous) ? previous : st.urls[0].url;
+  renderMobileQr(sel.value);
+}
+
+async function setMobileEnabled(enabled){
+  db.mobile.enabled = !!enabled;
+  await saveDbNow();
+  if(!window.mobile){ applyMobileStatus(null); return; }
+  applyMobileStatus(await window.mobile.setEnabled(!!enabled));
+}
+
+async function regenMobileToken(){
+  if(!window.mobile) return;
+  if(!confirm('Générer un nouveau lien ? Les téléphones déjà configurés ne pourront plus synchroniser tant qu\'ils n\'auront pas rescanné le QR code (leurs données restent consultables).')) return;
+  applyMobileStatus(await window.mobile.regenToken());
+}
+
+async function copyMobileLink(){
+  const url = el('mobileUrlSelect').value;
+  if(!url) return;
+  if(window.api && window.api.copyToClipboard) await window.api.copyToClipboard(url);
+  const msg = el('mobileStatusMsg');
+  msg.textContent = 'Lien copié ✓ — envoie-le sur ton téléphone ou scanne le QR code.';
+  msg.className = 'status-msg ok';
+}
+
+async function initMobilePanel(){
+  if(!el('mobileEnabled')) return;
+  el('mobileEnabled').addEventListener('change', e => setMobileEnabled(e.target.checked));
+  el('mobileUrlSelect').addEventListener('change', e => renderMobileQr(e.target.value));
+  if(!window.mobile){ el('mobileEnabled').disabled = true; applyMobileStatus(null); return; }
+  window.mobile.onStatus(st => applyMobileStatus(st));
+  // Réactivation automatique au lancement si l'utilisateur l'avait activé.
+  applyMobileStatus(db.mobile.enabled ? await window.mobile.setEnabled(true) : await window.mobile.getStatus());
+}
+
+/* =========================================================
    VISITE GUIDÉE
    ========================================================= */
 const TOUR_STEPS = [
@@ -2817,6 +3659,7 @@ const TOUR_STEPS = [
   { target: '[data-view="briefing"]', title: 'Briefing', text: 'Prépare ton vol ici : import SimBrief, réglages du plan de vol, connexion à ton simulateur, carte et télémétrie en direct.' },
   { target: '[data-view="logbook"]', title: 'Logbook', text: "L'historique de tous tes vols, avec les statistiques et le détail de chaque trajet tracké." },
   { target: '[data-view="career"]', title: 'Carrière', text: 'Suis ta progression de grade au sein de tes compagnies virtuelles, et gère tes tours.' },
+  { target: '[data-view="hangar"]', title: 'Hangar', text: "Tes avions, avec pour chacun ses heures de vol, sa distance parcourue et la qualité de tes atterrissages." },
   { target: '[data-view="livetool"]', title: 'Outil Live', text: "La carte OBS de ton briefing, et un overlay Twitch entièrement personnalisable pour afficher ta télémétrie en direct." },
   { target: '[data-view="tools"]', title: 'Outils', text: 'Des calculateurs de vol rapides : temps/distance/vitesse, carburant, top of descent, entrée en hold, METAR/TAF...' },
   { target: '[data-view="admin"]', title: 'Admin', text: "Personnalise entièrement l'apparence de la carte de briefing OBS : couleurs, polices, disposition." },
@@ -2905,6 +3748,8 @@ async function endTour(){
   setLbRules('VFR');
   el('lbDate').value = new Date().toISOString().slice(0,10);
   populateCareerSelect();
+  populateHangarSelect();
+  bindHangarLogbookControls();
   renderLogbook();
   renderCareers();
   loadThemeIntoAdmin(db.theme);
@@ -2933,5 +3778,6 @@ async function endTour(){
   if(window.api && window.api.getDataPath){
     el('dataPathDisplay').value = await window.api.getDataPath();
   }
+  initMobilePanel();
   maybeShowOnboarding();
 })();

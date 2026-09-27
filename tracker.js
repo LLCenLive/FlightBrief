@@ -80,19 +80,51 @@ function headingDiff(a, b) {
   return d > 180 ? 360 - d : d;
 }
 
+// Emplacements possibles des fichiers de données (airports.json, runways.json) : l'appli
+// les cherche à plusieurs endroits plutôt que d'échouer si l'arborescence locale diffère
+// (ex. dossier data/ à la racine du projet dans d'anciennes versions, ou ressources
+// externes à côté de l'exécutable installé).
+function findDataFile(name, rendererDir) {
+  const res = process.resourcesPath || '';
+  const candidates = [
+    rendererDir && path.join(rendererDir, 'data', name),
+    path.join(__dirname, 'renderer', 'data', name),
+    path.join(__dirname, 'data', name),
+    res && path.join(res, 'data', name),
+    res && path.join(res, 'renderer', 'data', name),
+    res && path.join(res, 'app.asar.unpacked', 'renderer', 'data', name)
+  ].filter(Boolean);
+  for (const p of candidates) { try { if (fs.existsSync(p)) return p; } catch (e) { /* suivant */ } }
+  return candidates[0];
+}
+
 let airportIndex = null;
+// Normalise airports.json en tableau [icao, nom, lat, lon, alt] quel que soit son format
+// (tableau de tableaux, tableau d'objets, objet indexé par OACI). Un index vide n'est pas
+// mémorisé : il sera relu au prochain appel.
 function loadAirports(rendererDir) {
-  if (airportIndex) return airportIndex;
+  if (airportIndex && airportIndex.length) return airportIndex;
+  let list = [];
   try {
-    airportIndex = JSON.parse(fs.readFileSync(path.join(rendererDir, 'data', 'airports.json'), 'utf-8'));
-  } catch (e) { airportIndex = []; }
+    const raw = JSON.parse(fs.readFileSync(findDataFile('airports.json', rendererDir), 'utf-8'));
+    const entries = Array.isArray(raw) ? raw.map(e => [null, e]) : Object.entries(raw || {});
+    for (const [key, e] of entries) {
+      if (Array.isArray(e)) { if (Number.isFinite(+e[2]) && Number.isFinite(+e[3])) list.push([e[0], e[1], +e[2], +e[3], e[4]]); continue; }
+      if (!e || typeof e !== 'object') continue;
+      const icao = e.icao || e.ident || e.gps_code || e.id || key;
+      const lat = +(e.lat ?? e.latitude ?? e.latitude_deg), lon = +(e.lon ?? e.lng ?? e.longitude ?? e.longitude_deg);
+      if (icao && Number.isFinite(lat) && Number.isFinite(lon)) list.push([icao, e.name || '', lat, lon, e.elevFt ?? e.elevation_ft ?? null]);
+    }
+  } catch (e) { list = []; }
+  airportIndex = list;
+  if (list.length) airportGrid = null; // (re)construit sur la nouvelle liste
   return airportIndex;
 }
 let runwayIndex = null;
 function loadRunways(rendererDir) {
   if (runwayIndex) return runwayIndex;
   try {
-    runwayIndex = JSON.parse(fs.readFileSync(path.join(rendererDir, 'data', 'runways.json'), 'utf-8'));
+    runwayIndex = JSON.parse(fs.readFileSync(findDataFile('runways.json', rendererDir), 'utf-8'));
   } catch (e) { runwayIndex = {}; }
   return runwayIndex;
 }
@@ -404,6 +436,7 @@ class FlightTracker extends EventEmitter {
 
   _resetFlightState() {
     this._lastSnapshotAt = 0;
+    this._simTitle = null; // titre de l'avion dans le simu (associé au Hangar côté renderer)
     this._phase = 'idle'; // idle -> ground (taxi/parqué) -> airborne -> landed (roulage) -> idle
     this._path = [];
     this._start = null;
@@ -542,7 +575,7 @@ class FlightTracker extends EventEmitter {
       case 'ground':
         if (!onGround || gs > AIRBORNE_SPEED_KT) {
           this._phase = 'airborne';
-          if (!this._start) { this._start = now; this._firstMoveTs = now; this.emit('flight-start', { startedAt: now, aircraft: data.title }); }
+          if (!this._start) { this._start = now; this._firstMoveTs = now; this._simTitle = data.title || null; this.emit('flight-start', { startedAt: now, aircraft: data.title }); }
           this._takeoffAt = now;
           this._hasBeenAirborne = true;
           this._initFuel = data.fuelLbs;
@@ -558,6 +591,7 @@ class FlightTracker extends EventEmitter {
             this._path = [{ ...this._point(data, now), phase: 'taxi_out' }];
             this._lastPathTs = now;
             pathChanged = true;
+            this._simTitle = data.title || null;
             this.emit('flight-start', { startedAt: now, aircraft: data.title });
           } else if (now - this._lastPathTs >= GROUND_SAMPLE_MS) {
             this._path.push({ ...this._point(data, now), phase: 'taxi_out' });
@@ -673,6 +707,7 @@ class FlightTracker extends EventEmitter {
       this._lastSnapshotAt = now;
       this._writeSnapshot({
         startedAt: this._start ? new Date(this._start).toISOString() : null,
+        simAircraft: this._simTitle || null,
         durationMin: this._start ? Math.round((now - this._start) / 60000) : 0,
         totalDurationMin: this._start ? Math.round((now - this._start) / 60000) : 0,
         distanceNm: Math.round(distanceNm),
@@ -725,6 +760,7 @@ class FlightTracker extends EventEmitter {
     const result = {
       startedAt: new Date(this._start).toISOString(),
       endedAt: new Date(now).toISOString(),
+      simAircraft: this._simTitle || null,
       durationMin: Math.round(airDuration / 60000),
       totalDurationMin: Math.round((now - this._start) / 60000),
       distanceNm: Math.round(distanceNm),
