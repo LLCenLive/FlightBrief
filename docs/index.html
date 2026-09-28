@@ -334,7 +334,7 @@
   <div class="contrail" aria-hidden="true"></div>
   <div class="wrap hero-grid">
     <div>
-      <a class="pill-new" href="#nouveautes"><b>Nouveau</b> v1.3 · appli mobile, hangar &amp; vol en direct →</a>
+      <a class="pill-new" id="pillNew" href="#nouveautes"><b>Nouveau</b> v1.3 · appli mobile, hangar &amp; vol en direct →</a>
       <h1>Ton copilote pour <span class="grad">streamer tes vols.</span></h1>
       <p class="lead">FlightBrief prépare ton vol, le suit en direct dans Microsoft Flight Simulator, l'affiche joliment sur ton stream — et range tout dans ton carnet de vol. Même sur ton téléphone.</p>
       <div class="hero-cta">
@@ -589,10 +589,10 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="kicker">Quoi de neuf</span>
-      <h2 style="margin-top:12px;">La version 1.3, en bref.</h2>
+      <h2 style="margin-top:12px;" id="newsTitle">La version 1.3, en bref.</h2>
       <p class="lead">Des nouveautés nées de vos idées en live.</p>
     </div>
-    <div class="news">
+    <div class="news" id="newsGrid">
       <div class="news-item reveal"><div class="ni" style="background:rgba(233,139,192,.16);">📱</div><div><b>Appli mobile</b><p>Ton carnet de vol consultable hors ligne, et ton vol suivi en direct sur la carte depuis ton téléphone.</p></div></div>
       <div class="news-item reveal"><div class="ni" style="background:rgba(124,196,255,.16);">🛩️</div><div><b>Hangar</b><p>Tes avions et leurs stats : heures, distance, taux au toucher, rebonds, consommation.</p></div></div>
       <div class="news-item reveal"><div class="ni" style="background:rgba(79,227,166,.14);">🏁</div><div><b>Tours terminés</b><p>Rangés à part, avec leur bilan : durée, distance, temps de vol, vols associés.</p></div></div>
@@ -708,11 +708,41 @@ if('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: red
 // un (on parcourt les Releases, pas seulement "latest", pour ne jamais renvoyer vers du code source).
 function fmtSize(b){ return b ? Math.round(b / 1048576) + ' Mo' : ''; }
 function fmtDate(iso){ return iso ? new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) : ''; }
+// « Quoi de neuf » synchronisé avec la dernière Release GitHub : chaque ligne des notes de
+// version au format « 🛩️ Titre : description » devient une carte. Si les notes ne suivent pas
+// ce format (ou si l'API GitHub ne répond pas), les cartes écrites en dur ci-dessus restent.
+const NEWS_TINTS = ['rgba(233,139,192,.16)','rgba(124,196,255,.16)','rgba(79,227,166,.14)','rgba(255,179,107,.16)','rgba(142,125,255,.18)','rgba(255,127,110,.16)'];
+function escHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function parseReleaseNotes(body){
+  const EMOJI = /^((?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\uFE0F|\u20E3|\p{Emoji_Modifier})*(?:\u200D\p{Extended_Pictographic}\uFE0F?)*)\s*/u;
+  return String(body || '').split(/\r?\n/)
+    .map(l => l.trim().replace(/^[-*+]\s+/, '').replace(/\*\*/g, ''))
+    .map(l => {
+      const m = l.match(EMOJI);
+      if(!m) return null;
+      const rest = l.slice(m[0].length);
+      const i = rest.search(/\s[:–—-]\s/);
+      if(i < 1) return null;
+      const text = rest.slice(i).replace(/^\s[:–—-]\s/, '').trim();
+      return { icon: m[1], title: rest.slice(0, i).trim(), text: text.charAt(0).toUpperCase() + text.slice(1) };
+    })
+    .filter(x => x && x.title && x.text);
+}
+function renderNews(release){
+  if(!release) return;
+  const items = parseReleaseNotes(release.body);
+  if(items.length < 2) return;
+  const v = release.tag_name.replace(/^v/, '');
+  $('newsGrid').innerHTML = items.map((it, i) => `<div class="news-item reveal in"><div class="ni" style="background:${NEWS_TINTS[i % NEWS_TINTS.length]};">${escHtml(it.icon)}</div><div><b>${escHtml(it.title)}</b><p>${escHtml(it.text)}</p></div></div>`).join('');
+  $('newsTitle').textContent = `La version ${v}, en bref.`;
+  $('pillNew').innerHTML = `<b>Nouveau</b> v${escHtml(v)} · ${escHtml(items.slice(0, 3).map(x => x.title.toLowerCase()).join(', '))} →`;
+}
 (async function loadRelease(){
   try{
     const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=15`);
     if(!res.ok) throw new Error('api');
     const releases = (await res.json()).filter(r => !r.draft && !r.prerelease);
+    try{ renderNews(releases[0]); }catch(err){ /* on garde les nouveautés écrites en dur */ }
     let release = null, asset = null;
     for(const r of releases){
       const exes = (r.assets || []).filter(a => /\.exe$/i.test(a.name));
