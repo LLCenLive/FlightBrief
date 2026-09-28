@@ -108,6 +108,7 @@ async function loadDb(){
       };
       db.userProfile = {...defaultUserProfile, ...(stored.userProfile || {})};
     }
+    FBShared.setLandingThresholds(db.userProfile.landingThresholds);
   }catch(e){
     console.warn('FlightBrief: lecture du fichier local impossible, valeurs par défaut utilisées.', e);
   }
@@ -350,6 +351,10 @@ function applySimbriefData(data){
   el('arrName').value = pick(destination.name);
   el('routeText').value = pick(general.route);
   el('aircraft').value = pick(aircraft.name, aircraft.icaocode, aircraft.icao_code);
+  // Code OACI de l'avion du plan SimBrief (ex : A20N), mémorisé à part : c'est lui qui part
+  // dans le logbook (le Briefing / OBS garde le nom lisible, ex : « A320-251N »).
+  state.simbriefAcIcao = String(pick(aircraft.icaocode, aircraft.icao_code) || '').trim().toUpperCase();
+  state.simbriefAcName = el('aircraft').value;
   const alt = pick(general.initial_altitude);
   el('altitude').value = alt ? (isNaN(alt) ? alt : 'FL' + Math.round(alt/100)) : '';
   const ete = pick(times.est_time_enroute);
@@ -780,7 +785,8 @@ function populateCareerSelect(){
 function resetLogbookForm(){
   editingLogbookId = null;
   el('logbookFormTitle').textContent = 'Ajouter un vol';
-  ['lbCallsign','lbDep','lbArr','lbDuration','lbAircraft','lbNetwork','lbRemarks'].forEach(id => el(id).value = '');
+  ['lbCallsign','lbDep','lbArr','lbDuration','lbAircraft','lbNetwork','lbRemarks','lbDistance'].forEach(id => el(id).value = '');
+  setLogbookDistanceTracked(null);
   el('lbDate').value = new Date().toISOString().slice(0,10);
   el('lbCareer').value = '';
   populateHangarSelect();
@@ -805,6 +811,8 @@ async function saveLogbookEntry(){
     pirep: el('lbPirep').value,
     remarks: el('lbRemarks').value.trim()
   };
+  const distVal = parseFloat(el('lbDistance').value);
+  if(!el('lbDistance').disabled && isFinite(distVal) && distVal > 0) entry.distanceNm = Math.round(distVal);
   if(_pendingTrackData && !editingLogbookId){
     entry.trackData = _pendingTrackData;
     _pendingTrackData = null;
@@ -841,6 +849,8 @@ function editLogbookEntry(id){
   el('lbHangar').value = (f.aircraftId && db.hangar.some(a => a.id === f.aircraftId)) ? f.aircraftId : '';
   el('lbPirep').value = f.pirep;
   el('lbRemarks').value = f.remarks;
+  el('lbDistance').value = f.distanceNm != null ? f.distanceNm : '';
+  setLogbookDistanceTracked(FBShared.flightTrackedDistance(f));
   setLbRules(f.rules);
   window.scrollTo({top:0, behavior:'smooth'});
 }
@@ -850,6 +860,28 @@ async function deleteLogbookEntry(id){
   db.logbook = db.logbook.filter(f => f.id !== id);
   await saveDbNow();
   renderLogbook();
+}
+
+// Distance d'un vol non tracké : estimation orthodromique (+5 % en IFR, les routes
+// aériennes étant rarement directes), modifiable ensuite à la main.
+async function estimateLogbookDistance(){
+  const dep = el('lbDep').value.trim().toUpperCase(), arr = el('lbArr').value.trim().toUpperCase();
+  const hint = el('lbDistanceHint');
+  if(!dep || !arr){ hint.textContent = 'Renseigne d\'abord les OACI de départ et d\'arrivée.'; return; }
+  const c = await resolveAirportCoords([dep, arr]);
+  if(!c[dep] || !c[arr]){ hint.textContent = `Aéroport inconnu : ${[!c[dep] && dep, !c[arr] && arr].filter(Boolean).join(', ')}.`; return; }
+  const direct = FBShared.haversineNm(c[dep].lat, c[dep].lon, c[arr].lat, c[arr].lon);
+  const ifr = (el('lbRulesToggle').dataset.rules || 'VFR') === 'IFR';
+  el('lbDistance').value = Math.round(direct * (ifr ? 1.05 : 1));
+  hint.textContent = `Estimation : ${Math.round(direct)} NM en direct${ifr ? ' + 5 % (route IFR)' : ''}. Tu peux corriger la valeur.`;
+}
+// Vol tracké : la distance mesurée par le GPS fait foi (champ verrouillé).
+function setLogbookDistanceTracked(nm){
+  const input = el('lbDistance'), btn = el('lbDistanceEstimate'), hint = el('lbDistanceHint');
+  const tracked = nm != null;
+  input.disabled = tracked; btn.disabled = tracked;
+  if(tracked){ input.value = Math.round(nm); hint.textContent = 'Distance mesurée par le tracker (non modifiable).'; }
+  else hint.textContent = 'Pour un vol fait sans le tracker. Vide = distance directe départ → arrivée.';
 }
 
 const pirepLabels = { none:['Aucun','pending'], pending:['En attente','pending'], ok:['Validé','ok'], rejected:['Refusé','rejected'] };
@@ -866,7 +898,7 @@ function renderLogbook(){
       <td>${escapeHtml(f.dep||'----')} → ${escapeHtml(f.arr||'----')}</td>
       <td>${escapeHtml(f.aircraft||'—')}</td>
       <td><span class="pill ${f.rules.toLowerCase()}">${f.rules}</span></td>
-      <td>${minToHhmm(f.durationMin)}</td>
+      <td>${(() => { const d = FBShared.flightDistance(f, cachedAirportLookup); return d.nm != null ? FBShared.fmtNm(d.nm) + (d.estimated ? '<sup title="Distance directe départ → arrivée">*</sup>' : '') : '—'; })()}</td>
       <td>${escapeHtml(f.network||'—')}</td>
       <td>${career ? escapeHtml(career.name) : '—'}</td>
       <td><span class="pill ${pClass}">${pLabel}</span></td>
@@ -1311,7 +1343,7 @@ async function renderTourModal(){
   el('tourModalTrack').innerHTML = tourTrackHtml(c, t);
 
   el('tourModalLegRows').innerHTML = s.legs.map(({ index, leg, flight: f, distanceNm, distanceEstimated, landingFpm }) => {
-    const grade = F.landingGrade(landingFpm);
+    const grade = F.landingGrade(landingFpm, f ? F.flightCategory(f) : null);
     const date = f ? f.date : (leg.doneAt ? String(leg.doneAt).slice(0, 10) : null);
     return `<tr class="${leg.done ? '' : 'leg-todo'}">
       <td class="muted">${index + 1}</td>
@@ -1409,10 +1441,51 @@ function bindHangarLogbookControls(){
   });
 }
 
+// Catégories du hangar (turbulence de sillage « à la FlightBrief »).
+const HANGAR_CATEGORIES = [
+  { key:'light',  label:'Light',  desc:'Monomoteurs & légers', icon:'🛩️', color:'var(--phosphor)' },
+  { key:'medium', label:'Medium', desc:'Régionaux & moyen-courriers', icon:'✈️', color:'var(--accent-ifr)' },
+  { key:'heavy',  label:'Heavy',  desc:'Gros porteurs', icon:'🛫', color:'var(--accent-vfr)' },
+  { key:'jumbo',  label:'Jumbo',  desc:'Très gros porteurs', icon:'🐘', color:'#ff5c5c' }
+];
+// Suggestion de catégorie d'après le code OACI (pré-remplit le menu, modifiable).
+const HANGAR_CATEGORY_HINTS = {
+  jumbo: ['A388','B741','B742','B743','B744','B748','B74S','A225','A124'],
+  heavy: ['A332','A333','A338','A339','A342','A343','A345','A346','A359','A35K','B762','B763','B764','B772','B773','B77L','B77W','B778','B779','B788','B789','B78X','MD11','DC10','L101','IL96','A306','A310','C5M','C17'],
+  medium: ['A318','A319','A320','A321','A19N','A20N','A21N','B736','B737','B738','B739','B37M','B38M','B39M','B3XM','B712','B752','B753','BCS1','BCS3','E170','E175','E190','E195','E290','E295','CRJ2','CRJ7','CRJ9','CRJX','AT43','AT45','AT72','AT75','AT76','DH8A','DH8B','DH8C','DH8D','MD82','MD83','MD88','F70','F100','B463','RJ85','RJ1H','SB20','JS41','D328','E145','E135','C130','A400']
+};
+function suggestHangarCategory(icao){
+  const k = String(icao || '').trim().toUpperCase();
+  if(!k) return '';
+  for(const cat of ['jumbo','heavy','medium']) if(HANGAR_CATEGORY_HINTS[cat].includes(k)) return cat;
+  return k.length >= 3 ? 'light' : '';
+}
+function hangarCategory(key){ return HANGAR_CATEGORIES.find(c => c.key === key) || null; }
+let _hangarCatFilter = 'all';
+
 function resetHangarForm(){
   editingHangarId = null;
   el('hangarFormTitle').textContent = 'Ajouter un avion';
-  ['hgName','hgType','hgDeveloper','hgKeys'].forEach(id => el(id).value = '');
+  ['hgName','hgType','hgDeveloper','hgKeys','hgCategory'].forEach(id => el(id).value = '');
+  el('hgCategory').dataset.touched = '';
+}
+function openHangarForm(id){
+  if(id) fillHangarForm(id); else resetHangarForm();
+  el('hangarFormOverlay').classList.remove('hidden');
+  setTimeout(() => el('hgName').focus(), 30);
+}
+function closeHangarForm(){
+  el('hangarFormOverlay').classList.add('hidden');
+  resetHangarForm();
+}
+function bindHangarFormControls(){
+  // Le code OACI propose une catégorie tant que l'utilisateur n'en a pas choisi une lui-même.
+  el('hgType').addEventListener('input', () => {
+    if(el('hgCategory').dataset.touched) return;
+    el('hgCategory').value = suggestHangarCategory(el('hgType').value);
+  });
+  el('hgCategory').addEventListener('change', () => { el('hgCategory').dataset.touched = '1'; });
+  el('hangarFormOverlay').addEventListener('keydown', e => { if(e.key === 'Enter' && e.target.tagName === 'INPUT') saveHangarAircraft(); });
 }
 
 async function saveHangarAircraft(){
@@ -1423,6 +1496,7 @@ async function saveHangarAircraft(){
     id: editingHangarId || 'a' + Date.now(),
     name,
     icaoType: el('hgType').value.trim().toUpperCase(),
+    category: el('hgCategory').value || '',
     developer: el('hgDeveloper').value.trim(),
     matchKeys: el('hgKeys').value.trim(),
     addedAt: prev ? prev.addedAt : new Date().toISOString()
@@ -1430,45 +1504,65 @@ async function saveHangarAircraft(){
   if(prev) db.hangar[db.hangar.indexOf(prev)] = aircraft;
   else db.hangar.push(aircraft);
   await saveDbNow();
-  _hangarSelectedId = aircraft.id;
-  resetHangarForm();
+  closeHangarForm();
   populateHangarSelect();
+  // Si la catégorie filtrée masquerait le nouvel avion, on revient sur « Tous ».
+  if(_hangarCatFilter !== 'all' && _hangarCatFilter !== (aircraft.category || 'none')) _hangarCatFilter = 'all';
   renderHangar();
-  const detail = el('hangarDetail');
-  if(detail) detail.scrollIntoView({ behavior:'smooth', block:'start' });
+  // Petit repère visuel sur la carte ajoutée/modifiée, SANS faire défiler la page.
+  const card = document.querySelector(`.hangar-card[data-id="${aircraft.id}"]`);
+  if(card){ card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1600); }
 }
 
-function editHangarAircraft(id){
+function fillHangarForm(id){
   const a = db.hangar.find(x => x.id === id);
   if(!a) return;
   editingHangarId = id;
   el('hangarFormTitle').textContent = 'Modifier l\'avion';
   el('hgName').value = a.name || '';
   el('hgType').value = a.icaoType || '';
+  el('hgCategory').value = a.category || '';
+  el('hgCategory').dataset.touched = a.category ? '1' : '';
   el('hgDeveloper').value = a.developer || '';
   // Anciennes fiches (v1.3.0) : l'immatriculation rejoint les mots-clés.
   el('hgKeys').value = [a.matchKeys, a.registration].filter(Boolean).join(', ');
-  el('hangarFormPanel').scrollIntoView({ behavior:'smooth', block:'center' });
 }
+function editHangarAircraft(id){ openHangarForm(id); }
 
 async function deleteHangarAircraft(id){
   const a = db.hangar.find(x => x.id === id);
   if(!a || !confirm(`Retirer « ${a.name} » du hangar ? Les vols restent dans le logbook.`)) return;
   db.hangar = db.hangar.filter(x => x.id !== id);
   db.logbook.forEach(f => { if(f.aircraftId === id) f.aircraftId = null; });
-  if(_hangarSelectedId === id) _hangarSelectedId = null;
-  if(editingHangarId === id) resetHangarForm();
+  if(_hangarSelectedId === id) closeHangarDetail();
   await saveDbNow();
   populateHangarSelect();
   renderHangar();
 }
 
+// Le détail d'un avion s'ouvre dans une modale : la page du hangar ne défile plus
+// (avant, le panneau s'insérait sous la grille et la page sautait au milieu).
 function selectHangarAircraft(id){
-  _hangarSelectedId = _hangarSelectedId === id ? null : id;
+  _hangarSelectedId = id;
   _hangarShowAllFlights = false;
-  renderHangar();
-  if(_hangarSelectedId) setTimeout(() => el('hangarDetail').scrollIntoView({ behavior:'smooth', block:'start' }), 30);
+  refreshHangarDetail();
+  el('hangarDetailOverlay').classList.remove('hidden');
+  el('hangarDetail').scrollTop = 0;
+  document.querySelectorAll('.hangar-card').forEach(c => c.classList.toggle('selected', c.dataset.id === id));
 }
+function closeHangarDetail(){
+  _hangarSelectedId = null;
+  el('hangarDetailOverlay').classList.add('hidden');
+  el('hangarDetail').innerHTML = '';
+  document.querySelectorAll('.hangar-card.selected').forEach(c => c.classList.remove('selected'));
+}
+function refreshHangarDetail(){
+  const a = _hangarSelectedId && db.hangar.find(x => x.id === _hangarSelectedId);
+  if(!a){ closeHangarDetail(); return; }
+  const assign = FBShared.assignFlightsToHangar(db.hangar, db.logbook);
+  renderHangarDetail(el('hangarDetail'), a, assign[a.id], FBShared.aircraftStats(assign[a.id].flights, cachedAirportLookup, a.category || null));
+}
+function setHangarCatFilter(key){ _hangarCatFilter = key; renderHangar(); }
 
 // Coordonnées de tous les aéroports du logbook (distances orthodromiques des vols non
 // trackés) : chargées une fois en tâche de fond, puis nouveau rendu.
@@ -1488,7 +1582,7 @@ function renderHangar(){
   ensureHangarCoords();
   const assign = FBShared.assignFlightsToHangar(db.hangar, db.logbook);
   const statsById = {};
-  db.hangar.forEach(a => { statsById[a.id] = FBShared.aircraftStats(assign[a.id].flights, cachedAirportLookup); });
+  db.hangar.forEach(a => { statsById[a.id] = FBShared.aircraftStats(assign[a.id].flights, cachedAirportLookup, a.category || null); });
   const F = FBShared;
 
   const totalMin = db.hangar.reduce((s, a) => s + statsById[a.id].totalMin, 0);
@@ -1496,14 +1590,25 @@ function renderHangar(){
   el('hgStatHours').textContent = F.fmtHm(totalMin);
   el('hgStatUnassigned').textContent = assign._unassigned.length;
 
+  // Filtre par catégorie (n'affiche que les catégories utilisées).
+  const catOf = a => hangarCategory(a.category) ? a.category : 'none';
+  const counts = {}; db.hangar.forEach(a => { const k = catOf(a); counts[k] = (counts[k] || 0) + 1; });
+  const groups = [...HANGAR_CATEGORIES, { key:'none', label:'Sans catégorie', desc:'À classer (bouton Modifier)', icon:'❔', color:'var(--text-secondary)' }].filter(c => counts[c.key]);
+  if(_hangarCatFilter !== 'all' && !counts[_hangarCatFilter]) _hangarCatFilter = 'all';
+  el('hangarCatFilter').innerHTML = groups.length > 1 ? `<div class="toggle-group">
+      <button class="${_hangarCatFilter === 'all' ? 'active-ifr' : ''}" onclick="setHangarCatFilter('all')">Tous · ${db.hangar.length}</button>
+      ${groups.map(c => `<button class="${_hangarCatFilter === c.key ? 'active-ifr' : ''}" onclick="setHangarCatFilter('${c.key}')">${c.key === 'none' ? 'À classer' : c.label} · ${counts[c.key]}</button>`).join('')}
+    </div>` : '';
+
   const maxMin = Math.max(1, ...db.hangar.map(a => statsById[a.id].totalMin));
-  const sorted = [...db.hangar].sort((a, b) => statsById[b.id].totalMin - statsById[a.id].totalMin || a.name.localeCompare(b.name));
-  el('hangarGrid').innerHTML = sorted.map(a => {
+  const card = a => {
     const s = statsById[a.id];
-    const grade = F.landingGrade(s.avgLandingFpm);
-    return `<div class="hangar-card ${_hangarSelectedId === a.id ? 'selected' : ''}" onclick="selectHangarAircraft('${a.id}')">
+    const grade = F.landingGrade(s.avgLandingFpm, a.category || null);
+    const cat = hangarCategory(a.category);
+    return `<div class="hangar-card ${_hangarSelectedId === a.id ? 'selected' : ''}" data-id="${a.id}" onclick="selectHangarAircraft('${a.id}')">
       <div class="hc-head">
         <span class="hc-type">${escapeHtml(a.icaoType || 'Avion')}</span>
+        ${cat ? `<span class="hc-cat" style="--cat:${cat.color}">${cat.label}</span>` : ''}
         ${a.developer ? `<span class="hc-reg">${escapeHtml(a.developer)}</span>` : ''}
       </div>
       <div class="hc-name">${escapeHtml(a.name)}</div>
@@ -1516,22 +1621,33 @@ function renderHangar(){
       </div>
       <div class="hc-foot">${s.lastDate ? 'Dernier vol le ' + F.fmtDateFr(s.lastDate) : 'Aucun vol pour le moment'}</div>
     </div>`;
-  }).join('') + `<div class="hangar-card hangar-add" onclick="resetHangarForm(); el('hangarFormPanel').scrollIntoView({behavior:'smooth', block:'center'}); el('hgName').focus();">
-      <div class="plus">+</div><div>Ajouter un avion</div>
-    </div>`;
+  };
+  const sortFn = (a, b) => statsById[b.id].totalMin - statsById[a.id].totalMin || a.name.localeCompare(b.name);
 
-  const detail = el('hangarDetail');
-  const a = _hangarSelectedId && db.hangar.find(x => x.id === _hangarSelectedId);
-  if(!a){ detail.classList.add('hidden'); detail.innerHTML = ''; return; }
-  detail.classList.remove('hidden');
-  renderHangarDetail(detail, a, assign[a.id], statsById[a.id]);
+  if(!db.hangar.length){
+    el('hangarGrid').innerHTML = `<div class="hangar-empty">Ton hangar est vide. Clique sur <b>＋ Ajouter un avion</b> en haut à droite pour créer ta première fiche.</div>`;
+    return;
+  }
+  el('hangarGrid').innerHTML = groups
+    .filter(c => _hangarCatFilter === 'all' || _hangarCatFilter === c.key)
+    .map(c => {
+      const list = db.hangar.filter(a => catOf(a) === c.key).sort(sortFn);
+      const min = list.reduce((n, a) => n + statsById[a.id].totalMin, 0);
+      return `<section class="hangar-cat" style="--cat:${c.color}">
+        <div class="hangar-cat-head"><span class="ic">${c.icon}</span><h3>${c.label}</h3><span class="desc">${c.desc}</span>
+          <span class="meta">${list.length} avion${list.length > 1 ? 's' : ''} · ${F.fmtHm(min)}</span></div>
+        <div class="hangar-grid">${list.map(card).join('')}</div>
+      </section>`;
+    }).join('');
+  if(_hangarSelectedId && !el('hangarDetailOverlay').classList.contains('hidden')) refreshHangarDetail();
 }
 
 function renderHangarDetail(detail, a, group, s){
   const F = FBShared;
   const flights = [...group.flights].sort((x, y) => (y.date || '').localeCompare(x.date || ''));
-  const gradeTotal = F.LANDING_GRADES.reduce((n, g) => n + s.grades[g.key], 0);
-  const gradeMax = Math.max(1, ...F.LANDING_GRADES.map(g => s.grades[g.key]));
+  const GR = F.landingGradesFor(a.category || null);
+  const gradeTotal = GR.reduce((n, g) => n + s.grades[g.key], 0);
+  const gradeMax = Math.max(1, ...GR.map(g => s.grades[g.key]));
   const rulesTotal = s.vfr + s.ifr;
 
   detail.innerHTML = `
@@ -1543,7 +1659,7 @@ function renderHangarDetail(detail, a, group, s){
       <div class="row-actions">
         <button class="icon-btn" onclick="editHangarAircraft('${a.id}')">Modifier</button>
         <button class="icon-btn" onclick="deleteHangarAircraft('${a.id}')">Retirer</button>
-        <button class="icon-btn" onclick="selectHangarAircraft('${a.id}')">Fermer</button>
+        <button class="icon-btn" onclick="closeHangarDetail()">Fermer</button>
       </div>
     </div>
 
@@ -1569,7 +1685,7 @@ function renderHangarDetail(detail, a, group, s){
     <div class="hd-cols">
       <div>
         <h4 class="modal-subhead">Qualité des atterrissages</h4>
-        ${gradeTotal ? `<div class="top-list">${F.LANDING_GRADES.map(g => `
+        ${gradeTotal ? `<div class="top-list">${GR.map(g => `
           <div class="row" style="--row-accent:${g.color};">
             <span class="rank" style="border-color:${g.color}55; color:${g.color};">●</span>
             <span class="name">${g.label}</span>
@@ -1588,7 +1704,7 @@ function renderHangarDetail(detail, a, group, s){
     ${flights.length ? `<div style="overflow-x:auto;"><table class="phase-table">
       <thead><tr><th>Date</th><th>Indicatif</th><th>Trajet</th><th>Durée</th><th>Distance</th><th>Toucher</th><th>Lien</th><th></th></tr></thead>
       <tbody>${flights.slice(0, _hangarShowAllFlights ? flights.length : 25).map(f => {
-        const lr = F.flightLandingRate(f), g = F.landingGrade(lr);
+        const lr = F.flightLandingRate(f), g = F.landingGrade(lr, a.category || null);
         const d = F.flightDistance(f, cachedAirportLookup);
         return `<tr>
           <td>${F.fmtDateFr(f.date)}</td>
@@ -1600,7 +1716,7 @@ function renderHangarDetail(detail, a, group, s){
           <td><span class="pill ${f.aircraftId === a.id ? 'ok' : 'pending'}" title="${f.aircraftId === a.id ? 'Choisi dans le logbook' : 'Associé automatiquement par mot-clé'}">${f.aircraftId === a.id ? 'Manuel' : 'Auto'}</span></td>
           <td>${f.trackData ? `<button class="icon-btn" onclick="openRouteModal('${f.id}')">Carte</button>` : ''}</td>
         </tr>`;
-      }).join('')}</tbody></table></div>${flights.length > 25 && !_hangarShowAllFlights ? `<div class="btn-row"><button class="btn small" onclick="_hangarShowAllFlights = true; renderHangar();">Afficher les ${flights.length} vols</button></div>` : ''}` : '<div class="hint">Aucun vol associé. Choisis cet avion dans le champ « Avion du hangar » en enregistrant un vol, ou ajoute des mots-clés qui correspondent au champ « Appareil » de tes vols.</div>'}
+      }).join('')}</tbody></table></div>${flights.length > 25 && !_hangarShowAllFlights ? `<div class="btn-row"><button class="btn small" onclick="_hangarShowAllFlights = true; refreshHangarDetail();">Afficher les ${flights.length} vols</button></div>` : ''}` : '<div class="hint">Aucun vol associé. Choisis cet avion dans le champ « Avion du hangar » en enregistrant un vol, ou ajoute des mots-clés qui correspondent au champ « Appareil » de tes vols.</div>'}
     <div class="hint" style="margin-top:8px;">${[
       s.distanceEstimatedCount ? '* distance orthodromique départ → arrivée (vol non tracké).' : '',
       group.autoCount ? `${group.autoCount} vol${group.autoCount > 1 ? 's' : ''} associé${group.autoCount > 1 ? 's' : ''} automatiquement par mot-clé.` : ''
@@ -1961,10 +2077,16 @@ function populateLogbookFieldsFromTrackedFlight(data){
   const arr = el('arrIcao').value.trim().toUpperCase() || (data.arrGuess ? data.arrGuess.icao : '');
   el('lbDep').value = dep;
   el('lbArr').value = arr;
-  // Appareil : celui saisi dans le Briefing, sinon l'avion du hangar reconnu d'après le nom
-  // détecté dans le simulateur, sinon ce nom brut.
-  const hgMatch = FBShared.suggestHangarAircraft(db.hangar, el('aircraft').value, data.simAircraft);
-  el('lbAircraft').value = el('aircraft').value.trim() || (hgMatch ? hgMatch.name : (data.simAircraft || ''));
+  // Appareil : on vise le CODE OACI (comme pour les vols saisis à la main), dans cet ordre :
+  //  1. l'avion du hangar reconnu (Briefing ou nom détecté dans le simulateur) → son code OACI ;
+  //  2. le code OACI du plan SimBrief importé (si le champ Appareil n'a pas été modifié depuis) ;
+  //  3. le champ Appareil du Briefing tel quel ;
+  //  4. le nom brut envoyé par le simulateur (variable TITLE = nom de la livrée, ex :
+  //     « FlyByWire A320neo Air France F-HBNA »), faute de mieux.
+  const briefAc = el('aircraft').value.trim();
+  const hgMatch = FBShared.suggestHangarAircraft(db.hangar, briefAc, data.simAircraft);
+  const sbIcao = state.simbriefAcIcao && briefAc === (state.simbriefAcName || '').trim() ? state.simbriefAcIcao : '';
+  el('lbAircraft').value = (hgMatch && hgMatch.icaoType) || sbIcao || briefAc || (hgMatch ? hgMatch.name : (data.simAircraft || ''));
   populateHangarSelect();
   el('lbHangar').value = hgMatch ? hgMatch.id : '';
   setLbRules(state.rules === 'IFR' ? 'IFR' : 'VFR');
@@ -2808,6 +2930,87 @@ async function saveUserProfile(){
   statusEl.className = 'status-msg ok';
 }
 
+/* ---------------- Seuils de toucher par catégorie d'avion (modale) ----------------
+   Accessible depuis le Hangar (« ⚙ Seuils de toucher », là où vivent les catégories)
+   et depuis Profil → Réglages. Rien n'est affiché en permanence. */
+// Catégorie de chaque vol = celle de l'avion du hangar associé. Cache reconstruit dès
+// qu'un vol inconnu est demandé ou que le hangar a changé.
+let _flightCatMap = new WeakMap(), _flightCatSig = '';
+function hangarSignature(){ return db.hangar.map(a => [a.id, a.category, a.name, a.icaoType, a.matchKeys].join('~')).join('|'); }
+function rebuildFlightCategories(){
+  _flightCatMap = new WeakMap();
+  _flightCatSig = hangarSignature();
+  const assign = FBShared.assignFlightsToHangar(db.hangar, db.logbook);
+  db.hangar.forEach(a => assign[a.id].flights.forEach(f => _flightCatMap.set(f, a.category || null)));
+  assign._unassigned.forEach(f => _flightCatMap.set(f, null));
+}
+FBShared.setFlightCategoryResolver(f => {
+  if(!f) return null;
+  if(_flightCatSig !== hangarSignature() || !_flightCatMap.has(f)) rebuildFlightCategories();
+  return _flightCatMap.get(f) || null;
+});
+
+const LT_ROWS = [
+  { key:'light',  label:'Light',  desc:'Monomoteurs & légers' },
+  { key:'medium', label:'Medium', desc:'Régionaux & moyen-courriers' },
+  { key:'heavy',  label:'Heavy',  desc:'Gros porteurs' },
+  { key:'jumbo',  label:'Jumbo',  desc:'Très gros porteurs' },
+  { key:'none',   label:'Sans catégorie', desc:'Avions non classés / hors hangar' }
+];
+function openLandingThresholds(){
+  renderLandingThresholdsModal(FBShared.getLandingThresholds());
+  el('landingThresholdsOverlay').classList.remove('hidden');
+}
+function closeLandingThresholds(){ el('landingThresholdsOverlay').classList.add('hidden'); }
+function renderLandingThresholdsModal(t){
+  const F = FBShared;
+  const counts = {}; // touchers mesurés par catégorie (aide au réglage)
+  db.logbook.forEach(f => { if(F.flightLandingRate(f) != null){ const c = F.flightCategory(f) || 'none'; counts[c] = (counts[c] || 0) + 1; } });
+  const inp = (cat, k, v) => `<input type="number" min="1" step="10" data-cat="${cat}" data-k="${k}" value="${v}">`;
+  el('ltRows').innerHTML = LT_ROWS.map(r => {
+    const x = t[r.key], cat = hangarCategory(r.key);
+    const top = x.firm * 1.35, pct = v => Math.round(v / top * 100);
+    return `<tr>
+      <td><div class="lt-cat" style="--cat:${cat ? cat.color : 'var(--text-secondary)'}">${r.label}</div><div class="hint">${r.desc}${counts[r.key] ? ` · ${counts[r.key]} toucher${counts[r.key] > 1 ? 's' : ''}` : ''}</div></td>
+      <td>&lt; ${inp(r.key, 'butter', x.butter)}</td>
+      <td>≤ ${inp(r.key, 'smooth', x.smooth)}</td>
+      <td>≤ ${inp(r.key, 'firm', x.firm)}</td>
+      <td class="lt-hard">&gt; ${x.firm}</td>
+      <td class="lt-scale"><div class="lt-bar">
+        <span style="width:${pct(x.butter)}%; background:#39e88f"></span>
+        <span style="width:${pct(x.smooth - x.butter)}%; background:#54d6e8"></span>
+        <span style="width:${pct(x.firm - x.smooth)}%; background:#ffb020"></span>
+        <span style="flex:1; background:#ff5c5c"></span>
+      </div></td>
+    </tr>`;
+  }).join('');
+  el('ltStatus').textContent = '';
+}
+function readLandingThresholdsModal(){
+  const out = {};
+  LT_ROWS.forEach(r => { out[r.key] = {}; });
+  el('ltRows').querySelectorAll('input[data-cat]').forEach(i => { out[i.dataset.cat][i.dataset.k] = i.value; });
+  LT_ROWS.forEach(r => { out[r.key] = FBShared.normLandingThresholds(out[r.key], r.key); });
+  return out;
+}
+async function saveLandingThresholds(){
+  const t = FBShared.setLandingThresholds(readLandingThresholdsModal());
+  db.userProfile.landingThresholds = t;
+  await saveDbNow();
+  closeLandingThresholds();
+  rerenderAfterThresholdChange();
+}
+function resetLandingThresholdsModal(){
+  renderLandingThresholdsModal(JSON.parse(JSON.stringify(FBShared.DEFAULT_LANDING_THRESHOLDS)));
+  el('ltStatus').textContent = 'Valeurs par défaut rétablies — clique sur Enregistrer pour les appliquer.';
+  el('ltStatus').className = 'status-msg';
+}
+function rerenderAfterThresholdChange(){
+  if(el('view-hangar').classList.contains('active')) renderHangar();
+  if(el('view-profil').classList.contains('active')) renderProfileStats();
+  if(!el('tourModalOverlay').classList.contains('hidden')) refreshTourModalIfOpen();
+}
+
 /* ---------------- Statistiques (calculées à partir du logbook) ---------------- */
 function renderTopListFromCounts(targetId, counts, limit, accent){
   const entries = Object.entries(counts).filter(([k]) => k && k !== 'undefined').sort((a,b) => b[1]-a[1]).slice(0, limit);
@@ -2832,6 +3035,7 @@ function renderTopList(targetId, items, keyFn, limit, accent){
   renderTopListFromCounts(targetId, counts, limit, accent);
 }
 
+const _profileCoordsRequested = new Set();
 function renderProfileStats(){
   const flights = db.logbook;
   el('pfStatFlights').textContent = flights.length;
@@ -2841,7 +3045,14 @@ function renderProfileStats(){
 
   // Distance totale : cumule la distance réellement mesurée des vols trackés (les
   // vols saisis manuellement n'ont pas de trajet GPS, donc pas de distance connue).
-  const totalDistance = flights.reduce((s,f) => s + ((f.trackData && f.trackData.distanceNm) || 0), 0);
+  // (+ distance saisie/estimée pour les vols ajoutés à la main, sinon orthodromie).
+  const totalDistance = flights.reduce((s,f) => { const d = FBShared.flightDistance(f, cachedAirportLookup); return s + (d.nm || 0); }, 0);
+  const missing = Array.from(new Set(flights.flatMap(f => [f.dep, f.arr]).filter(Boolean).map(x => x.toUpperCase()))).filter(k => _airportCoordCache[k] === undefined && !_profileCoordsRequested.has(k));
+  if(missing.length && !renderProfileStats._pending){
+    renderProfileStats._pending = true;
+    missing.forEach(k => _profileCoordsRequested.add(k)); // une seule tentative par OACI (pas de boucle si l'IPC échoue)
+    resolveAirportCoords(missing).then(() => { renderProfileStats._pending = false; if(el('view-profil').classList.contains('active')) renderProfileStats(); });
+  }
   el('pfStatDistance').textContent = totalDistance ? Math.round(totalDistance).toLocaleString('fr-FR') + ' NM' : '0 NM';
 
   let longest = null;
@@ -2997,8 +3208,9 @@ function initFlightsGlobe(){
 
   container.addEventListener('mousemove', onFlightsGlobePointerMove);
   container.addEventListener('mouseleave', () => { hideFlightsGlobeTooltip(); setFlightsGlobeHighlight(null); });
-  container.addEventListener('pointerdown', () => { _flightsGlobeAutoRotate = false; });
-  container.addEventListener('dblclick', onFlightsGlobeDblClick);
+  container.addEventListener('pointerdown', e => { _flightsGlobeAutoRotate = false; _flightsGlobeDown = { x: e.clientX, y: e.clientY }; });
+  container.addEventListener('click', onFlightsGlobeClick);
+  container.addEventListener('dblclick', e => { clearTimeout(_flightsGlobeClickTimer); onFlightsGlobeDblClick(e); });
   window.addEventListener('resize', resizeFlightsGlobe);
   document.addEventListener('visibilitychange', () => {
     if(document.hidden) pauseFlightsGlobe();
@@ -3501,7 +3713,7 @@ function showFlightsGlobeAirportTooltip(a, evt, container){
     <div class="tt-title">${escapeHtml(a.icao)}</div>
     <div class="tt-line">${escapeHtml((a.info && a.info.name) || '')}</div>
     <div class="tt-line">${a.count} départ${a.count > 1 ? 's' : ''}/arrivée${a.count > 1 ? 's' : ''} · ${connected} destination${connected > 1 ? 's' : ''}</div>
-    <div class="tt-line tt-small">Double-clic pour zoomer</div>
+    <div class="tt-line tt-small">Clic : départs & arrivées · double-clic : zoom</div>
   `;
   tip.classList.remove('hidden');
 }
@@ -3542,6 +3754,73 @@ function onFlightsGlobeDblClick(evt){
   const alt = flightsGlobeCamera.position.length() - GLOBE_RADIUS;
   flyFlightsGlobeTo(world, GLOBE_RADIUS + Math.max(12, Math.min(45, alt * 0.45)));
 }
+// Clic simple sur un aéroport : encadré avec tous ses départs et arrivées.
+// Ignoré si la souris a bougé (rotation du globe) ; différé de 260 ms pour laisser
+// passer un éventuel double-clic (qui, lui, zoome sur l'aéroport).
+let _flightsGlobeDown = null, _flightsGlobeClickTimer = null;
+function onFlightsGlobeClick(evt){
+  if(_flightsGlobeDown && Math.hypot(evt.clientX - _flightsGlobeDown.x, evt.clientY - _flightsGlobeDown.y) > 5) return;
+  const hit = flightsGlobePick(evt);
+  if(!hit || !hit.object.userData.airport) return;
+  const icao = hit.object.userData.airport.icao;
+  clearTimeout(_flightsGlobeClickTimer);
+  _flightsGlobeClickTimer = setTimeout(() => openAirportModal(icao), 260);
+}
+function openAirportModal(icao){
+  const F = FBShared;
+  icao = String(icao || '').toUpperCase();
+  const byDate = (a, b) => (b.date || '').localeCompare(a.date || '') || (b.id || '').localeCompare(a.id || '');
+  const deps = db.logbook.filter(f => F.up(f.dep) === icao).sort(byDate);
+  const arrs = db.logbook.filter(f => F.up(f.arr) === icao).sort(byDate);
+  const all = new Set([...deps, ...arrs]);
+  const info = cachedAirportLookup(icao);
+  const minutes = [...all].reduce((n, f) => n + (f.durationMin || 0), 0);
+  const others = new Set([...deps.map(f => F.up(f.arr)), ...arrs.map(f => F.up(f.dep))].filter(k => k && k !== icao));
+  const lrs = arrs.map(F.flightLandingRate).filter(v => v != null);
+  const avgLr = lrs.length ? -(lrs.reduce((n, v) => n + Math.abs(v), 0) / lrs.length) : null;
+  const hangar = FBShared.assignFlightsToHangar(db.hangar, db.logbook);
+  const acName = f => { for(const a of db.hangar) if(hangar[a.id].flights.includes(f)) return a.name; return f.aircraft || '—'; };
+  const table = (list, otherKey, otherLabel, showLanding) => list.length ? `<div style="overflow-x:auto;"><table class="phase-table">
+      <thead><tr><th>Date</th><th>Indicatif</th><th>${otherLabel}</th><th>Appareil</th><th>Durée</th>${showLanding ? '<th>Toucher</th>' : ''}<th></th></tr></thead>
+      <tbody>${list.map(f => {
+        const lr = F.flightLandingRate(f), g = F.flightLandingGrade(f);
+        return `<tr>
+          <td>${F.fmtDateFr(f.date)}</td>
+          <td>${escapeHtml(f.callsign || '—')}</td>
+          <td class="mono">${escapeHtml(f[otherKey] || '----')}</td>
+          <td>${escapeHtml(acName(f))}</td>
+          <td>${F.fmtHm(f.durationMin)}</td>
+          ${showLanding ? `<td>${lr != null ? `<span class="grade-dot" style="background:${g.color}"></span>${F.fmtFpm(lr)}` : '—'}</td>` : ''}
+          <td>${f.trackData ? `<button class="icon-btn" onclick="openRouteModal('${f.id}')">Carte</button>` : ''}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>` : '<div class="hint">Aucun vol.</div>';
+  el('airportModal').innerHTML = `
+    <div class="modal-head">
+      <div>
+        <div class="eyebrow">Aéroport</div>
+        <h3 style="font-size:18px;">${escapeHtml(icao)}${info && info.name ? ` <span class="hint" style="font-size:13px; font-family:var(--font-body);">— ${escapeHtml(info.name)}</span>` : ''}</h3>
+      </div>
+      <button class="icon-btn" onclick="closeAirportModal()">Fermer</button>
+    </div>
+    <div class="telemetry-grid">
+      <div class="tstat"><div class="cap">Départs</div><div class="val">${deps.length}</div></div>
+      <div class="tstat"><div class="cap">Arrivées</div><div class="val">${arrs.length}</div></div>
+      <div class="tstat"><div class="cap">Heures de vol</div><div class="val">${F.fmtHm(minutes)}</div></div>
+      <div class="tstat"><div class="cap">Terrains reliés</div><div class="val">${others.size}</div></div>
+      <div class="tstat"><div class="cap">Toucher moyen ici</div><div class="val">${F.fmtFpm(avgLr)}</div></div>
+      <div class="tstat"><div class="cap">Dernière visite</div><div class="val">${F.fmtDateFr([...all].map(f => f.date).filter(Boolean).sort().pop())}</div></div>
+    </div>
+    <h4 class="modal-subhead">🛫 Départs (${deps.length})</h4>
+    ${table(deps, 'arr', 'Destination', false)}
+    <h4 class="modal-subhead">🛬 Arrivées (${arrs.length})</h4>
+    ${table(arrs, 'dep', 'Provenance', true)}
+  `;
+  el('airportModalOverlay').classList.remove('hidden');
+  el('airportModal').scrollTop = 0;
+  hideFlightsGlobeTooltip();
+}
+function closeAirportModal(){ el('airportModalOverlay').classList.add('hidden'); }
+
 function resetFlightsGlobeView(){
   if(!flightsGlobeCamera) return;
   flyFlightsGlobeTo(flightsGlobeCamera.position.clone(), GLOBE_DEFAULT_DISTANCE);
@@ -3750,6 +4029,16 @@ async function endTour(){
   populateCareerSelect();
   populateHangarSelect();
   bindHangarLogbookControls();
+  bindHangarFormControls();
+  // Échap ferme la modale du hangar / de l'aéroport la plus haute.
+  document.addEventListener('keydown', e => {
+    if(e.key !== 'Escape') return;
+    if(!el('routeModalOverlay').classList.contains('hidden')) closeRouteModal(); // ouverte par-dessus les autres
+    else if(!el('hangarFormOverlay').classList.contains('hidden')) closeHangarForm();
+    else if(!el('hangarDetailOverlay').classList.contains('hidden')) closeHangarDetail();
+    else if(!el('airportModalOverlay').classList.contains('hidden')) closeAirportModal();
+    else if(!el('landingThresholdsOverlay').classList.contains('hidden')) closeLandingThresholds();
+  });
   renderLogbook();
   renderCareers();
   loadThemeIntoAdmin(db.theme);

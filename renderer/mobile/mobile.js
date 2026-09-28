@@ -42,9 +42,10 @@ function fmtTime(iso){
   const d = new Date(iso);
   return d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
 }
-function gradeHtml(fpm){
+// cat : catégorie d'avion (échelle de toucher propre à light/medium/heavy/jumbo).
+function gradeHtml(fpm, cat){
   if(fpm == null) return '—';
-  const g = F.landingGrade(fpm);
+  const g = F.landingGrade(fpm, cat);
   return `<i class="gdot" style="background:${g.color}"></i>${F.fmtFpm(fpm)}`;
 }
 function tile(k, v){ return `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
@@ -53,6 +54,8 @@ function assign(){
   if(!_assignCache) _assignCache = F.assignFlightsToHangar(DATA.hangar || [], DATA.logbook || []);
   return _assignCache;
 }
+// Catégorie d'un vol = celle de l'avion du hangar associé (échelle de toucher).
+F.setFlightCategoryResolver(f => { const ac = DATA && hangarOf(f); return ac ? ac.category || null : null; });
 function hangarOf(f){
   const a = assign();
   for(const ac of (DATA.hangar || [])) if(a[ac.id].flights.includes(f)) return ac;
@@ -205,7 +208,33 @@ function hideGate(){
 }
 
 /* ---------------- Navigation (onglets + écrans de détail via l'ancre #) ---------------- */
-function go(hash){ location.hash = hash; }
+// Profondeur de navigation interne : nombre d'écrans de détail ouverts par l'appli
+// elle-même (et donc qu'un history.back() peut refermer sans quitter l'appli).
+let _navDepth = 0;
+function go(hash){
+  const [kind] = String(hash).split('/');
+  if(['logbook','career','live','hangar','profile'].includes(kind)) _navDepth = 0; else _navDepth++;
+  location.hash = hash;
+}
+// Bouton « Retour » des écrans de détail.
+// Il ne dépend PLUS uniquement de history.back() : en appli installée (iOS/Android),
+// l'historique peut être vide ou « gelé » — typiquement quand l'appli a été rouverte
+// hors ligne, PC éteint, directement sur un écran de détail restauré. history.back()
+// ne fait alors rien et l'écran reste bloqué. On tente l'historique, et si la page n'a
+// pas changé d'ancre dans les 300 ms, on referme nous-mêmes l'écran.
+function sheetBack(){
+  const before = location.hash;
+  if(_navDepth > 0){
+    _navDepth--;
+    history.back();
+    setTimeout(() => { if(location.hash === before) closeToTab(); }, 300);
+  } else closeToTab();
+}
+function closeToTab(){
+  _navDepth = 0;
+  history.replaceState(null, '', location.pathname + location.search + '#' + _lastTab);
+  route();
+}
 function switchTab(tab){
   document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('main .view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab));
@@ -234,6 +263,8 @@ function route(){
   if(kind === 'flight') openFlight(a);
   else if(kind === 'tour') openTour(a, b);
   else if(kind === 'aircraft') openAircraft(a);
+  else if(kind === 'airport') openAirport(a);
+  else { closeToTab(); } // ancre inconnue : on ne laisse jamais un écran vide/bloqué
 }
 window.addEventListener('hashchange', route);
 function openSheet(title, html){
@@ -340,7 +371,7 @@ function flightCard(f){
       ${f.callsign ? `<span class="mono">${esc(f.callsign)}</span>` : ''}
       ${f.aircraft ? `<span>${esc(f.aircraft)}</span>` : ''}
       <span class="pill ${f.rules === 'VFR' ? 'vfr' : 'ifr'}">${esc(f.rules || '—')}</span>
-      ${lr != null ? `<span>${gradeHtml(lr)}</span>` : ''}
+      ${lr != null ? `<span>${gradeHtml(lr, F.flightCategory(f))}</span>` : ''}
     </div>
   </button>`;
 }
@@ -396,7 +427,7 @@ function openFlight(id){
       ${tile('Avion du hangar', ac ? esc(ac.name) : '—')}
       ${td ? tile('Altitude max', td.maxAltFt != null ? td.maxAltFt.toLocaleString('fr-FR') + ' ft' : '—') : ''}
       ${td ? tile('Vitesse max', td.maxIasKt != null ? td.maxIasKt + ' kt' : '—') : ''}
-      ${tile('Toucher', gradeHtml(lr))}
+      ${tile('Toucher', gradeHtml(lr, ac ? ac.category : null))}
       ${td ? tile('Rebonds', td.bounceCount ? td.bounceCount : 'Aucun') : ''}
       ${td && td.fuelUsedLbs != null ? tile('Carburant', td.fuelUsedLbs.toLocaleString('fr-FR') + ' lbs') : ''}
       ${td && td.turnStats && td.turnStats.maxBankDeg ? tile('Virage max', td.turnStats.maxBankDeg + '°') : ''}
@@ -521,7 +552,7 @@ function openTour(careerId, tourId){
       <td>${esc(x.leg.dep)}→${esc(x.leg.arr)}</td>
       <td>${F.fmtDateFr(x.flight ? x.flight.date : (x.leg.doneAt || '').slice(0, 10)).slice(0, 5)}</td>
       <td>${x.flight ? F.fmtHm(x.flight.durationMin) : '—'}</td>
-      <td>${x.landingFpm != null ? gradeHtml(x.landingFpm) : '—'}</td>
+      <td>${x.landingFpm != null ? gradeHtml(x.landingFpm, x.flight ? F.flightCategory(x.flight) : null) : '—'}</td>
     </tr>`).join('')}
     </tbody></table>
     <div class="note">Touche une étape pour voir le vol correspondant.${s.legs.some(x => x.leg.done && !x.flight) ? ' Certaines étapes validées n\'ont pas de vol correspondant dans le logbook.' : ''}</div>
@@ -544,17 +575,27 @@ function openTour(careerId, tourId){
 /* =========================================================
    HANGAR
    ========================================================= */
+const HANGAR_CATS = [
+  { key:'light', label:'Light', desc:'Monomoteurs & légers', color:'var(--phosphor)' },
+  { key:'medium', label:'Medium', desc:'Régionaux & moyen-courriers', color:'var(--ifr)' },
+  { key:'heavy', label:'Heavy', desc:'Gros porteurs', color:'var(--vfr)' },
+  { key:'jumbo', label:'Jumbo', desc:'Très gros porteurs', color:'#ff5c5c' },
+  { key:'none', label:'Sans catégorie', desc:'', color:'var(--text-2)' }
+];
+const catOf = ac => HANGAR_CATS.some(c => c.key === ac.category && c.key !== 'none') ? ac.category : 'none';
 function renderHangar(){
   const hangar = DATA.hangar || [];
   const a = assign();
-  const rows = hangar.map(ac => ({ ac, s: F.aircraftStats(a[ac.id].flights, lookup) }))
+  const rows = hangar.map(ac => ({ ac, s: F.aircraftStats(a[ac.id].flights, lookup, ac.category || null) }))
     .sort((x, y) => y.s.totalMin - x.s.totalMin);
   $('view-hangar').innerHTML = `
     <div class="stats two">
       ${stat('Avions', hangar.length, 'var(--ifr)')}
       ${stat('Heures', F.fmtHm(rows.reduce((n, r) => n + r.s.totalMin, 0)))}
     </div>
-    ${rows.length ? `<div class="list" style="margin-top:12px;">${rows.map(({ ac, s }) => `
+    ${rows.length ? HANGAR_CATS.filter(c => rows.some(r => catOf(r.ac) === c.key)).map(c => `
+      <h2 class="section" style="color:${c.color}">${c.label}${c.key !== 'none' ? ` <span class="muted" style="font-weight:500; font-size:12px;">${c.desc}</span>` : ''}</h2>
+      <div class="list">${rows.filter(r => catOf(r.ac) === c.key).map(({ ac, s }) => `
       <button class="card ac-card" onclick="go('aircraft/${esc(ac.id)}')">
         <div class="top"><span class="type">${esc(ac.icaoType || 'Avion')}</span>${ac.developer ? `<span class="reg">${esc(ac.developer)}</span>` : ''}</div>
         <div class="name">${esc(ac.name)}</div>
@@ -564,7 +605,7 @@ function renderHangar(){
           <div><div class="k">NM</div><div class="v">${s.distanceNm ? Math.round(s.distanceNm).toLocaleString('fr-FR') : '—'}</div></div>
           <div><div class="k">Toucher</div><div class="v">${s.avgLandingFpm != null ? '−' + Math.round(Math.abs(s.avgLandingFpm)) : '—'}</div></div>
         </div>
-      </button>`).join('')}</div>` : '<div class="empty">Ton hangar est vide. Ajoute tes avions depuis l\'onglet Hangar de FlightBrief sur ton PC.</div>'}
+      </button>`).join('')}</div>`).join('') : '<div class="empty">Ton hangar est vide. Ajoute tes avions depuis l\'onglet Hangar de FlightBrief sur ton PC.</div>'}
     ${a._unassigned.length && rows.length ? `<div class="note">${a._unassigned.length} vol${a._unassigned.length > 1 ? 's' : ''} du logbook ne sont associés à aucun avion du hangar.</div>` : ''}
   `;
 }
@@ -573,9 +614,10 @@ function openAircraft(id){
   const ac = (DATA.hangar || []).find(x => x.id === id);
   if(!ac){ go(_lastTab); return; }
   const flights = [...assign()[ac.id].flights].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const s = F.aircraftStats(flights, lookup);
-  const gradeTotal = F.LANDING_GRADES.reduce((n, g) => n + s.grades[g.key], 0);
-  const gradeMax = Math.max(1, ...F.LANDING_GRADES.map(g => s.grades[g.key]));
+  const cat = ac.category || null, GR = F.landingGradesFor(cat);
+  const s = F.aircraftStats(flights, lookup, cat);
+  const gradeTotal = GR.reduce((n, g) => n + s.grades[g.key], 0);
+  const gradeMax = Math.max(1, ...GR.map(g => s.grades[g.key]));
   const topAirports = Object.entries(s.airports).sort((a, b) => b[1] - a[1]).slice(0, 5);
   openSheet(ac.name, `
     <div class="hero">
@@ -587,20 +629,51 @@ function openAircraft(id){
       ${tile('Heures de vol', F.fmtHm(s.totalMin))}
       ${tile('Distance', s.distanceNm ? F.fmtNm(s.distanceNm) : '—')}
       ${tile('Durée moyenne', s.avgMin != null ? F.fmtHm(s.avgMin) : '—')}
-      ${tile('Toucher moyen', gradeHtml(s.avgLandingFpm))}
-      ${tile('Meilleur toucher', s.bestLanding ? gradeHtml(s.bestLanding.fpm) : '—')}
-      ${tile('Plus dur', s.worstLanding ? gradeHtml(s.worstLanding.fpm) : '—')}
+      ${tile('Toucher moyen', gradeHtml(s.avgLandingFpm, cat))}
+      ${tile('Meilleur toucher', s.bestLanding ? gradeHtml(s.bestLanding.fpm, cat) : '—')}
+      ${tile('Plus dur', s.worstLanding ? gradeHtml(s.worstLanding.fpm, cat) : '—')}
       ${tile('Rebonds', s.landingCount ? s.bounceTotal : '—')}
       ${tile('Altitude max', s.maxAltFt != null ? s.maxAltFt.toLocaleString('fr-FR') + ' ft' : '—')}
       ${tile('Conso. moyenne', s.fuelPerHourLbs != null ? Math.round(s.fuelPerHourLbs).toLocaleString('fr-FR') + ' lbs/h' : '—')}
       ${tile('Premier vol', F.fmtDateFr(s.firstDate))}
       ${tile('Dernier vol', F.fmtDateFr(s.lastDate))}
     </div>
-    ${gradeTotal ? `<h2 class="section">Qualité des atterrissages</h2>${F.LANDING_GRADES.map(g => `
+    ${gradeTotal ? `<h2 class="section">Qualité des atterrissages</h2>${GR.map(g => `
       <div class="grade-row"><span>${g.label}</span><div class="track"><div style="width:${Math.round(s.grades[g.key] / gradeMax * 100)}%; background:${g.color}"></div></div><span class="n">${s.grades[g.key]}</span></div>`).join('')}` : ''}
     ${topAirports.length ? `<h2 class="section">Aéroports les plus fréquentés</h2><div class="card toplist">${topAirports.map(([k, n]) => `<div class="r"><span class="mono">${esc(k)} <span class="muted" style="font-family:var(--font-body)">${esc((lookup(k) || {}).name || '')}</span></span><span class="n">${n}</span></div>`).join('')}</div>` : ''}
     <h2 class="section">Vols (${flights.length})</h2>
     ${flights.length ? `<div class="list">${flights.map(flightCard).join('')}</div>` : '<div class="empty">Aucun vol associé à cet avion.</div>'}
+  `);
+}
+
+/* =========================================================
+   AÉROPORT — départs et arrivées effectués depuis/vers un terrain
+   (ouvert en touchant un aéroport sur la carte du profil)
+   ========================================================= */
+function openAirport(icao){
+  icao = String(icao || '').toUpperCase();
+  const flights = sortedFlights();
+  const deps = flights.filter(f => F.up(f.dep) === icao), arrs = flights.filter(f => F.up(f.arr) === icao);
+  if(!deps.length && !arrs.length){ closeToTab(); return; }
+  const info = lookup(icao) || {};
+  const all = new Set([...deps, ...arrs]);
+  const min = [...all].reduce((n, f) => n + (f.durationMin || 0), 0);
+  openSheet(icao, `
+    <div class="hero">
+      <div class="eyebrow">Aéroport</div>
+      <div class="big" style="font-family:var(--font-display); font-size:22px;">${esc(icao)}</div>
+      ${info.name ? `<div class="note" style="margin-top:2px;">${esc(info.name)}</div>` : ''}
+    </div>
+    <div class="tiles">
+      ${tile('Départs', deps.length)}
+      ${tile('Arrivées', arrs.length)}
+      ${tile('Vols', all.size)}
+      ${tile('Heures', F.fmtHm(min))}
+    </div>
+    <h2 class="section">🛫 Départs (${deps.length})</h2>
+    ${deps.length ? `<div class="list">${deps.map(flightCard).join('')}</div>` : '<div class="empty">Aucun départ depuis ce terrain.</div>'}
+    <h2 class="section">🛬 Arrivées (${arrs.length})</h2>
+    ${arrs.length ? `<div class="list">${arrs.map(flightCard).join('')}</div>` : '<div class="empty">Aucune arrivée sur ce terrain.</div>'}
   `);
 }
 
@@ -633,6 +706,7 @@ function renderProfile(){
     </div>
     <h2 class="section">Mes vols dans le monde</h2>
     <div class="map tall" id="profileMap"></div>
+    <div class="note" style="margin-top:6px;">Touche un aéroport pour voir ses départs et arrivées.</div>
     ${vfr + ifr ? `<h2 class="section">VFR / IFR</h2>
       <div class="rules-bar"><div class="v" style="width:${vfr / (vfr + ifr) * 100}%"></div><div class="i" style="width:${ifr / (vfr + ifr) * 100}%"></div></div>
       <div class="note">${Math.round(vfr / (vfr + ifr) * 100)} % VFR (${vfr}) · ${Math.round(ifr / (vfr + ifr) * 100)} % IFR (${ifr})</div>` : ''}
@@ -676,7 +750,8 @@ function drawProfileMap(){
   Object.entries(usage).sort((a, b) => a[1] - b[1]).forEach(([icao, n]) => {
     const a = lookup(icao); if(!a) return;
     L.circleMarker([a.lat, a.lon], { radius: 3 + 4 * Math.sqrt(n / maxU), color:'#0a0d11', weight:1.5, fillColor:'#39e88f', fillOpacity:1 })
-      .bindTooltip(`${icao} · ${n} vol${n > 1 ? 's' : ''}`, { direction:'top', className:'lbl' }).addTo(map);
+      .bindTooltip(`${icao} · ${n} vol${n > 1 ? 's' : ''}`, { direction:'top', className:'lbl' })
+      .on('click', () => go('airport/' + icao)).addTo(map);
     pts.push([a.lat, a.lon]);
   });
   // Cadrage sur la zone principale d'activité : si ≥ 75 % des passages se font à moins de
@@ -861,6 +936,7 @@ function renderLiveView(){
 function renderAll(){
   if(!DATA) return;
   hideGate();
+  F.setLandingThresholds(DATA.profile && DATA.profile.landingThresholds);
   $('appTitle').textContent = DATA.profile && DATA.profile.firstName ? 'FlightBrief · ' + DATA.profile.firstName : 'FlightBrief';
   renderLive();
   renderLogbook();

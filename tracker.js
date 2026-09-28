@@ -176,8 +176,30 @@ function nearestAirport(lat, lon, rendererDir) {
 }
 
 // Projette le point de toucher des roues sur la piste la plus probable de l'aéroport
-// d'arrivée (déduite du cap au moment du toucher) et calcule la distance depuis le
-// seuil ainsi que l'écart latéral par rapport à l'axe.
+// d'arrivée et calcule la distance depuis le seuil ainsi que l'écart latéral par rapport
+// à l'axe.
+//
+// Choix de la piste : le cap seul ne suffit PAS. Des pistes parallèles (34L / 34C / 34R,
+// 27L / 27R…) ont exactement le même QFU dans la base OurAirports : avant, la première de
+// la liste gagnait, et un atterrissage parfait sur 34R était mesuré « à 300 m à droite »
+// de 34C. Désormais chaque seuil compatible avec le cap est évalué GÉOMÉTRIQUEMENT et on
+// garde celui dont l'axe passe le plus près du point de toucher, en pénalisant un toucher
+// hors de la longueur de piste et, à peine, l'écart de cap.
+const RUNWAY_HDG_TOLERANCE_DEG = 45;
+function runwayGeometry(c, touchdownPoint) {
+  const mPerDegLat = 111320;
+  const cosLat = Math.cos(c.thresholdLat * Math.PI / 180);
+  const toXY = (lat, lon) => ({ x: (lon - c.thresholdLon) * mPerDegLat * cosLat, y: (lat - c.thresholdLat) * mPerDegLat });
+  const opp = toXY(c.oppositeLat, c.oppositeLon);
+  const tdz = toXY(touchdownPoint.lat, touchdownPoint.lon);
+  const rwyLenM = Math.hypot(opp.x, opp.y) || 1;
+  const ux = opp.x / rwyLenM, uy = opp.y / rwyLenM; // vecteur unitaire seuil -> extrémité opposée
+  return {
+    rwyLenM,
+    alongM: tdz.x * ux + tdz.y * uy,   // distance depuis le seuil, projetée sur l'axe
+    lateralM: tdz.x * uy - tdz.y * ux  // écart perpendiculaire (signé, + = à droite)
+  };
+}
 function computeTouchdownZone(touchdownPoint, arrIcao, rendererDir) {
   if (!arrIcao || !touchdownPoint) return null;
   const runways = loadRunways(rendererDir)[arrIcao];
@@ -186,6 +208,7 @@ function computeTouchdownZone(touchdownPoint, arrIcao, rendererDir) {
   let best = null;
   for (const rwy of runways) {
     if (rwy.leHdg == null || rwy.heHdg == null) continue;
+    if (rwy.leLat == null || rwy.heLat == null) continue;
     const candidates = [
       { thresholdIdent: rwy.le, thresholdLat: rwy.leLat, thresholdLon: rwy.leLon, thresholdHdg: rwy.leHdg,
         oppositeLat: rwy.heLat, oppositeLon: rwy.heLon, oppositeIdent: rwy.he },
@@ -193,30 +216,21 @@ function computeTouchdownZone(touchdownPoint, arrIcao, rendererDir) {
         oppositeLat: rwy.leLat, oppositeLon: rwy.leLon, oppositeIdent: rwy.le }
     ];
     for (const c of candidates) {
-      const diff = headingDiff(touchdownPoint.hdg, c.thresholdHdg);
-      if (!best || diff < best.diff) best = { ...c, diff, rwy };
+      const diff = touchdownPoint.hdg != null ? headingDiff(touchdownPoint.hdg, c.thresholdHdg) : 0;
+      if (diff > RUNWAY_HDG_TOLERANCE_DEG) continue; // sens opposé / piste sécante
+      const g = runwayGeometry(c, touchdownPoint);
+      // Hors de la piste dans le sens de la longueur (avant le seuil ou après l'extrémité) :
+      // pénalité proportionnelle, 150 m de marge avant le seuil (seuil décalé, toucher court).
+      const outside = g.alongM < -150 ? (-150 - g.alongM) : g.alongM > g.rwyLenM ? (g.alongM - g.rwyLenM) : 0;
+      const score = Math.abs(g.lateralM) + outside + diff * 3;
+      if (!best || score < best.score) best = { ...c, ...g, diff, rwy, score };
     }
   }
-  if (!best || best.diff > 55) return null; // aucune piste plausible
+  if (!best) return null; // aucune piste plausible
 
-  // Projection plan local (équirectangulaire, valable sur de courtes distances)
-  const mPerDegLat = 111320;
-  const cosLat = Math.cos(best.thresholdLat * Math.PI / 180);
-  const toXY = (lat, lon) => ({
-    x: (lon - best.thresholdLon) * mPerDegLat * cosLat,
-    y: (lat - best.thresholdLat) * mPerDegLat
-  });
-  const opp = toXY(best.oppositeLat, best.oppositeLon);
-  const tdz = toXY(touchdownPoint.lat, touchdownPoint.lon);
-  const rwyLenM = Math.hypot(opp.x, opp.y) || 1;
-  const ux = opp.x / rwyLenM, uy = opp.y / rwyLenM; // vecteur unitaire seuil -> extrémité opposée
-
-  const alongM = tdz.x * ux + tdz.y * uy;           // distance depuis le seuil, projetée sur l'axe
-  const lateralM = tdz.x * uy - tdz.y * ux;         // écart perpendiculaire (signé)
-
-  const lengthFt = best.rwy.lengthFt || Math.round(rwyLenM * 3.28084);
-  const distanceFromThresholdFt = Math.round(alongM * 3.28084);
-  const lateralOffsetFt = Math.round(lateralM * 3.28084);
+  const lengthFt = best.rwy.lengthFt || Math.round(best.rwyLenM * 3.28084);
+  const distanceFromThresholdFt = Math.round(best.alongM * 3.28084);
+  const lateralOffsetFt = Math.round(best.lateralM * 3.28084);
 
   return {
     runway: `${best.thresholdIdent}${best.oppositeIdent ? '/' + best.oppositeIdent : ''}`,

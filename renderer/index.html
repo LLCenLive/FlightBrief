@@ -231,8 +231,16 @@
             <option value="rejected">Refusé</option>
           </select>
         </div>
-        <div class="field"><label>Remarques</label><input type="text" id="lbRemarks" placeholder="ex : turbulences en approche"></div>
+        <div class="field">
+          <label>Distance (NM)</label>
+          <div class="input-with-btn">
+            <input type="number" id="lbDistance" min="0" step="1" placeholder="auto">
+            <button class="btn small" type="button" id="lbDistanceEstimate" onclick="estimateLogbookDistance()" title="Distance directe (orthodromie) entre départ et arrivée, majorée de 5 % en IFR pour tenir compte des routes aériennes">Estimer</button>
+          </div>
+          <div class="hint" id="lbDistanceHint">Pour un vol fait sans le tracker. Vide = distance directe départ → arrivée.</div>
+        </div>
       </div>
+      <div class="field"><label>Remarques</label><input type="text" id="lbRemarks" placeholder="ex : turbulences en approche"></div>
       <div class="btn-row">
         <button class="btn primary" onclick="saveLogbookEntry()">Enregistrer le vol</button>
         <button class="btn" onclick="resetLogbookForm()">Annuler</button>
@@ -243,7 +251,7 @@
       <h3>Historique</h3>
       <div style="overflow-x:auto;">
         <table>
-          <thead><tr><th>Date</th><th>Indicatif</th><th>Trajet</th><th>Appareil</th><th>Règles</th><th>Durée</th><th>Réseau</th><th>Carrière</th><th>PIREP</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Indicatif</th><th>Trajet</th><th>Appareil</th><th>Règles</th><th>Durée</th><th>Distance</th><th>Réseau</th><th>Carrière</th><th>PIREP</th><th></th></tr></thead>
           <tbody id="logbookRows"></tbody>
         </table>
         <div class="empty-state" id="logbookEmpty">Aucun vol enregistré pour le moment.</div>
@@ -306,9 +314,15 @@
 
   <!-- ================= HANGAR VIEW ================= -->
   <div class="view" id="view-hangar">
-    <div class="page-head">
-      <h1>Hangar</h1>
-      <p>Tes avions et leurs statistiques, calculées à partir du logbook : heures de vol, distance, qualité des atterrissages… Les vols sont associés via le champ « Avion du hangar » du logbook, ou automatiquement grâce aux mots-clés de chaque avion.</p>
+    <div class="page-head with-action">
+      <div>
+        <h1>Hangar</h1>
+        <p>Tes avions et leurs statistiques, calculées à partir du logbook : heures de vol, distance, qualité des atterrissages… Les vols sont associés via le champ « Avion du hangar » du logbook, ou automatiquement grâce aux mots-clés de chaque avion.</p>
+      </div>
+      <div class="head-actions">
+        <button class="btn" onclick="openLandingThresholds()" title="Beurre, doux, ferme, dur : seuils réglables pour chaque catégorie d'avion">⚙ Seuils de toucher</button>
+        <button class="btn primary" onclick="openHangarForm()">＋ Ajouter un avion</button>
+      </div>
     </div>
 
     <div class="stat-row" id="hgStatRow">
@@ -317,29 +331,8 @@
       <div class="stat-card" style="--stat-accent:var(--accent-vfr);"><span class="stat-icon">❔</span><div class="cap">Vols sans avion associé</div><div class="val" id="hgStatUnassigned">0</div></div>
     </div>
 
-    <div class="hangar-grid" id="hangarGrid"></div>
-
-    <div class="card-panel hidden" id="hangarDetail"></div>
-
-    <div class="card-panel" id="hangarFormPanel">
-      <h3 id="hangarFormTitle">Ajouter un avion</h3>
-      <div class="row3">
-        <div class="field"><label>Nom</label><input type="text" id="hgName" placeholder="ex : A320neo"></div>
-        <div class="field"><label>Code OACI</label><input type="text" id="hgType" placeholder="ex : A20N" maxlength="4" style="text-transform:uppercase;"></div>
-        <div class="field"><label>Éditeur</label><input type="text" id="hgDeveloper" list="hgDevList" placeholder="ex : Fenix, iniBuilds, PMDG…">
-          <datalist id="hgDevList"><option value="Asobo"><option value="Fenix"><option value="iniBuilds"><option value="PMDG"><option value="FlyByWire"><option value="Headwind"><option value="Aerosoft"><option value="Leonardo"><option value="Just Flight"><option value="Black Square"><option value="Carenado"><option value="Hans Hartmann"></datalist>
-        </div>
-      </div>
-      <div class="field">
-        <label>Mots-clés (séparés par des virgules)</label>
-        <input type="text" id="hgKeys" placeholder="ex : Fenix A320, A320neo, F-HBNA">
-        <div class="hint">Les vols du logbook dont le champ « Appareil » (ou l'avion détecté dans le simulateur) contient l'un de ces mots sont rattachés automatiquement à cet avion. Le nom et le code OACI comptent aussi comme mots-clés.</div>
-      </div>
-      <div class="btn-row">
-        <button class="btn primary" onclick="saveHangarAircraft()">Enregistrer l'avion</button>
-        <button class="btn" onclick="resetHangarForm()">Annuler</button>
-      </div>
-    </div>
+    <div class="chips hangar-filter" id="hangarCatFilter"></div>
+    <div id="hangarGrid"></div>
   </div>
 
   <!-- ================= OUTIL LIVE VIEW ================= -->
@@ -827,6 +820,9 @@
         </div>
         <div class="status-msg" id="pfStatus"></div>
 
+        <h2>Réglages</h2>
+        <div class="btn-row"><button class="btn block" onclick="openLandingThresholds()">⚙ Seuils de toucher par catégorie</button></div>
+
         <h2>Visite guidée</h2>
         <div class="btn-row"><button class="btn block" onclick="startTour()">Revoir la visite guidée</button></div>
       </div>
@@ -870,7 +866,7 @@
 
         <div class="card-panel" id="flightsGlobePanel" style="padding-bottom:14px;">
           <h3>Mes vols dans le monde</h3>
-          <div class="hint" style="margin-top:-6px; margin-bottom:12px;">Trajets de tous les vols enregistrés dans ton logbook, projetés sur un globe 3D. Glisse pour orienter, molette pour zoomer, survole un aéroport pour isoler ses trajets, double-clic dessus pour zoomer.</div>
+          <div class="hint" style="margin-top:-6px; margin-bottom:12px;">Trajets de tous les vols enregistrés dans ton logbook, projetés sur un globe 3D. Glisse pour orienter, molette pour zoomer, survole un aéroport pour isoler ses trajets, clique dessus pour voir ses départs et arrivées, double-clic pour zoomer.</div>
           <div class="globe-filter-row">
             <input type="text" id="fgSearch" placeholder="Filtrer par indicatif ou appareil">
             <div class="toggle-group" id="fgRulesToggle" data-rules="all">
@@ -901,6 +897,81 @@
 </main>
 
 <footer class="app-footer">Application Vibe codée par LLCenLive avec Claude Sonnet 5</footer>
+
+<!-- ================= MODALE AJOUT / MODIFICATION D'UN AVION (hangar) ================= -->
+<div class="modal-overlay hidden" id="hangarFormOverlay" onclick="if(event.target===this) closeHangarForm()">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="hangarFormTitle">Ajouter un avion</h3>
+      <button class="icon-btn" onclick="closeHangarForm()">Fermer</button>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Nom</label><input type="text" id="hgName" placeholder="ex : A320neo"></div>
+      <div class="field"><label>Catégorie</label>
+        <select id="hgCategory">
+          <option value="">— Choisir —</option>
+          <option value="light">Light — monomoteurs, légers (C172, DA40, TBM…)</option>
+          <option value="medium">Medium — régionaux, moyen-courriers (ATR, A320, 737…)</option>
+          <option value="heavy">Heavy — gros porteurs (A330, 787, 777…)</option>
+          <option value="jumbo">Jumbo — très gros porteurs (747, A380)</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Code OACI</label><input type="text" id="hgType" placeholder="ex : A20N" maxlength="4" style="text-transform:uppercase;"></div>
+      <div class="field"><label>Éditeur</label><input type="text" id="hgDeveloper" list="hgDevList" placeholder="ex : Fenix, iniBuilds, PMDG…">
+        <datalist id="hgDevList"><option value="Asobo"><option value="Fenix"><option value="iniBuilds"><option value="PMDG"><option value="FlyByWire"><option value="Headwind"><option value="Aerosoft"><option value="Leonardo"><option value="Just Flight"><option value="Black Square"><option value="Carenado"><option value="Hans Hartmann"></datalist>
+      </div>
+    </div>
+    <div class="field">
+      <label>Mots-clés (séparés par des virgules)</label>
+      <input type="text" id="hgKeys" placeholder="ex : Fenix A320, A320neo, F-HBNA">
+      <div class="hint">Les vols du logbook dont le champ « Appareil » (ou le nom de l'avion détecté dans le simulateur) contient l'un de ces mots sont rattachés automatiquement à cet avion. Le nom et le code OACI comptent aussi comme mots-clés.</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="saveHangarAircraft()">Enregistrer l'avion</button>
+      <button class="btn" onclick="closeHangarForm()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODALE DÉTAIL D'UN AVION (hangar) =================
+     Avant la modale de trajet : le bouton "Carte" d'un vol s'ouvre par-dessus. -->
+<div class="modal-overlay hidden" id="hangarDetailOverlay" onclick="if(event.target===this) closeHangarDetail()">
+  <div class="modal modal-wide" id="hangarDetail"></div>
+</div>
+
+<!-- ================= MODALE AÉROPORT (globe du profil) ================= -->
+<div class="modal-overlay hidden" id="airportModalOverlay" onclick="if(event.target===this) closeAirportModal()">
+  <div class="modal modal-wide" id="airportModal"></div>
+</div>
+
+<!-- ================= MODALE SEUILS DE TOUCHER PAR CATÉGORIE ================= -->
+<div class="modal-overlay hidden" id="landingThresholdsOverlay" onclick="if(event.target===this) closeLandingThresholds()">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <div>
+        <h3>Seuils de toucher par catégorie</h3>
+        <div class="hint" style="margin-top:3px;">Taux de chute au toucher en ft/min (valeur absolue). Un vol est jugé avec l'échelle de la catégorie de son avion du hangar.</div>
+      </div>
+      <button class="icon-btn" onclick="closeLandingThresholds()">Fermer</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="lt-table">
+        <thead><tr><th>Catégorie</th><th><i class="grade-dot" style="background:#39e88f"></i>Beurre</th><th><i class="grade-dot" style="background:#54d6e8"></i>Doux</th><th><i class="grade-dot" style="background:#ffb020"></i>Ferme</th><th><i class="grade-dot" style="background:#ff5c5c"></i>Dur</th><th>Échelle</th></tr></thead>
+        <tbody id="ltRows"></tbody>
+      </table>
+    </div>
+    <div class="status-msg" id="ltStatus"></div>
+    <div class="btn-row" style="justify-content:space-between;">
+      <button class="btn small" onclick="resetLandingThresholdsModal()">Valeurs par défaut</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" onclick="closeLandingThresholds()">Annuler</button>
+        <button class="btn primary" onclick="saveLandingThresholds()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ================= MODALE DÉTAIL D'UN TOUR (carrière) =================
      Placée AVANT la modale de trajet : le bouton "Carte" d'une étape ouvre la modale

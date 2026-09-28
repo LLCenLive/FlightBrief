@@ -579,3 +579,44 @@ input.tool-output{color:var(--phosphor); border-color:color-mix(in srgb, var(--p
 .tm-state.done{color:var(--phosphor); background:rgba(57,232,143,.14);}
 .tm-go{flex:none; font-family:var(--font-display); font-size:11px; color:var(--phosphor);}
 .tour-card.tour-flash{border-color:var(--phosphor); box-shadow:0 0 0 1px var(--phosphor), 0 0 24px rgba(57,232,143,.3); transition:box-shadow .3s, border-color .3s;}
+
+/* ---------- Hangar : en-tête avec action, catégories, modales ---------- */
+.page-head.with-action{display:flex; align-items:flex-start; justify-content:space-between; gap:18px;}
+.page-head.with-action > .btn{flex:none; margin-top:2px; white-space:nowrap;}
+.hangar-filter{margin-bottom:14px;}
+.hangar-filter .toggle-group{width:auto; display:inline-flex; flex-wrap:wrap;}
+.hangar-filter .toggle-group button{padding:8px 14px; white-space:nowrap;}
+.hangar-cat{margin-bottom:22px;}
+.hangar-cat-head{display:flex; align-items:baseline; gap:10px; margin:0 0 10px; padding-bottom:8px; border-bottom:1px solid var(--hairline);}
+.hangar-cat-head .ic{font-size:16px; align-self:center;}
+.hangar-cat-head h3{font-family:var(--font-display); font-size:15px; margin:0; color:var(--cat);}
+.hangar-cat-head .desc{color:var(--text-secondary); font-size:12px;}
+.hangar-cat-head .meta{margin-left:auto; font-family:var(--font-mono); font-size:12px; color:var(--text-secondary);}
+.hangar-cat .hangar-grid{margin-bottom:0;}
+.hc-cat{font-family:var(--font-display); font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--cat); border:1px solid color-mix(in srgb, var(--cat) 45%, transparent); border-radius:6px; padding:1px 6px;}
+.hangar-card.flash{animation:hcFlash 1.5s ease;}
+@keyframes hcFlash{0%,40%{box-shadow:0 0 0 2px var(--phosphor), 0 0 26px rgba(57,232,143,.35);} 100%{box-shadow:none;}}
+.hangar-empty{border:1px dashed var(--hairline); border-radius:12px; padding:40px 20px; text-align:center; color:var(--text-secondary); font-size:13px;}
+#hangarDetail .hd-head{margin-bottom:6px;}
+/* ---------- Seuils de toucher par catégorie (modale) ---------- */
+.head-actions{display:flex; gap:8px; flex:none; margin-top:2px;}
+.head-actions .btn{white-space:nowrap;}
+.lt-table{width:100%; border-collapse:collapse;}
+.lt-table th{font-family:var(--font-display); font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--text-secondary); text-align:left; padding:8px 8px; border-bottom:1px solid var(--hairline); white-space:nowrap;}
+.lt-table th .grade-dot{margin-right:6px;}
+.lt-table td{padding:10px 8px; border-bottom:1px solid var(--hairline); color:var(--text-secondary); font-size:12.5px; white-space:nowrap; vertical-align:middle;}
+.lt-table td .hint{white-space:normal; margin-top:2px;}
+.lt-table input{width:74px; padding:6px 8px; margin-left:4px;}
+.lt-cat{font-family:var(--font-display); font-weight:700; font-size:13px; color:var(--cat);}
+.lt-hard{font-family:var(--font-mono); color:#ff8f8f !important;}
+.lt-scale{width:22%; min-width:140px;}
+.lt-bar{display:flex; height:8px; border-radius:4px; overflow:hidden; gap:2px;}
+.lt-bar span{display:block; height:100%;}
+/* ---------- Modale aéroport (globe) ---------- */
+.ap-cols{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+.ap-cols .phase-table td, .ap-cols .phase-table th{white-space:nowrap;}
+@media (max-width:900px){ .ap-cols{grid-template-columns:1fr;} }
+.phase-table td.mono{font-family:var(--font-mono);}
+.input-with-btn{display:flex; gap:6px;}
+.input-with-btn input{flex:1; min-width:0;}
+.input-with-btn .btn{flex:none;}

@@ -52,11 +52,14 @@
     const d = f && f.trackData && f.trackData.distanceNm;
     return (d == null || isNaN(d) || d <= 0) ? null : Number(d);
   }
-  // Distance d'un vol : mesurée (vol tracké) sinon orthodromie départ -> arrivée si les
+  // Distance d'un vol : mesurée (vol tracké), sinon saisie à la main, sinon orthodromie départ -> arrivée si les
   // coordonnées sont connues (lookup : OACI -> {lat, lon} | null).
   function flightDistance(f, lookup){
     const tracked = flightTrackedDistance(f);
     if(tracked != null) return { nm: tracked, estimated: false };
+    // Vol ajouté à la main : distance saisie (ou estimée via le bouton « Estimer »).
+    const manual = f && f.distanceNm != null && !isNaN(f.distanceNm) && Number(f.distanceNm) > 0 ? Number(f.distanceNm) : null;
+    if(manual != null) return { nm: manual, estimated: false, manual: true };
     if(lookup && f && f.dep && f.arr){
       const a = lookup(up(f.dep)), b = lookup(up(f.arr));
       if(a && b) return { nm: Math.round(haversineNm(a.lat, a.lon, b.lat, b.lon)), estimated: true };
@@ -70,11 +73,63 @@
     { key:'firm',   label:'Ferme (240–400)', max:400, color:'#ffb020' },
     { key:'hard',   label:'Dur (> 400)', max:Infinity, color:'#ff5c5c' }
   ];
-  function landingGrade(fpm){
-    if(fpm == null) return null;
-    const a = Math.abs(fpm);
-    return LANDING_GRADES.find(g => a < g.max) || LANDING_GRADES[LANDING_GRADES.length - 1];
+  /* ---------------- Seuils de toucher PAR CATÉGORIE d'avion ----------------
+     Réglés par l'utilisateur (Hangar → « Seuils de toucher »), en ft/min, valeur absolue :
+     beurre < butter ≤ doux < smooth ≤ ferme < firm ≤ dur.
+     Catégories du hangar : light / medium / heavy / jumbo ; « none » = avion sans catégorie
+     ou vol non rattaché au hangar. Stocké dans userProfile.landingThresholds sous la forme
+     { light:{butter,smooth,firm}, medium:{…}, heavy:{…}, jumbo:{…}, none:{…} }.
+     LANDING_GRADES (sans catégorie) reste l'échelle par défaut, modifiée sur place. */
+  const LANDING_CATEGORIES = ['light', 'medium', 'heavy', 'jumbo', 'none'];
+  const DEFAULT_LANDING_THRESHOLDS = {
+    light:  { butter: 80,  smooth: 180, firm: 300 },
+    medium: { butter: 100, smooth: 240, firm: 400 },
+    heavy:  { butter: 120, smooth: 280, firm: 450 },
+    jumbo:  { butter: 140, smooth: 300, firm: 500 },
+    none:   { butter: 100, smooth: 240, firm: 400 }
+  };
+  function catKey(cat){ return LANDING_CATEGORIES.includes(cat) ? cat : 'none'; }
+  function normLandingThresholds(t, cat){
+    const d = DEFAULT_LANDING_THRESHOLDS[catKey(cat)], n = v => { v = Math.round(Number(v)); return isFinite(v) && v > 0 ? v : null; };
+    let b = n(t && t.butter) || d.butter, s = n(t && t.smooth) || d.smooth, f = n(t && t.firm) || d.firm;
+    if(s <= b) s = b + 1;
+    if(f <= s) f = s + 1;
+    return { butter: b, smooth: s, firm: f };
   }
+  function buildGrades(x){
+    return [
+      { key:'butter', label:`Beurre (< ${x.butter})`, max:x.butter, color:'#39e88f' },
+      { key:'smooth', label:`Doux (${x.butter}–${x.smooth})`, max:x.smooth, color:'#54d6e8' },
+      { key:'firm',   label:`Ferme (${x.smooth}–${x.firm})`, max:x.firm, color:'#ffb020' },
+      { key:'hard',   label:`Dur (> ${x.firm})`, max:Infinity, color:'#ff5c5c' }
+    ];
+  }
+  let _thresholds = {}, _gradesByCat = {};
+  // Accepte aussi l'ancien format à un seul jeu de seuils ({butter, smooth, firm}).
+  function setLandingThresholds(all){
+    const legacy = all && all.butter != null ? all : null;
+    _thresholds = {}; _gradesByCat = {};
+    LANDING_CATEGORIES.forEach(c => {
+      const src = legacy ? (c === 'none' || c === 'medium' ? legacy : null) : (all && all[c]);
+      _thresholds[c] = normLandingThresholds(src, c);
+      _gradesByCat[c] = buildGrades(_thresholds[c]);
+    });
+    buildGrades(_thresholds.none).forEach((g, i) => Object.assign(LANDING_GRADES[i], g));
+    return JSON.parse(JSON.stringify(_thresholds));
+  }
+  function getLandingThresholds(){ return JSON.parse(JSON.stringify(_thresholds)); }
+  function landingGradesFor(cat){ return _gradesByCat[catKey(cat)] || LANDING_GRADES; }
+  // Catégorie d'un vol (celle de l'avion du hangar associé) : fournie par l'appli via
+  // setFlightCategoryResolver, puisque l'association dépend du hangar.
+  let _catResolver = () => null;
+  function setFlightCategoryResolver(fn){ _catResolver = typeof fn === 'function' ? fn : () => null; }
+  function flightCategory(f){ try{ return _catResolver(f) || null; }catch(e){ return null; } }
+  function landingGrade(fpm, cat){
+    if(fpm == null) return null;
+    const a = Math.abs(fpm), grades = landingGradesFor(cat);
+    return grades.find(g => a < g.max) || grades[grades.length - 1];
+  }
+  function flightLandingGrade(f){ return landingGrade(flightLandingRate(f), flightCategory(f)); }
   function fmtFpm(v){
     if(v == null || isNaN(v)) return '—';
     const a = Math.round(Math.abs(v));
@@ -143,7 +198,8 @@
     return best;
   }
 
-  function aircraftStats(flights, lookup){
+  // cat : catégorie de l'avion (échelle de toucher). Non fournie → catégorie de chaque vol.
+  function aircraftStats(flights, lookup, cat){
     flights = flights || [];
     const s = {
       flights: flights.length, totalMin: 0, avgMin: null,
@@ -176,7 +232,7 @@
         landingSum += Math.abs(lr);
         if(s.bestLanding == null || Math.abs(lr) < Math.abs(s.bestLanding.fpm)) s.bestLanding = { fpm: lr, flight: f };
         if(s.worstLanding == null || Math.abs(lr) > Math.abs(s.worstLanding.fpm)) s.worstLanding = { fpm: lr, flight: f };
-        const g = landingGrade(lr); if(g) s.grades[g.key]++;
+        const g = landingGrade(lr, cat !== undefined ? cat : flightCategory(f)); if(g) s.grades[g.key]++;
       }
       if(f.date){
         if(!s.firstDate || f.date < s.firstDate) s.firstDate = f.date;
@@ -266,10 +322,12 @@
     };
   }
 
+  setLandingThresholds(null);
   const api = {
     up, low, haversineNm, greatCirclePoints,
     flightLandingRate, flightTrackedDistance, flightDistance,
-    LANDING_GRADES, landingGrade, fmtFpm, fmtHm, fmtNm, fmtDateFr, daysBetween,
+    LANDING_GRADES, LANDING_CATEGORIES, DEFAULT_LANDING_THRESHOLDS, normLandingThresholds, setLandingThresholds, getLandingThresholds,
+    landingGradesFor, setFlightCategoryResolver, flightCategory, landingGrade, flightLandingGrade, fmtFpm, fmtHm, fmtNm, fmtDateFr, daysBetween,
     hangarMatchKeys, assignFlightsToHangar, suggestHangarAircraft, aircraftStats,
     tourIsComplete, tourLegFlights, tourStats
   };

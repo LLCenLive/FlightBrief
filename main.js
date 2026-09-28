@@ -5,7 +5,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { startServer, startLiveOverlayServer, startMobileAppServer, startMobileSetupServer } = require('./server');
 const { LocalTls, startMdnsResponder, localIPv4s, HOSTNAME: MOBILE_HOSTNAME } = require('./mobile-tls');
-const { FlightTracker } = require('./tracker');
+const { FlightTracker, computeTouchdownZone } = require('./tracker');
 
 const OBS_PORT = 4813;
 const LIVE_OVERLAY_PORT = 4814; // port distinct -> URL OBS différente de celle du briefing
@@ -270,7 +270,25 @@ app.on('before-quit', () => {
 });
 
 /* ---------------- Stockage local ---------------- */
-ipcMain.handle('db:load', () => readDb());
+ipcMain.handle('db:load', () => fixTouchdownZones(readDb()));
+
+// Correctif pistes parallèles (v1.3.3) : les vols déjà enregistrés gardaient une zone de
+// toucher calculée sur la mauvaise piste (34C au lieu de 34R…). On la recalcule à la lecture
+// à partir du point de toucher mémorisé ; le renderer réenregistre le fichier à sa prochaine
+// sauvegarde. Idempotent : sans effet quand la piste trouvée est déjà la bonne.
+function fixTouchdownZones(db) {
+  if (!db || !Array.isArray(db.logbook)) return db;
+  for (const f of db.logbook) {
+    const td = f && f.trackData && f.trackData.touchdown;
+    if (!td || !td.zone || td.lat == null || td.lon == null) continue;
+    const arr = String(f.arr || (f.trackData.arrGuess && f.trackData.arrGuess.icao) || '').toUpperCase();
+    try {
+      const zone = computeTouchdownZone(td, arr, path.join(__dirname, 'renderer'));
+      if (zone && zone.runway !== td.zone.runway) td.zone = zone;
+    } catch (e) { /* on garde l'ancienne zone */ }
+  }
+  return db;
+}
 ipcMain.handle('db:save', (evt, data) => { writeDb(data); return true; });
 ipcMain.handle('obs:getPort', () => OBS_PORT);
 ipcMain.handle('obs:getLiveOverlayPort', () => LIVE_OVERLAY_PORT);
@@ -362,7 +380,7 @@ function buildMobilePayloadBase() {
   const p = db.userProfile || {};
   const base = {
     appVersion: app.getVersion(),
-    profile: { firstName: p.firstName || '', network: p.network || '', homeBase: p.homeBase || '', twitchHandle: p.twitchHandle || '' },
+    profile: { firstName: p.firstName || '', network: p.network || '', homeBase: p.homeBase || '', twitchHandle: p.twitchHandle || '', landingThresholds: p.landingThresholds || null },
     logbook, careers: db.careers || [], hangar: db.hangar || [], airports,
     dataUpdatedAt: mtimeMs ? new Date(mtimeMs).toISOString() : null
   };
