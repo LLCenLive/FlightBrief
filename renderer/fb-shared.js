@@ -322,6 +322,62 @@
     };
   }
 
+  /* ---------------- Schéma de piste vue du dessus ----------------
+     Piste à l'échelle en longueur (la largeur est exagérée pour rester lisible), avec les
+     marquages d'une piste aux instruments (standard FAA / OACI), aux deux extrémités :
+       - seuil « touches de piano » (0 → 150 ft) ;
+       - marques de zone de toucher tous les 500 ft : 3 bandes à 500 ft, point d'aiming
+         (grosses bandes) à 1 000 ft, 3 bandes à 1 500 ft, 2 à 2 000 ft, 2 à 2 500 ft, 1 à 3 000 ft ;
+       - zone de toucher (TDZ, 3 000 premiers pieds) légèrement surlignée.
+     Les marques ne dépassent jamais la moitié de la piste (pistes courtes). */
+  function runwayDiagramSvg(zone, opts){
+    opts = opts || {};
+    const w = opts.width || 360, h = opts.height || 96, margin = 14;
+    const usableW = w - margin * 2, cy = h / 2, halfW = 17;
+    const lenFt = Math.max(1, +zone.lengthFt || 0);
+    const sc = usableW / lenFt;
+    const pct = Math.max(0, Math.min(1, (+zone.percentAlongRunway || 0) / 100));
+    const out = [];
+    const bar = (x, y, bw, bh, cls) => out.push(`<rect class="${cls}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1.2, bw).toFixed(1)}" height="${bh}"></rect>`);
+    // Dessine un marquage longitudinal [fromFt, fromFt+lengthFt] depuis un seuil donné (dir = 1 : gauche, -1 : droite).
+    // Longueur des bandes légèrement exagérée (minimum en px) pour rester lisible sur les pistes longues.
+    const mark = (dir, fromFt, lengthFtMark, rows, bh, cls, minPx) => {
+      if(fromFt + lengthFtMark > lenFt / 2) return;
+      const bw = Math.max(minPx || 3.5, lengthFtMark * sc);
+      const x = dir === 1 ? margin + fromFt * sc : w - margin - fromFt * sc - bw;
+      rows.forEach(off => { bar(x, cy - off - bh, bw, bh, cls); bar(x, cy + off, bw, bh, cls); });
+    };
+    const tdzFt = Math.min(3000, lenFt / 3);
+    [1, -1].forEach(dir => {
+      // Zone de toucher surlignée
+      const tx = dir === 1 ? margin : w - margin - tdzFt * sc;
+      out.push(`<rect class="rwy-tdz-band" x="${tx.toFixed(1)}" y="${cy - halfW}" width="${(tdzFt * sc).toFixed(1)}" height="${halfW * 2}"></rect>`);
+      // Seuil « touches de piano »
+      mark(dir, 20, 150, [3, 6.5, 10, 13.5], 2, 'rwy-mark', 6);
+      // Zone de toucher
+      mark(dir, 500, 75, [5, 8.5, 12], 2, 'rwy-mark');
+      mark(dir, 1020, 150, [5], 6, 'rwy-aim', 8);
+      mark(dir, 1500, 75, [5, 8.5, 12], 2, 'rwy-mark');
+      mark(dir, 2000, 75, [5, 8.5], 2, 'rwy-mark');
+      mark(dir, 2500, 75, [5, 8.5], 2, 'rwy-mark');
+      mark(dir, 3000, 75, [5], 2, 'rwy-mark');
+    });
+    const xPos = margin + pct * usableW;
+    const lateralPx = Math.max(-(halfW + 6), Math.min(halfW + 6, (+zone.lateralOffsetFt || 0) / 8));
+    const yPos = cy + (zone.side === 'droite' ? lateralPx : -lateralPx);
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[c]);
+    return `<svg class="touchdown-diagram${opts.className ? ' ' + opts.className : ''}" ${opts.fluid ? 'width="100%"' : `width="${w}" height="${h}"`} viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+      <rect x="${margin}" y="${cy - halfW}" width="${usableW}" height="${halfW * 2}" rx="1.5" fill="rgba(255,255,255,.05)" stroke="rgba(231,237,242,.14)"></rect>
+      ${out.join('')}
+      <line x1="${margin + 190 * sc > margin + usableW / 2 ? margin : margin + 190 * sc}" y1="${cy}" x2="${margin + usableW - 190 * sc < margin + usableW / 2 ? w - margin : w - margin - 190 * sc}" y2="${cy}" stroke="rgba(231,237,242,.35)" stroke-dasharray="7 6"></line>
+      <line x1="${margin}" y1="${cy - halfW}" x2="${margin}" y2="${cy + halfW}" stroke="var(--phosphor, #39e88f)" stroke-width="2"></line>
+      <circle cx="${xPos.toFixed(1)}" cy="${yPos.toFixed(1)}" r="6" fill="#ff5c5c" stroke="#fff" stroke-width="1.5"></circle>
+      <text x="${margin}" y="${cy + halfW + 14}" class="axis-label">${esc(zone.runway)}</text>
+      <text x="${(margin + tdzFt * sc / 2).toFixed(1)}" y="${cy - halfW - 5}" class="axis-label" text-anchor="middle">TDZ</text>
+      <text x="${w - margin}" y="${cy + halfW + 14}" class="axis-label" text-anchor="end">${esc(Math.round(lenFt).toLocaleString('fr-FR'))} ft</text>
+    </svg>`;
+  }
+
   setLandingThresholds(null);
   const api = {
     up, low, haversineNm, greatCirclePoints,
@@ -329,7 +385,8 @@
     LANDING_GRADES, LANDING_CATEGORIES, DEFAULT_LANDING_THRESHOLDS, normLandingThresholds, setLandingThresholds, getLandingThresholds,
     landingGradesFor, setFlightCategoryResolver, flightCategory, landingGrade, flightLandingGrade, fmtFpm, fmtHm, fmtNm, fmtDateFr, daysBetween,
     hangarMatchKeys, assignFlightsToHangar, suggestHangarAircraft, aircraftStats,
-    tourIsComplete, tourLegFlights, tourStats
+    tourIsComplete, tourLegFlights, tourStats,
+    runwayDiagramSvg
   };
   if(typeof module !== 'undefined' && module.exports) module.exports = api;
   root.FBShared = api;

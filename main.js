@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, shell, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -295,6 +295,62 @@ ipcMain.handle('obs:getLiveOverlayPort', () => LIVE_OVERLAY_PORT);
 ipcMain.handle('clipboard:write', (evt, text) => { clipboard.writeText(text); return true; });
 ipcMain.handle('shell:openExternal', (evt, url) => { shell.openExternal(url); return true; });
 ipcMain.handle('app:getDataPath', () => dataFilePath());
+
+/* ---------------- Vérification des mises à jour ----------------
+   Interroge l'API GitHub (dernière release publiée du dépôt) et compare le tag à la
+   version installée. Aucune donnée n'est envoyée : simple GET public, sans jeton.
+   Le téléchargement se fait depuis la landing page, jamais automatiquement. */
+const UPDATE_REPO = 'LLCenLive/FlightBrief';
+const UPDATE_LANDING_URL = 'https://llcenlive.github.io/FlightBrief/';
+function parseSemver(v) {
+  const m = String(v || '').trim().replace(/^v/i, '').match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+  return m ? [+m[1], +(m[2] || 0), +(m[3] || 0)] : null;
+}
+function isNewerVersion(remote, local) {
+  const a = parseSemver(remote), b = parseSemver(local);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] > b[i]; }
+  return false;
+}
+async function checkForUpdate() {
+  const current = app.getVersion();
+  try {
+    const res = await net.fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+      headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': `FlightBrief/${current}` }
+    });
+    if (!res.ok) return { ok: false, current, error: 'HTTP ' + res.status };
+    const rel = await res.json();
+    const latest = String(rel.tag_name || rel.name || '').replace(/^v/i, '');
+    return {
+      ok: true, current, latest,
+      available: !rel.draft && !rel.prerelease && isNewerVersion(latest, current),
+      name: rel.name || ('v' + latest),
+      notes: typeof rel.body === 'string' ? rel.body.slice(0, 4000) : '',
+      publishedAt: rel.published_at || null,
+      url: UPDATE_LANDING_URL
+    };
+  } catch (e) {
+    return { ok: false, current, error: e && e.message ? e.message : String(e) };
+  }
+}
+ipcMain.handle('app:getVersion', () => app.getVersion());
+// Notes de la release GitHub d'une version donnée (repli du changelog intégré à l'appli).
+ipcMain.handle('app:releaseNotes', async (evt, version) => {
+  const v = String(version || '').replace(/^v/i, '');
+  if (!/^\d+\.\d+\.\d+$/.test(v)) return null;
+  for (const tag of ['v' + v, v]) {
+    try {
+      const res = await net.fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${tag}`, {
+        headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': `FlightBrief/${app.getVersion()}` }
+      });
+      if (!res.ok) continue;
+      const rel = await res.json();
+      return { version: v, name: rel.name || tag, notes: typeof rel.body === 'string' ? rel.body.slice(0, 6000) : '', publishedAt: rel.published_at || null };
+    } catch (e) { /* hors ligne : pas de notes */ }
+  }
+  return null;
+});
+ipcMain.handle('app:checkUpdate', () => checkForUpdate());
 ipcMain.on('live:update', (evt, data) => { liveState = data; });
 // Overlay Twitch personnalisable (Outil Live) : le renderer pousse à la fois la
 // config (champs affichés + style, choisis par le user) et la télémétrie live ;

@@ -56,6 +56,9 @@
             <input type="text" id="sbUsername" placeholder="ex : jdupont">
             <button class="btn primary small" onclick="importFromSimbrief()">Importer le dernier plan de vol</button>
           </div>
+          <div class="btn-row" style="margin-top:8px;">
+            <button class="btn small block" id="ofpBtn" onclick="openOfp(true)">📄 Récupérer l'OFP du plan de vol actif</button>
+          </div>
           <div class="status-msg" id="sbStatus"></div>
         </div>
 
@@ -116,6 +119,7 @@
         <div class="card-panel" style="padding:0;">
           <div class="map-shell">
             <div id="trackMap"></div>
+            <button class="map-follow-btn on" id="trackFollowBtn" onclick="toggleTrackFollow()" title="Centrer automatiquement la carte sur l'avion">◎ Suivre l'avion</button>
             <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
             <span class="hud-corner bl"></span><span class="hud-corner br"></span>
           </div>
@@ -754,6 +758,16 @@
         <div class="btn-row"><button class="btn block" onclick="resetTheme()">Réinitialiser le thème par défaut</button></div>
       </div>
 
+      <div class="card-panel">
+        <h3>À propos</h3>
+        <p class="hint" style="margin-bottom:10px;">FlightBrief <b id="aboutVersion" style="font-family:var(--font-mono);">—</b></p>
+        <div class="btn-row">
+          <button class="btn block" onclick="openChangelog()">📝 Voir les nouveautés</button>
+          <button class="btn block" onclick="checkForAppUpdate(true)">Vérifier les mises à jour</button>
+        </div>
+        <div class="status-msg" id="aboutUpdateStatus"></div>
+      </div>
+
       <div class="card-panel mobile-panel" id="mobilePanel">
         <h3>📱 Application mobile</h3>
         <p class="hint" style="margin:-4px 0 10px;">Ton logbook, tes carrières, tes tours et ton hangar sur ton téléphone, <b>même hors ligne</b>. L'appli garde une copie des données sur le téléphone : tu la mets à jour d'un appui sur « Synchroniser » quand tu es sur le <b>même Wi-Fi</b> que ce PC (FlightBrief ouvert). Rien ne passe par Internet.</p>
@@ -1041,6 +1055,53 @@
   </div>
 </div>
 
+<!-- ================= OFP SIMBRIEF ================= -->
+<div class="modal-overlay hidden" id="ofpModalOverlay" onclick="if(event.target===this) closeOfp()">
+  <div class="modal modal-wide ofp-modal">
+    <div class="modal-head">
+      <h3 id="ofpTitle">OFP — plan de vol actif</h3>
+      <button class="btn small" onclick="closeOfp()">Fermer</button>
+    </div>
+    <div class="ofp-meta" id="ofpMeta"></div>
+    <div class="status-msg" id="ofpStatus"></div>
+    <div class="btn-row ofp-actions">
+      <button class="btn small" onclick="openOfp(true)">↻ Actualiser depuis SimBrief</button>
+      <button class="btn small" id="ofpPdfBtn" onclick="openOfpPdf()">Ouvrir le PDF</button>
+      <button class="btn small" onclick="copyOfpText()">Copier le texte</button>
+    </div>
+    <iframe class="ofp-frame" id="ofpFrame" sandbox="" title="OFP SimBrief"></iframe>
+  </div>
+</div>
+
+<!-- ================= QUOI DE NEUF (changelog) ================= -->
+<div class="modal-overlay hidden" id="changelogModalOverlay" onclick="if(event.target===this) closeChangelog()">
+  <div class="modal changelog-modal">
+    <div class="update-badge" id="changelogBadge">Quoi de neuf</div>
+    <h3 class="update-title" id="changelogTitle">Nouveautés de FlightBrief</h3>
+    <div class="changelog-body" id="changelogBody"></div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn primary block" onclick="closeChangelog()">C'est parti !</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MISE À JOUR DISPONIBLE ================= -->
+<div class="modal-overlay hidden" id="updateModalOverlay" onclick="if(event.target===this) closeUpdateModal(false)">
+  <div class="modal update-modal">
+    <div class="update-badge">Mise à jour disponible</div>
+    <h3 class="update-title">FlightBrief <span id="updateLatest"></span> est sorti 🎉</h3>
+    <p class="hint" id="updateSub"></p>
+    <pre class="update-notes hidden" id="updateNotes"></pre>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn primary block" onclick="openUpdatePage()">Télécharger la nouvelle version</button>
+    </div>
+    <div class="btn-row update-secondary">
+      <button class="btn small" onclick="closeUpdateModal(false)">Plus tard</button>
+      <button class="btn small" onclick="closeUpdateModal(true)">Ignorer cette version</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= MODALE D'ACCUEIL (premier lancement) ================= -->
 <div class="modal-overlay hidden" id="onboardingModalOverlay">
   <div class="modal">
@@ -1095,6 +1156,7 @@
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="vendor/qrcode.js"></script>
 <script src="fb-shared.js"></script>
+<script src="changelog.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

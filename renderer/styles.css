@@ -620,3 +620,52 @@ input.tool-output{color:var(--phosphor); border-color:color-mix(in srgb, var(--p
 .input-with-btn{display:flex; gap:6px;}
 .input-with-btn input{flex:1; min-width:0;}
 .input-with-btn .btn{flex:none;}
+
+/* ---------------- v1.3.4 — suivi de l'avion sur la carte live ---------------- */
+.map-follow-btn{position:absolute; top:14px; right:38px; z-index:500; background:rgba(10,13,17,.85); color:var(--text-secondary);
+  border:1px solid var(--hairline); border-radius:20px; padding:6px 12px; font-family:var(--font-display); font-weight:600; font-size:11.5px;
+  cursor:pointer; backdrop-filter:blur(6px); transition:color .15s, border-color .15s;}
+.map-follow-btn:hover{border-color:var(--text-secondary);}
+.map-follow-btn.on{color:var(--phosphor); border-color:rgba(57,232,143,.45);}
+
+/* ---------------- v1.3.4 — OFP SimBrief ---------------- */
+.ofp-modal{width:min(1040px, 100%); display:flex; flex-direction:column; max-height:92vh;}
+.ofp-meta{display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12px; color:var(--text-secondary); margin-bottom:6px;}
+.ofp-meta b{font-family:var(--font-display); font-weight:600; font-size:10px; letter-spacing:.08em; text-transform:uppercase; margin-right:4px;}
+.ofp-meta .ofp-warn{flex-basis:100%; color:var(--accent-vfr);}
+.ofp-actions{margin:8px 0 10px; flex-wrap:wrap;}
+.ofp-actions .btn:disabled{opacity:.4; cursor:not-allowed;}
+.ofp-frame{width:100%; flex:1; min-height:58vh; border:1px solid var(--hairline); border-radius:10px; background:var(--cockpit-night);}
+
+/* ---------------- v1.3.4 — pop-up de mise à jour ---------------- */
+.update-modal{width:min(520px, 100%); border-color:rgba(57,232,143,.35); box-shadow:0 20px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(57,232,143,.08);}
+.update-badge{display:inline-block; font-family:var(--font-display); font-weight:700; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--phosphor); background:rgba(57,232,143,.12); border-radius:20px; padding:4px 10px;}
+.update-title{font-family:var(--font-display); font-size:20px; margin:12px 0 6px;}
+.update-title span{color:var(--phosphor); font-family:var(--font-mono);}
+.update-notes{max-height:180px; overflow:auto; white-space:pre-wrap; font-family:var(--font-mono); font-size:11.5px; line-height:1.5; color:var(--text-secondary);
+  background:rgba(255,255,255,.02); border:1px solid var(--hairline); border-radius:8px; padding:10px 12px; margin:10px 0 0;}
+.update-secondary{justify-content:space-between;}
+
+/* ---------------- v1.3.4 — schéma de piste (marquages de la zone de toucher) ---------------- */
+.touchdown-diagram .rwy-mark{fill:rgba(231,237,242,.55);}
+.touchdown-diagram .rwy-aim{fill:rgba(231,237,242,.8);}
+.touchdown-diagram .rwy-tdz-band{fill:rgba(57,232,143,.07);}
+.touchdown-diagram .axis-label{font-family:var(--font-mono); font-size:9px; fill:var(--text-secondary);}
+
+/* ---------------- v1.3.4 — fenêtre « Quoi de neuf » ---------------- */
+.changelog-modal{width:min(600px, 100%); border-color:rgba(57,232,143,.35); box-shadow:0 20px 60px rgba(0,0,0,.55);}
+.changelog-body{max-height:56vh; overflow-y:auto; margin-top:6px; padding-right:4px;}
+.cl-version{padding:12px 0 4px; border-top:1px solid var(--hairline);}
+.cl-version:first-child{border-top:0; padding-top:4px;}
+.cl-head{display:flex; align-items:baseline; gap:10px; margin-bottom:8px;}
+.cl-head .v{font-family:var(--font-mono); font-weight:600; color:var(--phosphor); font-size:14px;}
+.cl-head .t{font-family:var(--font-display); font-weight:600; font-size:13px; flex:1;}
+.cl-head .d{font-size:11px; color:var(--text-secondary);}
+.cl-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px;}
+.cl-list li{display:flex; gap:10px; align-items:flex-start; font-size:13px; line-height:1.45;}
+.cl-tag{flex:none; font-family:var(--font-display); font-weight:700; font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; border-radius:5px; padding:3px 7px; margin-top:1px; min-width:76px; text-align:center;}
+.cl-tag.new{color:var(--phosphor); background:rgba(57,232,143,.12);}
+.cl-tag.improved{color:var(--accent-ifr); background:rgba(84,214,232,.12);}
+.cl-tag.fix{color:var(--accent-vfr); background:rgba(255,176,32,.12);}
+.cl-notes{white-space:pre-wrap; font-size:12.5px; line-height:1.5; color:var(--text-secondary);}

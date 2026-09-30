@@ -242,7 +242,7 @@ function switchTab(tab){
   if(tab === 'live') startLiveView(); else stopLiveView();
   // Le bandeau « vol en cours » est inutile sur l'onglet En vol lui-même.
   $('liveSlot').classList.toggle('hidden', tab === 'live');
-  window.scrollTo(0, 0);
+  $('appMain').scrollTop = 0;
 }
 $('tabbar').addEventListener('click', e => {
   const b = e.target.closest('button[data-tab]');
@@ -433,7 +433,7 @@ function openFlight(id){
       ${td && td.turnStats && td.turnStats.maxBankDeg ? tile('Virage max', td.turnStats.maxBankDeg + '°') : ''}
       ${career ? tile('Carrière', esc(career.name)) : ''}
     </div>
-    ${z ? `<h2 class="section">Toucher des roues</h2><div class="tiles">
+    ${z ? `<h2 class="section">Toucher des roues</h2>${z.lengthFt ? `<div class="rwy-wrap">${F.runwayDiagramSvg(z, { width: 360, height: 96, fluid: true })}</div>` : ''}<div class="tiles">
       ${tile('Piste', esc(z.runway))}
       ${tile('Depuis le seuil', z.distanceFromThresholdFt + ' ft (' + z.percentAlongRunway + ' %)')}
       ${tile('Écart latéral', z.lateralOffsetFt + ' ft à ' + esc(z.side))}

@@ -28,3 +28,16 @@ if (missing) {
   process.exit(1);
 }
 console.log('[check-build] OK — données et icônes présentes.');
+
+// Rappel (non bloquant) : la fenêtre « Quoi de neuf » affichée après une mise à jour lit
+// renderer/changelog.js. Sans entrée pour la version buildée, l'appli se rabat sur les
+// notes de la release GitHub (si l'utilisateur est en ligne).
+try {
+  const version = require(path.join(root, 'package.json')).version;
+  const src = fs.readFileSync(path.join(root, 'renderer', 'changelog.js'), 'utf-8');
+  if (!src.includes(`version: '${version}'`)) {
+    console.warn(`[check-build] ATTENTION : aucune entrée pour la v${version} dans renderer/changelog.js — pense à y décrire les nouveautés.`);
+  }
+} catch (e) {
+  console.warn('[check-build] renderer/changelog.js introuvable — la fenêtre « Quoi de neuf » sera vide.');
+}

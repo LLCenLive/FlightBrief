@@ -87,7 +87,7 @@ const defaultUserProfile = {
   onboarded:false, tourDone:false
 };
 
-let db = { logbook: [], careers: [], hangar: [], mobile: { enabled:false }, theme: {...defaultTheme}, simbriefUsername: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, custom:{...defaultLiveOverlay.custom}, style:{...defaultLiveOverlay.style}}, userProfile: {...defaultUserProfile} };
+let db = { logbook: [], careers: [], hangar: [], mobile: { enabled:false }, theme: {...defaultTheme}, simbriefUsername: '', ofp: null, trackFollow: true, updateDismissed: '', lastSeenVersion: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, custom:{...defaultLiveOverlay.custom}, style:{...defaultLiveOverlay.style}}, userProfile: {...defaultUserProfile} };
 
 async function loadDb(){
   try{
@@ -99,6 +99,10 @@ async function loadDb(){
       db.mobile = { enabled:false, ...(stored.mobile || {}) };
       db.theme = {...defaultTheme, ...(stored.theme || {})};
       db.simbriefUsername = stored.simbriefUsername || '';
+      db.ofp = stored.ofp && stored.ofp.planHtml ? stored.ofp : null;
+      db.trackFollow = stored.trackFollow !== false;
+      db.updateDismissed = stored.updateDismissed || '';
+      db.lastSeenVersion = stored.lastSeenVersion || '';
       const storedLo = stored.liveOverlay || {};
       db.liveOverlay = {
         fields: {...defaultLiveOverlay.fields, ...(storedLo.fields || {})},
@@ -333,6 +337,7 @@ async function importFromSimbrief(){
     if(!res.ok) throw new Error('Aucun plan de vol trouvé pour ce pseudo (ou compte SimBrief invalide).');
     const data = await res.json();
     applySimbriefData(data);
+    storeOfpFromSimbrief(data);
     statusEl.textContent = 'Plan de vol importé ✓ — vérifie et ajuste les champs si besoin.';
     statusEl.classList.add('ok');
     switchView('briefing');
@@ -369,6 +374,232 @@ function applySimbriefData(data){
   const metarCombined = [origMetar && `Départ: ${origMetar}`, destMetar && `Arrivée: ${destMetar}`].filter(Boolean).join('\n');
   if(metarCombined) el('weather').value = metarCombined;
   render();
+}
+
+/* ---------------- OFP SimBrief (plan de vol actif) ----------------
+   SimBrief ne garde qu'UN plan « actif » par compte : le dernier OFP généré. On le
+   récupère via la même API publique que l'import (xml.fetcher.php), on en garde une
+   copie locale (db.ofp) pour pouvoir le relire hors ligne / après redémarrage, et on
+   l'affiche dans une iframe sandboxée (aucun script exécuté). */
+function storeOfpFromSimbrief(data){
+  const text = data.text || {}, files = data.files || {}, params = data.params || {};
+  const general = data.general || {}, origin = data.origin || {}, destination = data.destination || {};
+  const atc = data.atc || {}, aircraft = data.aircraft || {};
+  const planHtml = typeof text.plan_html === 'string' ? text.plan_html : '';
+  if(!planHtml) return null;
+  const dir = files.directory || '';
+  const pdfLink = files.pdf && files.pdf.link ? files.pdf.link : '';
+  const genTs = parseInt(params.time_generated, 10);
+  db.ofp = {
+    fetchedAt: new Date().toISOString(),
+    generatedAt: genTs ? new Date(genTs * 1000).toISOString() : null,
+    dep: String(pick(origin.icao_code) || '').toUpperCase(),
+    arr: String(pick(destination.icao_code) || '').toUpperCase(),
+    callsign: String(pick(atc.callsign, (general.icao_airline || '') + (general.flight_number || '')) || ''),
+    aircraft: String(pick(aircraft.name, aircraft.icaocode) || ''),
+    airac: String(pick(params.airac) || ''),
+    route: String(pick(general.route) || ''),
+    pdfUrl: dir && pdfLink ? dir + pdfLink : '',
+    planHtml
+  };
+  saveDbNow();
+  return db.ofp;
+}
+async function fetchActiveOfp(){
+  const username = (el('sbUsername').value || db.simbriefUsername || '').trim();
+  if(!username) throw new Error('Indique ton pseudo SimBrief dans la section « Import SimBrief ».');
+  if(username !== db.simbriefUsername){ db.simbriefUsername = username; saveDbNow(); }
+  const url = `https://www.simbrief.com/api/xml.fetcher.php?username=${encodeURIComponent(username)}&json=1`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('aucun plan de vol actif pour ce pseudo SimBrief');
+  const data = await res.json();
+  if(data.fetch && data.fetch.status && !/success/i.test(data.fetch.status)) throw new Error(data.fetch.status);
+  const ofp = storeOfpFromSimbrief(data);
+  if(!ofp) throw new Error("SimBrief n'a pas renvoyé d'OFP pour ce plan");
+  return ofp;
+}
+// refresh=true : on retélécharge le plan actif (si ça échoue, on retombe sur la copie locale).
+async function openOfp(refresh){
+  el('ofpModalOverlay').classList.remove('hidden');
+  const statusEl = el('ofpStatus');
+  statusEl.className = 'status-msg';
+  if(refresh){
+    statusEl.textContent = 'Récupération de l’OFP depuis SimBrief…';
+    if(db.ofp) renderOfp(db.ofp); else setOfpFrame('');
+    try{
+      renderOfp(await fetchActiveOfp());
+      statusEl.textContent = 'OFP à jour ✓';
+      statusEl.classList.add('ok');
+    }catch(err){
+      statusEl.textContent = db.ofp
+        ? `Actualisation impossible (${err.message}) — affichage de la dernière copie enregistrée.`
+        : `Impossible de récupérer l'OFP (${err.message}).`;
+      statusEl.classList.add('err');
+      if(db.ofp) renderOfp(db.ofp);
+    }
+  } else if(db.ofp){
+    statusEl.textContent = '';
+    renderOfp(db.ofp);
+  }
+}
+function renderOfp(ofp){
+  const fmt = iso => iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' }) : '—';
+  el('ofpTitle').textContent = `OFP — ${ofp.dep || '????'} → ${ofp.arr || '????'}${ofp.callsign ? ' · ' + ofp.callsign : ''}`;
+  const bDep = (el('depIcao').value || '').trim().toUpperCase(), bArr = (el('arrIcao').value || '').trim().toUpperCase();
+  const mismatch = bDep && bArr && (bDep !== ofp.dep || bArr !== ofp.arr);
+  el('ofpMeta').innerHTML = `
+    <span><b>Généré</b> ${escapeHtml(fmt(ofp.generatedAt))}</span>
+    ${ofp.aircraft ? `<span><b>Appareil</b> ${escapeHtml(ofp.aircraft)}</span>` : ''}
+    ${ofp.airac ? `<span><b>AIRAC</b> ${escapeHtml(ofp.airac)}</span>` : ''}
+    <span><b>Récupéré</b> ${escapeHtml(fmt(ofp.fetchedAt))}</span>
+    ${mismatch ? `<span class="ofp-warn">⚠ Cet OFP (${escapeHtml(ofp.dep)} → ${escapeHtml(ofp.arr)}) ne correspond pas au briefing en cours (${escapeHtml(bDep)} → ${escapeHtml(bArr)}).</span>` : ''}`;
+  el('ofpPdfBtn').disabled = !ofp.pdfUrl;
+  setOfpFrame(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    html,body{margin:0; background:#0a0d11; color:#e7edf2;}
+    body{padding:18px 20px; font-family:'IBM Plex Mono',Consolas,monospace; font-size:12.5px; line-height:1.35;}
+    pre{font-family:inherit !important; font-size:inherit !important; line-height:inherit !important; white-space:pre; margin:0;}
+    div{font-size:inherit !important; line-height:inherit !important;}
+    b,strong{color:#54d6e8;} h2{color:#39e88f; font-size:13px;}
+    a{color:#54d6e8;} img{max-width:100%; filter:invert(.9) hue-rotate(180deg);}
+  </style></head><body>${ofp.planHtml}</body></html>`);
+}
+// L'iframe est recréée à chaque affichage : Chromium ignore parfois une 2e affectation de
+// srcdoc faite dans la même tâche (ex. vidage puis contenu), ce qui laissait l'OFP vide.
+function setOfpFrame(html){
+  const old = el('ofpFrame');
+  const fresh = document.createElement('iframe');
+  fresh.id = 'ofpFrame'; fresh.className = old.className; fresh.title = old.title;
+  fresh.setAttribute('sandbox', '');
+  fresh.srcdoc = html || '<body style="background:#0a0d11"></body>';
+  old.replaceWith(fresh);
+  _elCache.delete('ofpFrame');
+}
+function closeOfp(){ el('ofpModalOverlay').classList.add('hidden'); }
+function openOfpPdf(){ if(db.ofp && db.ofp.pdfUrl) window.api.openExternal(db.ofp.pdfUrl); }
+async function copyOfpText(){
+  if(!db.ofp) return;
+  const statusEl = el('ofpStatus');
+  const doc = new DOMParser().parseFromString(db.ofp.planHtml, 'text/html');
+  try{
+    await window.api.copyToClipboard(doc.body.innerText || doc.body.textContent || '');
+    statusEl.textContent = 'Texte de l’OFP copié ✓'; statusEl.className = 'status-msg ok';
+  }catch(e){
+    statusEl.textContent = 'Copie impossible.'; statusEl.className = 'status-msg err';
+  }
+}
+
+/* ---------------- Mise à jour disponible ----------------
+   Vérifiée au démarrage (après quelques secondes) puis toutes les 6 h tant que l'appli
+   est ouverte. La pop-up renvoie vers la landing page, qui propose toujours le dernier
+   installeur. « Ignorer cette version » la fait taire jusqu'à la version suivante. */
+let _updateInfo = null;
+let _updateCheckDeferred = false;
+async function checkForAppUpdate(manual){
+  if(!window.api || !window.api.checkUpdate) return;
+  const statusEl = manual ? el('aboutUpdateStatus') : null;
+  if(statusEl){ statusEl.className = 'status-msg'; statusEl.textContent = 'Vérification…'; }
+  const info = await window.api.checkUpdate();
+  if(statusEl){
+    if(!info || !info.ok){ statusEl.textContent = 'Vérification impossible (hors ligne ?).'; statusEl.classList.add('err'); return; }
+    statusEl.textContent = info.available ? `Nouvelle version disponible : v${info.latest}` : `Tu es à jour (v${info.current}) ✓`;
+    statusEl.classList.add(info.available ? 'err' : 'ok');
+  }
+  if(!info || !info.ok || !info.available) return;
+  _updateInfo = info;
+  if(!manual && db.updateDismissed === info.latest) return;
+  // Pas par-dessus l'accueil ni par-dessus le « Quoi de neuf » : on réessaie à sa fermeture.
+  if(!el('onboardingModalOverlay').classList.contains('hidden')) return;
+  if(!el('changelogModalOverlay').classList.contains('hidden')){ _updateCheckDeferred = true; return; }
+  el('updateLatest').textContent = 'v' + info.latest;
+  el('updateSub').textContent = `Tu utilises actuellement la v${info.current}. La nouvelle version se télécharge depuis la page officielle de FlightBrief — tes données (logbook, carrières, hangar) sont conservées.`;
+  const notes = (info.notes || '').trim();
+  el('updateNotes').textContent = notes;
+  el('updateNotes').classList.toggle('hidden', !notes);
+  el('updateModalOverlay').classList.remove('hidden');
+}
+function openUpdatePage(){
+  window.api.openExternal((_updateInfo && _updateInfo.url) || 'https://llcenlive.github.io/FlightBrief/');
+  closeUpdateModal(false);
+}
+function closeUpdateModal(dismissVersion){
+  el('updateModalOverlay').classList.add('hidden');
+  if(dismissVersion && _updateInfo){ db.updateDismissed = _updateInfo.latest; saveDbNow(); }
+}
+/* ---------------- « Quoi de neuf » après une mise à jour ----------------
+   On mémorise la dernière version lancée (db.lastSeenVersion). Au premier lancement
+   d'une version plus récente, on affiche les entrées du changelog intégré
+   (renderer/changelog.js) comprises entre les deux versions ; à défaut d'entrée
+   intégrée, on tente les notes de la release GitHub correspondante. */
+function cmpVersions(a, b){
+  const pa = String(a || '0').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '0').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+  for(let i = 0; i < 3; i++){ if((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
+  return 0;
+}
+let _appVersion = '';
+function changelogEntriesBetween(fromExcl, toIncl){
+  return (window.FB_CHANGELOG || [])
+    .filter(e => (!fromExcl || cmpVersions(e.version, fromExcl) > 0) && cmpVersions(e.version, toIncl) <= 0)
+    .sort((a, b) => cmpVersions(b.version, a.version));
+}
+function renderChangelogEntries(entries){
+  const tagLabel = { new:'Nouveau', improved:'Amélioré', fix:'Correctif' };
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) : '';
+  return entries.map(e => `<div class="cl-version">
+    <div class="cl-head"><span class="v">v${escapeHtml(e.version)}</span><span class="t">${escapeHtml(e.title || '')}</span><span class="d">${escapeHtml(fmtDate(e.date))}</span></div>
+    ${e.notes != null
+      ? `<div class="cl-notes">${escapeHtml(e.notes || 'Pas de détails pour cette version.')}</div>`
+      : `<ul class="cl-list">${(e.items || []).map(([t, txt]) => `<li><span class="cl-tag ${escapeHtml(t)}">${tagLabel[t] || escapeHtml(t)}</span><span>${escapeHtml(txt)}</span></li>`).join('')}</ul>`}
+  </div>`).join('');
+}
+async function showChangelog(entries, justUpdated){
+  if(!entries.length) return false;
+  el('changelogBadge').textContent = justUpdated ? 'Mise à jour installée' : 'Quoi de neuf';
+  el('changelogTitle').innerHTML = justUpdated
+    ? `Bienvenue dans FlightBrief <span>v${escapeHtml(_appVersion)}</span> 🎉`
+    : 'Nouveautés de FlightBrief';
+  el('changelogBody').innerHTML = renderChangelogEntries(entries);
+  el('changelogModalOverlay').classList.remove('hidden');
+  return true;
+}
+// Depuis Admin → À propos : tout l'historique intégré (ou, à défaut, les notes GitHub de la version courante).
+async function openChangelog(){
+  let entries = changelogEntriesBetween(null, _appVersion || '999.0.0');
+  if(!entries.length && window.api.releaseNotes){
+    const rel = await window.api.releaseNotes(_appVersion);
+    if(rel) entries = [{ version: rel.version, title: rel.name, date: rel.publishedAt, notes: rel.notes }];
+  }
+  if(!entries.length) entries = [{ version: _appVersion || '?', title: '', notes: 'Pas encore de notes pour cette version.' }];
+  showChangelog(entries, false);
+}
+function closeChangelog(){
+  el('changelogModalOverlay').classList.add('hidden');
+  if(_updateCheckDeferred){ _updateCheckDeferred = false; checkForAppUpdate(); }
+}
+async function maybeShowChangelogAfterUpdate(){
+  if(!window.api || !window.api.getVersion) return;
+  _appVersion = await window.api.getVersion();
+  if(el('aboutVersion')) el('aboutVersion').textContent = 'v' + _appVersion;
+  const prev = db.lastSeenVersion;
+  // Première installation (aucune donnée) : rien à annoncer. Utilisateur existant qui
+  // arrive d'une version antérieure à ce système (pas de lastSeenVersion) : on affiche
+  // les nouveautés de la version installée.
+  const existingUser = !!(db.userProfile && db.userProfile.onboarded) || db.logbook.length > 0;
+  const shouldShow = prev ? cmpVersions(_appVersion, prev) > 0 : existingUser;
+  if(prev !== _appVersion){ db.lastSeenVersion = _appVersion; saveDbNow(); }
+  if(!shouldShow) return;
+  if(!el('onboardingModalOverlay').classList.contains('hidden')) return;
+  let entries = changelogEntriesBetween(prev, _appVersion);
+  if(!entries.length && window.api.releaseNotes){
+    const rel = await window.api.releaseNotes(_appVersion);
+    if(rel && rel.notes) entries = [{ version: rel.version, title: rel.name, date: rel.publishedAt, notes: rel.notes }];
+  }
+  showChangelog(entries, true);
+}
+
+function initUpdateChecks(){
+  setTimeout(checkForAppUpdate, 4000);
+  setInterval(checkForAppUpdate, 6 * 3600 * 1000);
 }
 
 /* =========================================================
@@ -1813,7 +2044,24 @@ function initTrackMap(){
   trackPathGlow = L.polyline([], { color:'#54d6e8', weight:8, opacity:.18, className:'route-glow' }).addTo(trackMap);
   trackPathLine = L.polyline([], { color:'#54d6e8', weight:2.5, opacity:.95 }).addTo(trackMap);
   trackPlaneMarker = L.marker([46.6,2.4], { icon: planeDivIcon('var(--accent-vfr)') });
+  // Déplacer la carte à la main coupe le suivi automatique (sinon elle se recentrerait
+  // sur l'avion à la seconde suivante) ; le bouton « Suivre l'avion » le réactive.
+  trackMap.on('dragstart', () => { if(db.trackFollow) setTrackFollow(false); });
+  setTrackFollow(db.trackFollow, true);
 }
+function setTrackFollow(on, silent){
+  db.trackFollow = !!on;
+  const btn = el('trackFollowBtn');
+  if(btn){
+    btn.classList.toggle('on', db.trackFollow);
+    btn.textContent = db.trackFollow ? '◎ Suivi de l’avion : activé' : '○ Suivi de l’avion : désactivé';
+  }
+  if(!silent) queueSaveDb();
+  if(db.trackFollow && trackMap && trackPlaneMarker && trackMap.hasLayer(trackPlaneMarker)){
+    trackMap.panTo(trackPlaneMarker.getLatLng(), { animate:true, duration:0.5 });
+  }
+}
+function toggleTrackFollow(){ setTrackFollow(!db.trackFollow); }
 
 async function toggleTrackerConnection(){
   const btn = el('trkConnectBtn');
@@ -1935,8 +2183,8 @@ function initTrackerListeners(){
         _liveTrackPoints.push(latlng);
         trackPathLine.setLatLngs(_liveTrackPoints);
         trackPathGlow.setLatLngs(_liveTrackPoints);
-        trackMap.panTo(latlng, { animate:true, duration:0.5 });
       }
+      if(db.trackFollow) trackMap.panTo(latlng, { animate:true, duration:0.5 });
     }
 
     // Overlay live personnalisable : champs instantanés (indicatif/route pris sur le
@@ -2301,21 +2549,7 @@ function renderTouchdownPanel(touchdown, turnStats){
   const zone = touchdown.zone;
   const fpm = touchdown.vsFpm;
   let diagram = '';
-  if(zone){
-    const w = 320, h = 90, margin = 14;
-    const usableW = w - margin*2;
-    const xPos = margin + Math.min(1, zone.percentAlongRunway/100) * usableW;
-    const lateralPx = Math.max(-22, Math.min(22, zone.lateralOffsetFt / 8));
-    const yPos = h/2 + (zone.side === 'droite' ? lateralPx : -lateralPx);
-    diagram = `<svg class="touchdown-diagram" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-      <rect x="${margin}" y="${h/2-16}" width="${usableW}" height="32" fill="rgba(255,255,255,.04)" stroke="var(--hairline)"></rect>
-      <line x1="${margin}" y1="${h/2}" x2="${w-margin}" y2="${h/2}" stroke="var(--hairline)" stroke-dasharray="6 5"></line>
-      <line x1="${margin}" y1="${h/2-16}" x2="${margin}" y2="${h/2+16}" stroke="var(--phosphor)" stroke-width="2"></line>
-      <circle cx="${xPos.toFixed(1)}" cy="${yPos.toFixed(1)}" r="6" fill="#ff5c5c" stroke="#fff" stroke-width="1.5"></circle>
-      <text x="${margin}" y="${h/2+30}" class="axis-label">${escapeHtml(zone.runway)}</text>
-      <text x="${w-margin}" y="${h/2+30}" class="axis-label" text-anchor="end">${zone.lengthFt} ft</text>
-    </svg>`;
-  }
+  if(zone) diagram = FBShared.runwayDiagramSvg(zone, { width: 360, height: 96 });
   container.innerHTML = `<div class="touchdown-panel">
     ${diagram}
     <div class="touchdown-stats">
@@ -4038,6 +4272,9 @@ async function endTour(){
     else if(!el('hangarDetailOverlay').classList.contains('hidden')) closeHangarDetail();
     else if(!el('airportModalOverlay').classList.contains('hidden')) closeAirportModal();
     else if(!el('landingThresholdsOverlay').classList.contains('hidden')) closeLandingThresholds();
+    else if(!el('ofpModalOverlay').classList.contains('hidden')) closeOfp();
+    else if(!el('changelogModalOverlay').classList.contains('hidden')) closeChangelog();
+    else if(!el('updateModalOverlay').classList.contains('hidden')) closeUpdateModal(false);
   });
   renderLogbook();
   renderCareers();
@@ -4069,4 +4306,6 @@ async function endTour(){
   }
   initMobilePanel();
   maybeShowOnboarding();
+  await maybeShowChangelogAfterUpdate();
+  initUpdateChecks();
 })();

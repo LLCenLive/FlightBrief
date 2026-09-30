@@ -1,7 +1,7 @@
 {
   "name": "flightbrief",
   "productName": "FlightBrief",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Briefing de vol, logbook, suivi de carrière et tracking de vol en direct (SimConnect) pour les créateurs de contenu simu aérienne, avec source OBS intégrée.",
   "main": "main.js",
   "author": "FlightBrief",
