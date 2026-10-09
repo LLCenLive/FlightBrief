@@ -41,12 +41,19 @@ function startServer(port, getLiveState) {
 // distinct (port différent) de celui du briefing ci-dessus, pour que les deux
 // sources OBS aient des URLs (hôte:port) réellement différentes, pas seulement
 // des chemins différents sur le même serveur.
-function startLiveOverlayServer(port, getLiveOverlayState) {
+function startLiveOverlayServer(port, getLiveOverlayState, getAlerts) {
   const server = http.createServer((req, res) => {
     const url = (req.url || '/').split('?')[0];
 
     if (url === '/' || url === '/live') return htmlResponse(res, 'live-overlay.html');
     if (url === '/api/live-state') return jsonResponse(res, getLiveOverlayState);
+    // v1.5 — 3e source OBS : alertes (carte d'atterrissage, paris Twitch, succès, réponses du bot).
+    if (url === '/alerts') return htmlResponse(res, 'alerts-overlay.html');
+    if (url === '/api/alerts') {
+      let since = 0;
+      try { since = parseInt(new URL(req.url, 'http://localhost').searchParams.get('since') || '0', 10) || 0; } catch (e) { since = 0; }
+      return jsonResponse(res, () => (getAlerts ? getAlerts(since) : { events: [] }));
+    }
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');

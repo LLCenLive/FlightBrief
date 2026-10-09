@@ -1,11 +1,14 @@
-const { app, BrowserWindow, ipcMain, clipboard, shell, net } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, shell, net, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 const { startServer, startLiveOverlayServer, startMobileAppServer, startMobileSetupServer } = require('./server');
 const { LocalTls, startMdnsResponder, localIPv4s, HOSTNAME: MOBILE_HOSTNAME } = require('./mobile-tls');
-const { FlightTracker, computeTouchdownZone } = require('./tracker');
+const { FlightTracker, computeTouchdownZone, windComponents } = require('./tracker');
+const { DataStore } = require('./backups');
+const { fetchAtc } = require('./atc');
+const { TwitchAuth, TwitchChat, FlightBot, mergeConfig: mergeTwitchConfig } = require('./twitch');
 
 const OBS_PORT = 4813;
 const LIVE_OVERLAY_PORT = 4814; // port distinct -> URL OBS différente de celle du briefing
@@ -133,18 +136,18 @@ function dataFilePath() {
   return path.join(app.getPath('userData'), 'flightbrief-data.json');
 }
 
+// v1.5 : lecture/écriture via DataStore (écriture atomique + sauvegarde quotidienne, 7 jours
+// gardés, restauration automatique si le fichier est illisible) — voir backups.js.
+let _store = null;
+function store() { if (!_store) _store = new DataStore(app.getPath('userData')); return _store; }
 function readDb() {
-  try {
-    const raw = fs.readFileSync(dataFilePath(), 'utf-8');
-    return JSON.parse(raw);
-  } catch (e) {
-    return null; // pas encore de fichier -> le renderer utilisera les valeurs par défaut
-  }
+  try { return store().read(); }
+  catch (e) { logFatalError('db-read', e); return null; }
 }
-
 function writeDb(data) {
-  fs.mkdirSync(path.dirname(dataFilePath()), { recursive: true });
-  fs.writeFileSync(dataFilePath(), JSON.stringify(data, null, 2), 'utf-8');
+  // Si la lecture avait échoué sans sauvegarde valide, le fichier abîmé a déjà été copié de
+  // côté (flightbrief-data.corrompu-….json) : rien n'est perdu même si on réécrit ici.
+  store().write(data);
 }
 
 // Icône de la fenêtre : .ico sous Windows (toutes les tailles pour la barre des tâches et
@@ -219,7 +222,7 @@ function startObsServerSafely() {
 }
 function startLiveOverlayServerSafely() {
   try {
-    liveOverlayServer = startLiveOverlayServer(LIVE_OVERLAY_PORT, () => liveOverlayState);
+    liveOverlayServer = startLiveOverlayServer(LIVE_OVERLAY_PORT, () => liveOverlayState, alertsSince);
     liveOverlayServer.on('error', (err) => {
       logFatalError('live-overlay-server', err);
       if (mainWindow) {
@@ -246,6 +249,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   tracker.disconnect();
+  try { twitchChat.stop(true); } catch (e) { /* ignoré */ }
   stopMobileServer();
   if (obsServer) { try { obsServer.close(); } catch (e) { /* déjà fermé */ } }
   if (liveOverlayServer) { try { liveOverlayServer.close(); } catch (e) { /* déjà fermé */ } }
@@ -264,6 +268,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   tracker.disconnect();
+  try { twitchChat.stop(true); } catch (e) { /* ignoré */ }
   stopMobileServer();
   if (obsServer) { try { obsServer.close(); } catch (e) { /* déjà fermé */ } }
   if (liveOverlayServer) { try { liveOverlayServer.close(); } catch (e) { /* déjà fermé */ } }
@@ -284,12 +289,29 @@ function fixTouchdownZones(db) {
     const arr = String(f.arr || (f.trackData.arrGuess && f.trackData.arrGuess.icao) || '').toUpperCase();
     try {
       const zone = computeTouchdownZone(td, arr, path.join(__dirname, 'renderer'));
-      if (zone && zone.runway !== td.zone.runway) td.zone = zone;
+      // v1.5 : on complète aussi les zones d'avant la 1.5 (sans géométrie de piste, utile à
+      // l'approche 3D) et le vent traversier quand le vent a été mesuré.
+      if (zone && (zone.runway !== td.zone.runway || td.zone.thresholdLat == null)) td.zone = zone;
+      if (td.windDir != null && td.crosswindKt == null && td.zone && td.zone.runwayHdg != null) {
+        const wc = windComponents(td.windDir, td.windKt, td.zone.runwayHdg);
+        if (wc) { td.headwindKt = wc.headwindKt; td.crosswindKt = wc.crosswindKt; }
+      }
     } catch (e) { /* on garde l'ancienne zone */ }
   }
   return db;
 }
 ipcMain.handle('db:save', (evt, data) => { writeDb(data); return true; });
+
+/* ---------------- v1.5 — sauvegardes ---------------- */
+ipcMain.handle('backups:list', () => store().list().map(b => store().summary(b)));
+ipcMain.handle('backups:now', () => { const p = store().dailyBackup(true); return { ok: !!p }; });
+ipcMain.handle('backups:restore', (evt, name) => {
+  try { store().restore(name); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('backups:openFolder', () => { fs.mkdirSync(store().backupDir, { recursive: true }); shell.openPath(store().backupDir); return true; });
+ipcMain.handle('backups:recoveryInfo', () => store().lastRecovery);
+ipcMain.handle('app:reload', () => { if (mainWindow) mainWindow.reload(); return true; });
 ipcMain.handle('obs:getPort', () => OBS_PORT);
 ipcMain.handle('obs:getLiveOverlayPort', () => LIVE_OVERLAY_PORT);
 ipcMain.handle('clipboard:write', (evt, text) => { clipboard.writeText(text); return true; });
@@ -436,7 +458,7 @@ function buildMobilePayloadBase() {
   const p = db.userProfile || {};
   const base = {
     appVersion: app.getVersion(),
-    profile: { firstName: p.firstName || '', network: p.network || '', homeBase: p.homeBase || '', twitchHandle: p.twitchHandle || '', landingThresholds: p.landingThresholds || null },
+    profile: { firstName: p.firstName || '', network: p.network || '', homeBase: p.homeBase || '', twitchHandle: p.twitchHandle || '', landingThresholds: p.landingThresholds || null, planeIcon: db.planeIcon || 'airliner' },
     logbook, careers: db.careers || [], hangar: db.hangar || [], airports,
     dataUpdatedAt: mtimeMs ? new Date(mtimeMs).toISOString() : null
   };
@@ -645,3 +667,221 @@ tracker.on('flight-end', data => mainWindow && mainWindow.webContents.send('trac
 // dans la vue synthétique de l'onglet Carte du Logbook.
 tracker.on('flight-progress', data => mainWindow && mainWindow.webContents.send('tracker:progress', data));
 tracker.on('error', err => logFatalError('tracker', err));
+
+
+/* =========================================================
+   v1.5 — Mise à jour en un clic (electron-updater, Releases GitHub)
+   ---------------------------------------------------------
+   La détection reste celle d'avant (API GitHub, voir checkForUpdate). Quand l'utilisateur
+   clique « Mettre à jour maintenant », electron-updater lit latest.yml dans la Release,
+   télécharge l'installeur, puis relance l'appli à jour. L'installeur n'étant pas signé,
+   aucune vérification de signature n'est configurée (publisherName absent).
+   Si la Release ne contient pas latest.yml, on retombe sur la page de téléchargement.
+   ========================================================= */
+let _autoUpdater = null;
+function getAutoUpdater() {
+  if (_autoUpdater) return _autoUpdater;
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.setFeedURL({ provider: 'github', owner: 'LLCenLive', repo: 'FlightBrief' });
+  const send = (ch, d) => mainWindow && mainWindow.webContents.send(ch, d);
+  autoUpdater.on('download-progress', p => send('update:progress', { percent: Math.round(p.percent || 0), transferred: p.transferred, total: p.total, bytesPerSecond: p.bytesPerSecond }));
+  autoUpdater.on('update-downloaded', info => send('update:downloaded', { version: info && info.version }));
+  autoUpdater.on('error', err => send('update:error', { error: (err && err.message) || String(err) }));
+  _autoUpdater = autoUpdater;
+  return autoUpdater;
+}
+ipcMain.handle('update:download', async () => {
+  if (!app.isPackaged) return { ok: false, error: "Mise à jour automatique indisponible en mode développement (npm start).", fallbackUrl: UPDATE_LANDING_URL };
+  try {
+    const u = getAutoUpdater();
+    const r = await u.checkForUpdates();
+    if (!r || !r.updateInfo || !isNewerVersion(r.updateInfo.version, app.getVersion())) return { ok: false, error: 'Aucune version plus récente trouvée dans la Release.', fallbackUrl: UPDATE_LANDING_URL };
+    u.downloadUpdate().catch(err => mainWindow && mainWindow.webContents.send('update:error', { error: err.message || String(err) }));
+    return { ok: true, version: r.updateInfo.version };
+  } catch (e) {
+    return { ok: false, error: e.message || String(e), fallbackUrl: UPDATE_LANDING_URL };
+  }
+});
+ipcMain.handle('update:install', () => {
+  try {
+    tracker.disconnect();
+    try { twitchChat.stop(true); } catch (e) { /* ignoré */ }
+    setImmediate(() => getAutoUpdater().quitAndInstall(true, true));
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+/* =========================================================
+   v1.5 — Contrôleurs en ligne VATSIM + IVAO (carte et panneau ATC du Briefing)
+   ========================================================= */
+ipcMain.handle('atc:get', (evt, opts) => fetchAtc((url, o) => net.fetch(url, o), {
+  networks: (opts && opts.networks) || { vatsim: true, ivao: false }, force: !!(opts && opts.force),
+  cacheDir: path.join(app.getPath('userData'), 'atc-data'), lookupAirport
+}));
+
+/* =========================================================
+   v1.5 — Alertes à l'écran (source OBS http://localhost:4814/alerts)
+   ---------------------------------------------------------
+   File d'événements courte (atterrissage, paris, succès, réponses du bot) que la page
+   d'alertes interroge chaque seconde. Les événements sont produits ici (bot Twitch) ou
+   poussés par l'interface (carte d'atterrissage, succès débloqués).
+   ========================================================= */
+let alertSeq = 0;
+let alertsQueue = [];
+let alertsConfig = { durationSec: 9, position: 'top-right', scale: 100, accent: '#39e88f', types: { landing: true, achievement: true, bet: true, chat: true } };
+function pushAlert(a) {
+  const ev = { id: ++alertSeq, ts: Date.now(), ...a };
+  alertsQueue.push(ev);
+  alertsQueue = alertsQueue.filter(x => Date.now() - x.ts < 5 * 60000).slice(-40);
+  if (mainWindow) mainWindow.webContents.send('alerts:pushed', ev);
+  return ev;
+}
+function alertsSince(sinceId) {
+  return { config: alertsConfig, lastId: alertSeq, events: alertsQueue.filter(e => e.id > (sinceId || 0)) };
+}
+ipcMain.on('alerts:push', (evt, a) => { if (a && a.type) pushAlert(a); });
+ipcMain.on('alerts:config', (evt, c) => { alertsConfig = { ...alertsConfig, ...(c || {}), types: { ...alertsConfig.types, ...((c && c.types) || {}) } }; });
+ipcMain.handle('alerts:getPort', () => LIVE_OVERLAY_PORT);
+
+/* =========================================================
+   v1.5 — Bot Twitch (commandes de vol + paris d'atterrissage)
+   ========================================================= */
+const twitchCrypt = {
+  encrypt: s => (safeStorage && safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(s) : Buffer.from(s, 'utf-8')),
+  decrypt: b => (safeStorage && safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf-8'))
+};
+let twitchAuth = null;
+function getTwitchAuth() {
+  if (!twitchAuth) twitchAuth = new TwitchAuth((u, o) => net.fetch(u, o), path.join(app.getPath('userData'), 'twitch-auth.bin'), twitchCrypt);
+  return twitchAuth;
+}
+const twitchChat = new TwitchChat();
+let twitchStatus = { state: 'disconnected' };
+let twitchConfig = mergeTwitchConfig(null);
+let lastLanding = null; // { fpm, icao, gForce, grade, bounces, at }
+const metarCache = new Map();
+async function fetchMetar(icao) {
+  const c = metarCache.get(icao);
+  if (c && Date.now() - c.at < 5 * 60000) return c.text;
+  try {
+    const res = await net.fetch(`https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(icao)}&format=raw`);
+    const text = res.ok ? (await res.text()).trim().split('\n')[0] : '';
+    metarCache.set(icao, { at: Date.now(), text: text || null });
+    return text || null;
+  } catch (e) { return null; }
+}
+function lastLandingFromLogbook() {
+  const db = readDb();
+  const f = (db && db.logbook || []).filter(x => x.trackData && (x.trackData.landingRateFpm != null || x.trackData.landingRate != null))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0];
+  if (!f) return null;
+  const td = f.trackData;
+  return { fpm: td.landingRateFpm ?? td.landingRate, icao: f.arr || null, gForce: td.touchdown && td.touchdown.gForce, bounces: td.bounceCount || 0, grade: td.landingScore && td.landingScore.letter };
+}
+const PHASE_LABELS_FR = { taxi_out: 'roulage', liftoff: 'décollage', initial_climb: 'montée initiale', climb: 'montée', cruise: 'croisière', descent: 'descente', approach: 'approche', final_approach: 'approche finale', touchdown: 'toucher', taxi_in: 'roulage' };
+function currentDetailedPhase() {
+  return (liveTrack.phases.length ? liveTrack.phases[liveTrack.phases.length - 1].phase : null);
+}
+const flightBot = new FlightBot(twitchChat, {
+  statsFile: path.join(app.getPath('userData'), 'twitch-bets.json'),
+  fetchMetar,
+  getContext: () => {
+    const t = { ...(liveOverlayState.telemetry || {}) };
+    if (liveTrack.pos) { t.gsKt = liveTrack.pos.gsKt; if (t.altFt == null) t.altFt = liveTrack.pos.altFt; }
+    const ph = currentDetailedPhase();
+    t.phaseLabel = ph ? PHASE_LABELS_FR[ph] : (liveTrack.pos && liveTrack.pos.onGround ? 'au sol' : null);
+    const fresh = liveTrack.connected && liveTrack.pos && (Date.now() - liveTrack.updatedAt) < 20000;
+    return {
+      connected: !!fresh, telemetry: t,
+      briefing: { dep: liveState.dep, arr: liveState.arr, route: liveState.route, aircraft: liveState.aircraft, callsign: liveState.callsign },
+      simAircraft: liveTrack.aircraft, lastLanding: lastLanding || lastLandingFromLogbook()
+    };
+  }
+});
+function twitchPublicState() {
+  return {
+    status: twitchStatus, config: twitchConfig, auth: getTwitchAuth().publicInfo(),
+    bet: flightBot.betState(), leaderboard: flightBot.leaderboard(10), log: flightBot.log.slice(0, 25)
+  };
+}
+const sendTwitchState = (() => {
+  let t = null;
+  return () => { if (t) return; t = setTimeout(() => { t = null; if (mainWindow) mainWindow.webContents.send('twitch:state', twitchPublicState()); }, 150); };
+})();
+twitchChat.on('status', st => { twitchStatus = st; sendTwitchState(); });
+twitchChat.on('log', msg => { flightBot._pushLog({ kind: 'info', text: msg }); });
+twitchChat.on('auth-failed', async () => {
+  // Jeton refusé : une tentative de rafraîchissement, sinon on repasse en lecture anonyme.
+  const ok = await getTwitchAuth().refresh().catch(() => false);
+  if (ok) applyTwitchConnection(); else { getTwitchAuth().logout(); applyTwitchConnection(); }
+});
+flightBot.on('state', sendTwitchState);
+flightBot.on('alert', a => pushAlert(a));
+function applyTwitchConnection() {
+  flightBot.setConfig(twitchConfig);
+  if (!twitchConfig.enabled || !twitchConfig.channel) { twitchChat.stop(); return; }
+  twitchChat.start({
+    channel: twitchConfig.channel,
+    getToken: async () => {
+      const a = getTwitchAuth();
+      const token = await a.ensureToken().catch(() => null);
+      return token && a.data.login ? { login: a.data.login, token } : null;
+    }
+  });
+}
+ipcMain.handle('twitch:getState', () => twitchPublicState());
+ipcMain.handle('twitch:setConfig', (evt, cfg) => {
+  const prev = twitchConfig;
+  twitchConfig = mergeTwitchConfig(cfg);
+  if (twitchConfig.clientId !== (prev.clientId || '')) getTwitchAuth().setClientId(twitchConfig.clientId);
+  flightBot.setConfig(twitchConfig);
+  if (prev.enabled !== twitchConfig.enabled || prev.channel !== twitchConfig.channel) applyTwitchConnection();
+  sendTwitchState();
+  return twitchPublicState();
+});
+let _twitchDevice = null;
+ipcMain.handle('twitch:startLogin', async () => {
+  try {
+    const a = getTwitchAuth();
+    _twitchDevice = await a.startDevice(twitchConfig.clientId);
+    shell.openExternal(_twitchDevice.verificationUri);
+    a.pollDevice(_twitchDevice)
+      .then(info => { _twitchDevice = null; if (mainWindow) mainWindow.webContents.send('twitch:loginResult', { ok: true, ...info }); applyTwitchConnection(); sendTwitchState(); })
+      .catch(err => { _twitchDevice = null; if (mainWindow) mainWindow.webContents.send('twitch:loginResult', { ok: false, error: err.message }); });
+    return { ok: true, userCode: _twitchDevice.userCode, verificationUri: _twitchDevice.verificationUri, expiresIn: _twitchDevice.expiresIn };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('twitch:cancelLogin', () => { getTwitchAuth().cancelPoll(); _twitchDevice = null; return true; });
+ipcMain.handle('twitch:logout', () => { getTwitchAuth().logout(); applyTwitchConnection(); sendTwitchState(); return twitchPublicState(); });
+ipcMain.handle('twitch:reconnect', () => { applyTwitchConnection(); return true; });
+ipcMain.handle('twitch:bet', (evt, action) => {
+  if (action === 'open') flightBot.openBets('manuel');
+  else if (action === 'lock') flightBot.lockBets('manuel');
+  else if (action === 'cancel') flightBot.cancelBets();
+  else if (action === 'reset-leaderboard') flightBot.resetLeaderboard();
+  sendTwitchState();
+  return flightBot.betState();
+});
+ipcMain.handle('twitch:test', (evt, kind) => {
+  if (kind === 'bet') {
+    pushAlert({ type: 'bet-result', title: 'Pari gagné ! (test)', text: '🎯 Toucher à −142 ft/min ! Bravo Viewer42 (150, à 8 près) sur 12 pronostics.', data: { actual: 142, winner: { name: 'Viewer42', fpm: 150, diff: 8 }, podium: [{ name: 'Viewer42', fpm: 150, diff: 8 }, { name: 'PiloteDu59', fpm: 120, diff: 22 }, { name: 'Kéro', fpm: 180, diff: 38 }], count: 12 } });
+  } else {
+    pushAlert({ type: 'chat-answer', title: twitchConfig.botName || 'FlightBot', text: 'ETA LFBO : 21:47 (dans 38 min) · 212 NM restants · début de descente dans 12 min', user: 'Viewer42' });
+  }
+  return true;
+});
+// L'interface transmet la note calculée de l'atterrissage (catégorie du hangar) pour !landing.
+ipcMain.on('twitch:landingInfo', (evt, info) => { if (info && info.fpm != null) lastLanding = { ...info, at: Date.now() }; });
+
+tracker.on('flight-start', () => flightBot.onFlightStart());
+tracker.on('telemetry', d => {
+  if (!twitchConfig.enabled) return;
+  if (d.phase === 'airborne') flightBot.onFlightTick(currentDetailedPhase(), d.aglFt, d.vsFpm);
+});
+tracker.on('flight-landed', d => {
+  lastLanding = { fpm: d.landingRate, icao: d.arr && d.arr.icao, gForce: d.gForce, bounces: d.bounceCount || 0, at: Date.now() };
+  if (twitchConfig.enabled) flightBot.resolveBets({ fpm: d.landingRate, icao: d.arr && d.arr.icao });
+});

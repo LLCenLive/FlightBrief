@@ -64,11 +64,11 @@ const defaultTheme = {
 
 // Configuration par défaut de l'overlay Twitch personnalisable (onglet Outil Live) :
 // tous les champs visibles, style calé sur le thème sombre par défaut de l'appli.
-const LIVE_OVERLAY_FIELD_ORDER = ['callsign','route','phase','altitude','heading','radio','distance','progress'];
-const LIVE_OVERLAY_DEFAULT_LABELS = { callsign:'Indicatif', route:'Trajet', phase:'Phase', altitude:'Altitude', heading:'Cap', radio:'Fréquence radio', distance:'Distance', progress:'Progression' };
-const LIVE_OVERLAY_ICONS = { callsign:'✈', route:'→', phase:'◎', altitude:'▲', heading:'◈', radio:'▮', distance:'↦', progress:'%' };
+const LIVE_OVERLAY_FIELD_ORDER = ['callsign','route','phase','altitude','heading','radio','distance','progress','tod','eta'];
+const LIVE_OVERLAY_DEFAULT_LABELS = { callsign:'Indicatif', route:'Trajet', phase:'Phase', altitude:'Altitude', heading:'Cap', radio:'Fréquence radio', distance:'Distance', progress:'Progression', tod:'Début de descente', eta:'Arrivée' };
+const LIVE_OVERLAY_ICONS = { callsign:'✈', route:'→', phase:'◎', altitude:'▲', heading:'◈', radio:'▮', distance:'↦', progress:'%', tod:'↘', eta:'◷' };
 const defaultLiveOverlay = {
-  fields: { callsign:true, route:true, progress:true, distance:true, radio:true, heading:true, altitude:true, phase:true },
+  fields: { callsign:true, route:true, progress:true, distance:true, radio:true, heading:true, altitude:true, phase:true, tod:false, eta:false },
   labels: {...LIVE_OVERLAY_DEFAULT_LABELS},
   // Jusqu'à 2 textes libres, entièrement facultatifs : si le champ est vide, rien ne
   // s'affiche dans l'overlay (contrairement aux champs de télémétrie qui affichent "—").
@@ -111,6 +111,9 @@ async function loadDb(){
         style: {...defaultLiveOverlay.style, ...(storedLo.style || {})}
       };
       db.userProfile = {...defaultUserProfile, ...(stored.userProfile || {})};
+      // v1.5 : on conserve aussi les sections ajoutées par les nouveautés (bot Twitch, alertes,
+      // succès…) et toute clé inconnue, pour ne jamais en perdre une à la sauvegarde suivante.
+      Object.keys(stored).forEach(k => { if(!(k in db)) db[k] = stored[k]; });
     }
     FBShared.setLandingThresholds(db.userProfile.landingThresholds);
   }catch(e){
@@ -183,6 +186,7 @@ function switchView(name){
   // on force juste un recalcul de sa taille à chaque fois qu'on revient sur cet onglet,
   // Leaflet ayant besoin de ça quand son conteneur était caché (display:none).
   if(name === 'briefing') setTimeout(() => trackMap && trackMap.invalidateSize(), 60);
+  if(window.FBv15) FBv15.onViewChange(name);
 }
 
 /* =========================================================
@@ -400,6 +404,15 @@ function storeOfpFromSimbrief(data){
     airac: String(pick(params.airac) || ''),
     route: String(pick(general.route) || ''),
     pdfUrl: dir && pdfLink ? dir + pdfLink : '',
+    // v1.5 : points de la route (dont TOC / TOD) pour calculer en vol le début de descente et l'ETA.
+    navlog: (() => {
+      const fx = data.navlog && data.navlog.fix;
+      const arr = Array.isArray(fx) ? fx : (fx ? [fx] : []);
+      return arr.map(f => ({ id: String(f.ident || ''), lat: parseFloat(f.pos_lat), lon: parseFloat(f.pos_long) }))
+        .filter(f => isFinite(f.lat) && isFinite(f.lon));
+    })(),
+    destElevFt: parseFloat(destination.elevation) || null,
+    cruiseAltFt: parseFloat(general.initial_altitude) || null,
     planHtml
   };
   saveDbNow();
@@ -712,7 +725,8 @@ const updateOverlayRouteDistance = debounce(async () => {
 let _overlayTelemetry = { callsign:null, dep:null, arr:null, altFt:null, headingDeg:null, comFreqMhz:null, phase:null, distanceNm:null, progressPct:null };
 
 function currentLiveOverlayConfig(){
-  return { fields: {...db.liveOverlay.fields}, custom: {...db.liveOverlay.custom}, style: {...db.liveOverlay.style} };
+  // v1.5 : les libellés personnalisés partent aussi vers OBS (avant, seul l'aperçu les affichait).
+  return { fields: {...db.liveOverlay.fields}, labels: {...db.liveOverlay.labels}, custom: {...db.liveOverlay.custom}, style: {...db.liveOverlay.style} };
 }
 
 // Rendu d'un texte libre personnalisé (aucun libellé/cap au-dessus, juste le texte du
@@ -741,7 +755,16 @@ function liveOverlayFieldValue(key, t){
   if(key === 'radio') return t.comFreqMhz != null ? t.comFreqMhz.toFixed(3) : '—';
   if(key === 'distance') return t.distanceNm != null ? Math.round(t.distanceNm) + ' NM' : '—';
   if(key === 'progress') return t.progressPct != null ? Math.max(0, Math.min(100, t.progressPct)) + ' %' : '—';
+  if(key === 'tod'){
+    if(t.todState === 'passed') return 'En descente';
+    return t.todMin != null ? (t.todMin <= 0 ? 'Maintenant' : 'dans ' + fmtMinShort(t.todMin)) : '—';
+  }
+  if(key === 'eta') return t.etaIso ? new Date(t.etaIso).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) + (t.etaMin != null ? ` <span class="lo-sub">${fmtMinShort(t.etaMin)}</span>` : '') : '—';
   return '—';
+}
+function fmtMinShort(min){
+  min = Math.max(0, Math.round(min || 0));
+  return min >= 60 ? `${Math.floor(min/60)} h ${String(min % 60).padStart(2,'0')}` : `${min} min`;
 }
 
 // Rendu d'un champ de l'overlay live — partagé par l'aperçu in-app et repris à
@@ -828,15 +851,13 @@ function setLiveOverlayLayout(layout){
   queueSaveDb();
 }
 
+const LIVE_OVERLAY_FIELD_INPUTS = {
+  loFieldCallsign:'callsign', loFieldRoute:'route', loFieldProgress:'progress', loFieldDistance:'distance',
+  loFieldRadio:'radio', loFieldHeading:'heading', loFieldAltitude:'altitude', loFieldPhase:'phase',
+  loFieldTod:'tod', loFieldEta:'eta'
+};
 function loadLiveOverlayIntoForm(cfg){
-  el('loFieldCallsign').checked = !!cfg.fields.callsign;
-  el('loFieldRoute').checked = !!cfg.fields.route;
-  el('loFieldProgress').checked = !!cfg.fields.progress;
-  el('loFieldDistance').checked = !!cfg.fields.distance;
-  el('loFieldRadio').checked = !!cfg.fields.radio;
-  el('loFieldHeading').checked = !!cfg.fields.heading;
-  el('loFieldAltitude').checked = !!cfg.fields.altitude;
-  el('loFieldPhase').checked = !!cfg.fields.phase;
+  Object.entries(LIVE_OVERLAY_FIELD_INPUTS).forEach(([id, key]) => { if(el(id)) el(id).checked = !!cfg.fields[key]; });
 
   LIVE_OVERLAY_FIELD_ORDER.forEach(key => {
     const input = document.getElementById('loLabel_' + key);
@@ -879,11 +900,8 @@ function loadLiveOverlayIntoForm(cfg){
 }
 
 function bindLiveOverlayControls(){
-  const fieldMap = {
-    loFieldCallsign:'callsign', loFieldRoute:'route', loFieldProgress:'progress', loFieldDistance:'distance',
-    loFieldRadio:'radio', loFieldHeading:'heading', loFieldAltitude:'altitude', loFieldPhase:'phase'
-  };
-  Object.entries(fieldMap).forEach(([elemId, key]) => {
+  Object.entries(LIVE_OVERLAY_FIELD_INPUTS).forEach(([elemId, key]) => {
+    if(!el(elemId)) return;
     el(elemId).addEventListener('change', () => {
       db.liveOverlay.fields[key] = el(elemId).checked;
       renderLiveOverlayPreview();
@@ -1060,6 +1078,7 @@ async function saveLogbookEntry(){
   await saveDbNow();
   resetLogbookForm();
   renderLogbook();
+  if(window.FBv15) FBv15.afterLogbookChange();
 }
 
 function editLogbookEntry(id){
@@ -1129,6 +1148,8 @@ function renderLogbook(){
       <td>${escapeHtml(f.dep||'----')} → ${escapeHtml(f.arr||'----')}</td>
       <td>${escapeHtml(f.aircraft||'—')}</td>
       <td><span class="pill ${f.rules.toLowerCase()}">${f.rules}</span></td>
+      <td>${f.durationMin != null ? minToHhmm(f.durationMin) : '—'}</td>
+      <td>${(() => { const sc = FBShared.flightLandingScore(f); return sc ? `<span class="score-pill" style="--sc:${sc.color}" title="${escapeHtml(FBShared.fmtFpm(FBShared.flightLandingRate(f)))} — note ${sc.score}/100">${sc.letter}</span>` : '<span class="muted">—</span>'; })()}</td>
       <td>${(() => { const d = FBShared.flightDistance(f, cachedAirportLookup); return d.nm != null ? FBShared.fmtNm(d.nm) + (d.estimated ? '<sup title="Distance directe départ → arrivée">*</sup>' : '') : '—'; })()}</td>
       <td>${escapeHtml(f.network||'—')}</td>
       <td>${career ? escapeHtml(career.name) : '—'}</td>
@@ -2038,7 +2059,7 @@ function darkTileLayer(){
 
 function initTrackMap(){
   if(trackMap || !window.L) return;
-  trackMap = L.map('trackMap', { attributionControl:true, zoomControl:true }).setView([46.6, 2.4], 5);
+  trackMap = L.map('trackMap', { attributionControl:true, zoomControl:true, zoomSnap:0.5, zoomDelta:0.5, wheelPxPerZoomLevel:90 }).setView([46.6, 2.4], 5);
   darkTileLayer().addTo(trackMap);
   styleMapShell(trackMap);
   trackPathGlow = L.polyline([], { color:'#54d6e8', weight:8, opacity:.18, className:'route-glow' }).addTo(trackMap);
@@ -2054,7 +2075,9 @@ function setTrackFollow(on, silent){
   const btn = el('trackFollowBtn');
   if(btn){
     btn.classList.toggle('on', db.trackFollow);
-    btn.textContent = db.trackFollow ? '◎ Suivi de l’avion : activé' : '○ Suivi de l’avion : désactivé';
+    const lbl = btn.querySelector('span');
+    if(lbl) lbl.textContent = db.trackFollow ? 'Suivi actif' : 'Suivre';
+    else btn.textContent = db.trackFollow ? '◎ Suivi actif' : '○ Suivre';
   }
   if(!silent) queueSaveDb();
   if(db.trackFollow && trackMap && trackPlaneMarker && trackMap.hasLayer(trackPlaneMarker)){
@@ -2207,6 +2230,7 @@ function initTrackerListeners(){
     _overlayTelemetry.progressPct = 100;
     renderLiveOverlayPreview();
     pushLiveOverlayTelemetry();
+    if(window.FBv15) FBv15.onLanded(data);
   });
 
   // Phases de vol + rapport détaillé qui se complètent directement dans l'app au fil
@@ -2284,6 +2308,12 @@ function renderTrkResultPanel(data){
   el('trkResMaxBank').textContent = (data.turnStats && data.turnStats.maxBankDeg)
     ? `${data.turnStats.maxBankDeg}°${data.turnStats.aggressiveTurnCount ? ' ⚠️' : (data.turnStats.steepTurnCount ? ' (serré)' : '')}`
     : '—';
+  // v1.5 : facteur de charge, vent au toucher et note globale.
+  const tdx = data.touchdown || {};
+  el('trkResG').textContent = tdx.gForce != null ? tdx.gForce.toFixed(2) + ' G' : '—';
+  el('trkResWind').textContent = tdx.windKt != null ? `${String(tdx.windDir ?? 0).padStart(3,'0')}°/${tdx.windKt} kt${tdx.crosswindKt != null ? ' · travers ' + Math.abs(tdx.crosswindKt) + ' kt' : ''}` : '—';
+  const scx = FBShared.landingScore({ fpm: data.landingRateFpm, gForce: tdx.gForce, bounces: data.bounceCount || 0, zone: tdx.zone }, currentFlightCategory(data));
+  el('trkResScore').innerHTML = scx ? `<span class="score-pill" style="--sc:${scx.color}">${scx.letter}</span> ${scx.score}/100` : '—';
   el('trkResultPanel').classList.remove('hidden');
   // Rapport final complet (avec la vraie phase d'atterrissage) à la place du live partiel.
   if(Array.isArray(data.phases) && data.phases.length){
@@ -2354,9 +2384,18 @@ function populateLogbookFieldsFromTrackedFlight(data){
     data.fuelUsedLbs != null ? `Carburant utilisé : ${data.fuelUsedLbs} lbs` : null
   ].filter(Boolean);
   const briefingNotes = el('notes').value.trim();
+  const tdw = data.touchdown || {};
+  if(tdw.gForce != null) remarksBits.push(`Facteur de charge : ${tdw.gForce.toFixed(2)} G`);
+  if(tdw.windKt != null) remarksBits.push(`Vent au toucher : ${String(tdw.windDir ?? 0).padStart(3,'0')}°/${tdw.windKt} kt${tdw.crosswindKt != null ? ' (travers ' + Math.abs(tdw.crosswindKt) + ' kt)' : ''}`);
+  // v1.5 : note d'atterrissage et vol de nuit calculés une fois pour toutes à l'enregistrement.
+  const landScore = FBShared.landingScore({ fpm: data.landingRateFpm, gForce: tdw.gForce, bounces: data.bounceCount || 0, zone: tdw.zone }, currentFlightCategory(data));
+  if(landScore) remarksBits.push(`Note d'atterrissage : ${landScore.letter} (${landScore.score}/100)`);
+  const nightAt = tdw.lat != null ? FBShared.isNightAt(tdw.lat, tdw.lon, tdw.ts || data.endedAt || data.startedAt) : null;
   el('lbRemarks').value = 'Vol tracké automatiquement — ' + remarksBits.join(' · ') + (briefingNotes ? ' · Notes de briefing : ' + briefingNotes : '');
   // Trajet complet + segmentation de phases + zone de toucher, associés au vol du logbook.
   _pendingTrackData = {
+    landingScore: landScore ? { score: landScore.score, letter: landScore.letter } : null,
+    night: nightAt,
     path: data.path, phases: data.phases, touchdown: data.touchdown,
     distanceNm: data.distanceNm, maxAltFt: data.maxAltFt, maxIasKt: data.maxIasKt,
     landingRateFpm: data.landingRateFpm, fuelUsedLbs: data.fuelUsedLbs,
@@ -2412,8 +2451,11 @@ function openRouteModal(flightId){
 
     renderPhaseTable(td.phases);
     renderProfileChart(td.path);
+    if(td.touchdown) td.touchdown._score = FBShared.flightLandingScore(f);
     renderTouchdownPanel(td.touchdown, td.turnStats);
+    if(td.touchdown) delete td.touchdown._score;
   }
+  if(window.FBv15) FBv15.renderApproach3D(f);
 
   el('routeModalOverlay').classList.remove('hidden');
   setTimeout(() => {
@@ -2550,10 +2592,21 @@ function renderTouchdownPanel(touchdown, turnStats){
   const fpm = touchdown.vsFpm;
   let diagram = '';
   if(zone) diagram = FBShared.runwayDiagramSvg(zone, { width: 360, height: 96 });
+  const sc = touchdown._score;
+  const scoreHtml = sc ? `<div class="score-breakdown">
+      <div class="score-big" style="--sc:${sc.color}"><span class="l">${sc.letter}</span><span class="n">${sc.score}<small>/100</small></span></div>
+      <div class="score-parts">${sc.parts.map(p => `<div class="sp"><span>${escapeHtml(p.label)}</span><div class="sp-bar"><i style="width:${Math.round(100 * p.pts / p.max)}%"></i></div><b>${p.pts}/${p.max}</b></div>`).join('')}</div>
+    </div>` : '';
+  const windHtml = touchdown.windKt != null ? `${String(touchdown.windDir ?? 0).padStart(3,'0')}°/${touchdown.windKt} kt` : '—';
+  const xwHtml = touchdown.crosswindKt != null ? `${Math.abs(touchdown.crosswindKt)} kt ${touchdown.crosswindKt >= 0 ? 'de droite' : 'de gauche'}${touchdown.headwindKt != null ? ' · ' + (touchdown.headwindKt >= 0 ? 'face ' : 'arrière ') + Math.abs(touchdown.headwindKt) + ' kt' : ''}` : '—';
   container.innerHTML = `<div class="touchdown-panel">
+    ${scoreHtml}
     ${diagram}
     <div class="touchdown-stats">
-      <div class="tstat"><div class="cap">Taux de descente (fpm)</div><div class="val">${fpm != null ? fpm + ' ft/min' : '—'}</div></div>
+      <div class="tstat"><div class="cap">Taux de descente (fpm)</div><div class="val">${fpm != null ? fpm + ' ft/min' : '—'}${touchdown.measure === 'touchdown-velocity' ? ' <sup title="Valeur exacte mesurée par le simulateur à l\'impact">✓</sup>' : ''}</div></div>
+      <div class="tstat"><div class="cap">Facteur de charge</div><div class="val">${touchdown.gForce != null ? touchdown.gForce.toFixed(2) + ' G' : '—'}</div></div>
+      <div class="tstat"><div class="cap">Vent au toucher</div><div class="val">${windHtml}</div></div>
+      <div class="tstat"><div class="cap">Vent traversier</div><div class="val val-sm">${xwHtml}</div></div>
       <div class="tstat"><div class="cap">Piste identifiée</div><div class="val">${zone ? escapeHtml(zone.runway) : 'Non identifiée'}</div></div>
       <div class="tstat"><div class="cap">Distance depuis le seuil</div><div class="val">${zone ? zone.distanceFromThresholdFt + ' ft (' + zone.percentAlongRunway + '%)' : '—'}</div></div>
       <div class="tstat"><div class="cap">Écart latéral</div><div class="val">${zone ? zone.lateralOffsetFt + ' ft à ' + zone.side : '—'}</div></div>
@@ -2564,6 +2617,7 @@ function renderTouchdownPanel(touchdown, turnStats){
 
 function closeRouteModal(){
   el('routeModalOverlay').classList.add('hidden');
+  if(window.FBv15) FBv15.disposeApproach3D();
 }
 
 /* =========================================================
@@ -3177,6 +3231,13 @@ function rebuildFlightCategories(){
   const assign = FBShared.assignFlightsToHangar(db.hangar, db.logbook);
   db.hangar.forEach(a => assign[a.id].flights.forEach(f => _flightCatMap.set(f, a.category || null)));
   assign._unassigned.forEach(f => _flightCatMap.set(f, null));
+}
+// v1.5 : catégorie (échelle de toucher) de l'avion du vol EN COURS / tout juste tracké,
+// d'après l'appareil du Briefing ou le nom de l'avion détecté dans le simulateur.
+function currentFlightCategory(data){
+  const briefAc = el('aircraft') ? el('aircraft').value.trim() : '';
+  const hg = FBShared.suggestHangarAircraft(db.hangar, briefAc, data && (data.simAircraft || data.aircraft));
+  return hg ? (hg.category || null) : null;
 }
 FBShared.setFlightCategoryResolver(f => {
   if(!f) return null;
@@ -4305,6 +4366,8 @@ async function endTour(){
     el('dataPathDisplay').value = await window.api.getDataPath();
   }
   initMobilePanel();
+  window.__fbAppReady = true;
+  if(window.FBv15) await FBv15.init();
   maybeShowOnboarding();
   await maybeShowChangelogAfterUpdate();
   initUpdateChecks();

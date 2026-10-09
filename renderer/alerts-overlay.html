@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>FlightBrief — Alertes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:rgba(10,13,17,.9); --panel:#12171c; --line:rgba(231,237,242,.1); --text:#e7edf2; --sub:#8a96a2; --ok:#39e88f; --ifr:#54d6e8; --vfr:#ffb020; --bad:#ff5c5c; --gold:#ffd166; --scale:1; }
+  *{box-sizing:border-box;}
+  html,body{margin:0; padding:0; background:transparent; overflow:hidden; width:100vw; height:100vh;}
+  body{font-family:'Space Grotesk',sans-serif; color:var(--text);}
+  .stack{position:fixed; display:flex; flex-direction:column; gap:14px; padding:36px; transform:scale(var(--scale));}
+  .pos-top-right{top:0; right:0; align-items:flex-end; transform-origin:top right;}
+  .pos-top-left{top:0; left:0; align-items:flex-start; transform-origin:top left;}
+  .pos-bottom-right{bottom:0; right:0; align-items:flex-end; flex-direction:column-reverse; transform-origin:bottom right;}
+  .pos-bottom-left{bottom:0; left:0; align-items:flex-start; flex-direction:column-reverse; transform-origin:bottom left;}
+  .pos-center{top:50%; left:50%; transform:translate(-50%,-50%) scale(var(--scale)); align-items:center; transform-origin:center;}
+
+  .al{position:relative; width:420px; background:linear-gradient(160deg, rgba(24,30,37,.94), rgba(12,16,20,.94)); border:1px solid var(--line); border-radius:18px; padding:18px 20px; box-shadow:0 24px 60px rgba(0,0,0,.45); overflow:hidden;
+      animation:alIn .55s cubic-bezier(.2,1.2,.3,1) both;}
+  .al.out{animation:alOut .45s ease-in both;}
+  .al::before{content:''; position:absolute; inset:0 auto 0 0; width:4px; background:var(--accent, var(--ifr));}
+  .al .timer{position:absolute; left:0; bottom:0; height:3px; background:var(--accent, var(--ifr)); opacity:.7; animation:timer linear both;}
+  @keyframes alIn{0%{opacity:0; transform:translateY(-18px) scale(.94);} 100%{opacity:1; transform:none;}}
+  @keyframes alOut{to{opacity:0; transform:translateX(40px) scale(.97);}}
+  @keyframes timer{from{width:100%;} to{width:0%;}}
+  .eyebrow{font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--sub); font-weight:600;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  /* Atterrissage */
+  .ld-top{display:flex; gap:16px; align-items:center;}
+  .ld-letter{width:84px; height:84px; flex:none; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:40px; font-weight:700; color:var(--accent);
+    background:color-mix(in srgb, var(--accent) 13%, transparent); border:1px solid color-mix(in srgb, var(--accent) 50%, transparent); text-shadow:0 0 22px color-mix(in srgb, var(--accent) 60%, transparent);
+    animation:pop .7s .25s cubic-bezier(.2,1.7,.4,1) both;}
+  @keyframes pop{0%{transform:scale(.2) rotate(-20deg); opacity:0;} 100%{transform:none; opacity:1;}}
+  .ld-fpm{font-family:'IBM Plex Mono',monospace; font-size:34px; font-weight:600; line-height:1.1; margin:3px 0 2px;}
+  .ld-grade{font-size:14px; font-weight:600;}
+  .ld-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px;}
+  .ld-stats div{background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:10px; padding:7px 9px;}
+  .ld-stats span{display:block; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--sub);}
+  .ld-stats b{font-family:'IBM Plex Mono',monospace; font-size:14px;}
+  .rwy{position:relative; height:34px; margin-top:12px; border-radius:4px; background:#2a3138; border:1px solid rgba(231,237,242,.15); overflow:hidden;}
+  .rwy .tdz{position:absolute; top:0; bottom:0; left:0; background:rgba(57,232,143,.12);}
+  .rwy .cl{position:absolute; left:3%; right:3%; top:50%; border-top:2px dashed rgba(231,237,242,.35);}
+  .rwy .thr{position:absolute; left:4px; top:5px; bottom:5px; width:10px; background:repeating-linear-gradient(0deg, rgba(231,237,242,.7) 0 2px, transparent 2px 5px);}
+  .rwy .dot{position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:var(--bad); border:2px solid #fff; box-shadow:0 0 12px var(--bad); animation:pop .6s .6s both;}
+  .rwy-cap{display:flex; justify-content:space-between; font-size:10.5px; color:var(--sub); margin-top:4px;}
+
+  /* Paris */
+  .bt-actual{font-family:'IBM Plex Mono',monospace; font-size:30px; font-weight:600; margin:4px 0 10px;}
+  .podium{display:flex; gap:8px;}
+  .pod{flex:1; text-align:center; padding:8px 6px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.03);}
+  .pod.p1{border-color:rgba(255,209,102,.6); background:rgba(255,209,102,.08);}
+  .pod .m{font-size:22px;}
+  .pod .n{font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .pod .g{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--sub);}
+  .banner{display:flex; align-items:center; gap:14px;}
+  .banner .ic{font-size:30px;}
+  .banner .t{font-size:20px; font-weight:700;}
+  .banner .s{font-size:14px; color:var(--sub); margin-top:2px;}
+  .banner code{font-family:'IBM Plex Mono',monospace; color:var(--ifr); background:rgba(84,214,232,.12); padding:1px 6px; border-radius:5px;}
+
+  /* Succès */
+  .ach{display:flex; gap:16px; align-items:center;}
+  .ach .badge{width:70px; height:70px; flex:none; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:34px; background:radial-gradient(circle, rgba(255,209,102,.35), rgba(255,209,102,.05) 70%); border:1px solid rgba(255,209,102,.6); animation:pop .8s .2s cubic-bezier(.2,1.7,.4,1) both;}
+  .ach .t{font-size:22px; font-weight:700; margin:2px 0;}
+  .ach .d{font-size:14px; color:var(--sub);}
+
+  /* Réponse du bot */
+  .chat .who{display:flex; align-items:center; gap:8px; margin-bottom:6px;}
+  .chat .bot{background:#9146ff; color:#fff; font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; letter-spacing:.04em;}
+  .chat .to{font-size:12px; color:var(--sub);}
+  .chat .txt{font-size:17px; line-height:1.4; font-weight:500;}
+</style>
+</head>
+<body>
+<div class="stack pos-top-right" id="stack"></div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let cfg = { durationSec: 9, position: 'top-right', scale: 100, types: { landing: true, bet: true, achievement: true, chat: true } };
+let lastId = null;
+const queue = [];
+let showing = 0;
+const MAX_VISIBLE = 3;
+
+function category(t){ return t === 'landing' ? 'landing' : t === 'achievement' ? 'achievement' : t === 'chat-answer' ? 'chat' : t.startsWith('bet') ? 'bet' : null; }
+function fpm(v){ return v == null ? '—' : '−' + Math.abs(Math.round(v)) + ' ft/min'; }
+
+function landingHtml(e){
+  const a = e.data || {};
+  const z = a.zone;
+  const pct = z ? Math.max(1, Math.min(99, z.percentAlongRunway || 0)) : null;
+  const lat = z ? Math.max(-14, Math.min(14, (z.lateralOffsetFt || 0) / 6)) * (z.side === 'droite' ? 1 : -1) : 0;
+  const tdz = z && z.lengthFt ? Math.min(100, 3000 / z.lengthFt * 100) : 25;
+  return { accent: a.color || '#54d6e8', html: `
+    <div class="ld-top">
+      <div class="ld-letter">${esc(a.letter || '—')}</div>
+      <div>
+        <div class="eyebrow">Atterrissage${a.icao ? ' · ' + esc(a.icao) : ''}${z ? ' · piste ' + esc(String(z.runway).split('/')[0]) : ''}</div>
+        <div class="ld-fpm">${esc(fpm(a.fpm))}</div>
+        <div class="ld-grade" style="color:${esc(a.gradeColor || '#e7edf2')}">${esc(a.gradeLabel || '')}${a.score != null ? ' · ' + a.score + '/100' : ''}</div>
+      </div>
+    </div>
+    <div class="ld-stats">
+      <div><span>Facteur G</span><b>${a.gForce != null ? Number(a.gForce).toFixed(2) : '—'}</b></div>
+      <div><span>Rebonds</span><b>${a.bounces || 0}</b></div>
+      <div><span>Vent</span><b>${a.windKt != null ? String(a.windDir ?? 0).padStart(3,'0') + '/' + a.windKt : '—'}</b></div>
+      <div><span>Travers</span><b>${a.crosswindKt != null ? Math.abs(a.crosswindKt) + ' kt' : '—'}</b></div>
+    </div>
+    ${z ? `<div class="rwy"><div class="tdz" style="width:${tdz}%"></div><div class="thr"></div><div class="cl"></div><div class="dot" style="left:${pct}%; top:calc(50% + ${lat}px)"></div></div>
+    <div class="rwy-cap"><span>Seuil ${esc(String(z.runway).split('/')[0])}</span><span>${(z.distanceFromThresholdFt || 0).toLocaleString('fr-FR')} ft après le seuil · ${z.lateralOffsetFt || 0} ft à ${esc(z.side || '')}</span></div>` : ''}` };
+}
+function betHtml(e){
+  if(e.type === 'bet-result' && e.data){
+    const r = e.data;
+    const medals = ['🥇','🥈','🥉'];
+    return { accent: '#ffd166', html: `<div class="eyebrow">${esc(e.title || 'Pari d\'atterrissage')}</div>
+      <div class="bt-actual">${esc(fpm(r.actual))}</div>
+      ${(r.podium || []).length ? `<div class="podium">${r.podium.map((p, i) => `<div class="pod p${i+1}"><div class="m">${medals[i]}</div><div class="n">${esc(p.name)}</div><div class="g">${p.fpm} · ±${p.diff}</div></div>`).join('')}</div>` : '<div class="banner"><div class="s">Personne n\'avait parié cette fois.</div></div>'}` };
+  }
+  const open = e.type === 'bet-open';
+  return { accent: open ? '#39e88f' : '#ffb020', html: `<div class="banner"><div class="ic">${open ? '🛬' : '🔒'}</div><div><div class="t">${esc(e.title)}</div><div class="s">${open ? 'Devine le taux de toucher : <code>!pari 180</code>' : esc(e.text || '')}</div></div></div>` };
+}
+function achHtml(e){
+  return { accent: '#ffd166', html: `<div class="ach"><div class="badge">${esc(e.icon || '🏆')}</div><div><div class="eyebrow">Succès débloqué</div><div class="t">${esc(e.title)}</div><div class="d">${esc(e.text || '')}</div></div></div>` };
+}
+function chatHtml(e){
+  return { accent: '#9146ff', html: `<div class="chat"><div class="who"><span class="bot">${esc(e.title || 'FlightBot')}</span>${e.user ? `<span class="to">répond à ${esc(e.user)}</span>` : ''}</div><div class="txt">${esc(e.text)}</div></div>` };
+}
+function render(e){
+  const c = category(e.type);
+  if(!c || cfg.types[c] === false) return null;
+  if(c === 'landing') return landingHtml(e);
+  if(c === 'bet') return betHtml(e);
+  if(c === 'achievement') return achHtml(e);
+  return chatHtml(e);
+}
+function pump(){
+  while(showing < MAX_VISIBLE && queue.length){
+    const e = queue.shift();
+    const r = render(e);
+    if(!r) continue;
+    const dur = (e.type === 'landing' || e.type === 'bet-result' ? 1.6 : e.type === 'chat-answer' ? 1 : 0.8) * (cfg.durationSec || 9);
+    const n = document.createElement('div');
+    n.className = 'al';
+    n.style.setProperty('--accent', r.accent);
+    n.innerHTML = r.html + `<div class="timer" style="animation-duration:${dur}s"></div>`;
+    $('stack').appendChild(n);
+    showing++;
+    setTimeout(() => { n.classList.add('out'); setTimeout(() => { n.remove(); showing--; pump(); }, 450); }, dur * 1000);
+  }
+}
+function applyCfg(c){
+  if(!c) return;
+  cfg = { ...cfg, ...c, types: { ...cfg.types, ...(c.types || {}) } };
+  $('stack').className = 'stack pos-' + (cfg.position || 'top-right');
+  document.documentElement.style.setProperty('--scale', (cfg.scale || 100) / 100);
+}
+async function poll(){
+  try{
+    const r = await fetch('/api/alerts?since=' + (lastId == null ? 0 : lastId), { cache: 'no-store' });
+    const j = await r.json();
+    applyCfg(j.config);
+    if(lastId == null){
+      // Premier chargement (ou OBS qui recharge la source) : on ne rejoue que les 8 dernières secondes.
+      (j.events || []).filter(e => Date.now() - e.ts < 8000).forEach(e => queue.push(e));
+    } else (j.events || []).forEach(e => queue.push(e));
+    lastId = j.lastId != null ? j.lastId : lastId;
+    pump();
+  }catch(e){ /* FlightBrief fermé : on réessaie */ }
+}
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

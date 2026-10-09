@@ -10,7 +10,10 @@ FlightBrief est une application Windows (avec un compagnon mobile consultable ho
 - **Carrière** : compagnies virtuelles, IVAO, VATSIM — grades, heures requises, progression automatique. Pour IVAO, création de **Tours** affichés en timeline horizontale (étapes OACI reliées, cochables directement sur la carte), modifiables à tout moment, avec une petite animation à la complétion.
 - **Suivi de vol (SimConnect)** : connexion directe à MSFS pour récupérer la télémétrie en direct (position, altitude, vitesses, cap, vario, fréquence radio active), affichage sur une carte interactive, phases de vol calculées en direct au fil du vol, et détection automatique décollage/atterrissage/fin de vol pour pré-remplir le logbook.
 - **Outil Live** : la carte de briefing destinée à OBS (aperçu + lien source), et un **overlay Twitch de télémétrie entièrement personnalisable** (indicatif, trajet, phase, altitude, cap, fréquence radio, distance, progression) — champs à cocher, libellés renommables, couleurs, police, disposition (barre / bloc / cartes), bordure, ombre, flou, tout est configurable, avec aperçu en direct dans l'app.
-- **Deux sources OBS locales indépendantes**, sur deux ports différents : `http://localhost:4813/obs` (carte de briefing) et `http://localhost:4814/live` (overlay de télémétrie live) — chacune à coller une fois dans OBS (Source → Navigateur → URL).
+- **Trois sources OBS locales** : `http://localhost:4813/obs` (carte de briefing), `http://localhost:4814/live` (overlay de télémétrie live) et `http://localhost:4814/alerts` (alertes : carte d'atterrissage, paris, succès, réponses du bot) — chacune à coller une fois dans OBS (Source → Navigateur → URL).
+- **Bot Twitch (v1.5)** : commandes `!eta`, `!route`, `!metar`, `!avion`, `!alt`, `!landing`, `!top`, `!fb` et **paris d'atterrissage** (`!pari 180`) avec classement. Lecture du chat sans compte ; pour que le bot réponde dans le chat, connexion d'un compte Twitch par code (Device Code Flow), jeton chiffré localement.
+- **Atterrissage précis (v1.5)** : vitesse verticale exacte à l'impact (`PLANE TOUCHDOWN NORMAL VELOCITY`), facteur G, vent et vent traversier sur la piste identifiée, note de A+ à F ; **approche finale rejouée en 3D** face au plan de 3°.
+- **TOD / ETA en direct (v1.5)** le long de la route de l'OFP SimBrief, **ATC VATSIM + IVAO sur la carte** du Briefing (secteurs, approches, badges d'aéroport), **succès**, **sauvegardes automatiques** (7 jours) et **mise à jour en un clic**.
 - **Profil** : identité pilote (prénom, réseau, VID VATSIM/IVAO, pseudo Twitch, aéroport de base) et tableau de bord de statistiques calculées à partir du logbook (heures totales, distance, répartition VFR/IFR, appareils et aéroports les plus fréquentés, heures par carrière).
 - **Accueil & visite guidée** : au premier lancement, une courte modale demande quelques infos de profil (facultatives), puis propose une visite guidée de l'application — rejouable à tout moment depuis l'onglet Profil.
 - **Admin** : couleurs, polices (15+ préchargées), rayon des angles, halo lumineux, bordure/ombre/fond transparent, alignement, disposition des cases, texte de marque, visibilité des sections — avec thèmes prédéfinis, dont un calé sur une identité visuelle bleu/nuit.
@@ -56,7 +59,10 @@ Les installeurs sont produits dans `dist/`. Note : la génération d'un installe
 ## Structure du projet
 
 ```
-main.js                processus principal Electron (fenêtre sans cadre, stockage disque, deux serveurs OBS, wiring SimConnect)
+main.js                processus principal Electron (fenêtre sans cadre, stockage disque, serveurs OBS, SimConnect, bot Twitch, mises à jour)
+backups.js             écriture atomique du fichier de données + sauvegardes quotidiennes (7 gardées) + restauration
+twitch.js              chat Twitch (IRC TLS), connexion par code (Device Code Flow), commandes et paris d'atterrissage
+atc.js                 contrôleurs en ligne VATSIM (data.vatsim.net + secteurs VATSpy, gardés 7 jours) et IVAO (whazzup v2)
 preload.js              pont sécurisé entre le processus principal et l'interface (stockage, fenêtre, tracker)
 server.js               deux petits serveurs HTTP locaux : briefing (/obs, /api/state) et overlay live (/live, /api/live-state)
 tracker.js               connexion SimConnect + machine à états de suivi de vol + segmentation des phases (fin de vol et en direct) + recherche d'aéroport le plus proche
@@ -64,6 +70,8 @@ renderer/
   index.html             interface principale (titlebar, Briefing, Logbook, Carrière, Outil Live, Outils, Admin, Profil)
   app.js                 logique de l'interface principale
   styles.css             styles de l'interface principale
+  v15.js                 nouveautés 1.5 côté interface (TOD/ETA, carte d'atterrissage, succès, approche 3D, ATC, sauvegardes, Twitch)
+  alerts-overlay.html    page servie à OBS pour les alertes (/alerts)
   obs.html                page servie à OBS pour la carte de briefing, mise à jour en direct par polling
   live-overlay.html       page servie à OBS pour l'overlay de télémétrie live, mise à jour en direct par polling
   data/airports.json      aéroports (grands + moyens, ICAO/nom/lat/lon) pour le rapprochement auto au décollage/atterrissage
@@ -86,3 +94,23 @@ Voir le guide pas-à-pas dans [CONTRIBUTING.md](CONTRIBUTING.md) pour publier ce
 
 MIT — voir [LICENSE](LICENSE).
 
+
+## Mise à jour en un clic (v1.5) — à faire à chaque release
+
+L'appli installée lit **`latest.yml`** dans la Release GitHub pour savoir quoi télécharger. Après `npm run dist:win`, publie donc dans la Release (tag `vX.Y.Z`) **les trois fichiers** du dossier `dist/` :
+
+- `FlightBrief-Setup-X.Y.Z.exe`
+- `FlightBrief-Setup-X.Y.Z.exe.blockmap`
+- `latest.yml`
+
+Sans `latest.yml`, l'appli propose simplement d'ouvrir la page de téléchargement, comme avant. Le workflow GitHub Actions joint ces fichiers automatiquement.
+
+## Bot Twitch : Client ID (une seule fois)
+
+La connexion d'un compte Twitch (pour que le bot réponde dans le chat) a besoin d'un **Client ID** d'application Twitch :
+
+1. https://dev.twitch.tv/console/apps → « Enregistrer votre application ».
+2. Nom : `FlightBrief` · URL de redirection OAuth : `http://localhost` · Catégorie : `Chat Bot` · **Type de client : Public**.
+3. Copie l'« ID client » dans `DEFAULT_CLIENT_ID` en haut de `twitch.js` (ce n'est pas un secret, il peut être publié).
+
+Sans Client ID, le bot fonctionne quand même en lecture seule (réponses affichées sur l'overlay Alertes).

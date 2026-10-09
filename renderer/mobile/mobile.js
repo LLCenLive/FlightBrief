@@ -816,7 +816,7 @@ function toggleLiveFollow(){
 }
 function planeIcon(heading){
   return L.divIcon({ className:'live-plane', iconSize:[34,34], iconAnchor:[17,17],
-    html:`<div style="transform:rotate(${heading || 0}deg)"><svg viewBox="0 0 24 24"><path d="M12 1.5 L15 10 L22.5 14 L22.5 16.5 L15 14.5 L15 19.5 L18.5 22 L18.5 23.5 L12 22 L5.5 23.5 L5.5 22 L9 19.5 L9 14.5 L1.5 16.5 L1.5 14 L9 10 Z"/></svg></div>` });
+    html:`<div style="transform:rotate(${heading || 0}deg)"><span class="plane-halo"></span>${FBShared.planeSvg(DATA && DATA.profile && DATA.profile.planeIcon)}</div>` });
 }
 function fmtElapsed(iso){
   if(!iso) return '—';

@@ -38,7 +38,36 @@ const VARS = [
   { name: 'TITLE', unit: null, key: 'title', string: true }
 ];
 
-const AIRBORNE_SPEED_KT = 40;     // GS au-dessus duquel on considère l'avion en l'air même si le capteur onGround retarde
+// v1.5 — Flux RAPIDE (~10 Hz), dans une définition SimConnect SÉPARÉE : si l'une de ces
+// variables est refusée par une version du simulateur, seule cette définition tombe — la
+// télémétrie principale ci-dessus continue d'arriver normalement (voir handle.on('exception')).
+// Sert à mesurer l'atterrissage précisément : vitesse verticale exacte au toucher
+// (PLANE TOUCHDOWN NORMAL VELOCITY, mémorisée par le simu à l'impact), pic de facteur de
+// charge (G FORCE), vent au moment du toucher, et hauteur sol (paris Twitch, approche 3D).
+const DEF_ID_FAST = 2;
+const REQ_ID_FAST = 2;
+const FAST_VARS = [
+  { name: 'VERTICAL SPEED', unit: 'feet per minute', key: 'vs' },
+  { name: 'G FORCE', unit: 'GForce', key: 'g' },
+  { name: 'PLANE TOUCHDOWN NORMAL VELOCITY', unit: 'feet per second', key: 'tdv' },
+  { name: 'AMBIENT WIND DIRECTION', unit: 'degrees', key: 'windDir' },
+  { name: 'AMBIENT WIND VELOCITY', unit: 'knots', key: 'windKt' },
+  { name: 'PLANE ALT ABOVE GROUND', unit: 'feet', key: 'agl' },
+  { name: 'SIM ON GROUND', unit: 'bool', key: 'onGround' }
+];
+const FAST_BUFFER_MS = 9000;          // historique gardé en mémoire (glissant)
+const TOUCHDOWN_FINALIZE_MS = 3000;   // délai avant de figer les mesures du toucher (pic de G + rebond éventuel)
+const APPROACH_SAMPLE_MS = 1000;      // échantillonnage du trajet resserré sous 2 500 ft sol en descente (approche 3D)
+const APPROACH_SAMPLE_AGL_FT = 2500;
+
+// Composantes du vent par rapport à un cap (piste ou avion) : + = vent de face / venant de droite.
+function windComponents(windDirDeg, windKt, refHdgDeg) {
+  if (windDirDeg == null || windKt == null || refHdgDeg == null) return null;
+  const a = (windDirDeg - refHdgDeg) * Math.PI / 180;
+  return { headwindKt: Math.round(windKt * Math.cos(a)), crosswindKt: Math.round(windKt * Math.sin(a)) };
+}
+
+const AIRBORNE_SPEED_KT = 40;    // GS au-dessus duquel on considère l'avion en l'air même si le capteur onGround retarde
 const STOPPED_GS_KT = 3;          // en dessous, on considère l'avion à l'arrêt (parqué)
 const MIN_FLIGHT_MIN = 2;         // durée minimale en vol pour enregistrer un vol
 const PARKED_TIMEOUT_MS = 25000;  // temps immobile après roulage avant de considérer le vol terminé
@@ -234,6 +263,12 @@ function computeTouchdownZone(touchdownPoint, arrIcao, rendererDir) {
 
   return {
     runway: `${best.thresholdIdent}${best.oppositeIdent ? '/' + best.oppositeIdent : ''}`,
+    // v1.5 : géométrie complète de la piste, pour l'approche rejouée en 3D et le vent traversier.
+    thresholdIdent: best.thresholdIdent,
+    thresholdLat: best.thresholdLat, thresholdLon: best.thresholdLon,
+    oppositeLat: best.oppositeLat, oppositeLon: best.oppositeLon,
+    runwayHdg: best.thresholdHdg,
+    widthFt: best.rwy.widthFt || null,
     lengthFt,
     distanceFromThresholdFt: Math.max(0, Math.min(distanceFromThresholdFt, lengthFt)),
     percentAlongRunway: Math.round(Math.max(0, Math.min(100, (distanceFromThresholdFt / lengthFt) * 100))),
@@ -410,6 +445,10 @@ class FlightTracker extends EventEmitter {
     this._handle = null;
     this._connected = false;
     this._lastSnapshotAt = 0;
+    this._fast = [];            // échantillons du flux rapide, FAST_BUFFER_MS glissants
+    this._fastLast = null;      // dernier échantillon rapide reçu
+    this._fastFailed = false;   // définition rapide refusée par le simu -> repli sur le flux 1 Hz
+    this._fastSendIds = new Set();
     this._resetFlightState();
   }
 
@@ -480,6 +519,12 @@ class FlightTracker extends EventEmitter {
     this._stationarySince = null;
     this._liveDepGuess = null; // aéroport de départ deviné, mis en cache dès le 1er point du trajet
     this._lastProgressTs = 0;
+    // v1.5 — mesures fines du toucher (voir _finalizeTouchdown)
+    this._flightToken = (this._flightToken || 0) + 1; // invalide un minuteur de toucher d'un vol précédent
+    this._tdFinalized = false;
+    this._tdTimer && clearTimeout(this._tdTimer);
+    this._tdTimer = null;
+    this._tdvAirborne = null; // dernière valeur de PLANE TOUCHDOWN NORMAL VELOCITY vue en vol (= celle du vol précédent)
   }
 
   isConnected() { return this._connected; }
@@ -503,7 +548,24 @@ class FlightTracker extends EventEmitter {
     });
     handle.requestDataOnSimObject(REQ_ID, DEF_ID, 0, sc.SimConnectPeriod.SECOND, 0, 0, 0, 0);
 
-    handle.on('simObjectData', packet => this._handlePacket(packet));
+    // Flux rapide (~10 Hz) dans sa propre définition : voir FAST_VARS.
+    this._fast = []; this._fastLast = null; this._fastFailed = false; this._fastSendIds = new Set();
+    try {
+      FAST_VARS.forEach((v, i) => {
+        const id = handle.addToDataDefinition(DEF_ID_FAST, v.name, v.unit, sc.SimConnectDataType.FLOAT64, 0, i);
+        if (typeof id === 'number') this._fastSendIds.add(id);
+      });
+      const rid = handle.requestDataOnSimObject(REQ_ID_FAST, DEF_ID_FAST, 0, sc.SimConnectPeriod.SIM_FRAME, 0, 0, 5, 0);
+      if (typeof rid === 'number') this._fastSendIds.add(rid);
+    } catch (e) {
+      this._fastFailed = true;
+      console.error('[FlightBrief] [SimConnect] flux rapide indisponible :', e.message);
+    }
+
+    handle.on('simObjectData', packet => {
+      if (packet && packet.requestID === REQ_ID_FAST) this._handleFastPacket(packet);
+      else this._handlePacket(packet);
+    });
     handle.on('quit', () => this._handleDisconnect());
     handle.on('close', () => this._handleDisconnect());
     handle.on('error', err => {
@@ -516,6 +578,13 @@ class FlightTracker extends EventEmitter {
     // explicite dès qu'une exception SimConnect survient, pour ne plus jamais avoir à
     // deviner pourquoi le tracking ne réagit plus.
     handle.on('exception', exc => {
+      // Exception sur le flux rapide (variable inconnue d'une version du simu…) : on le
+      // désactive sans bruit, le flux principal et la mesure 1 Hz prennent le relais.
+      if (exc && this._fastSendIds.has(exc.sendId)) {
+        this._fastFailed = true;
+        console.warn('[FlightBrief] [SimConnect] flux rapide refusé (variable', (FAST_VARS[exc.index] || {}).name || '?', ') — repli sur la mesure 1 Hz.');
+        return;
+      }
       const badVar = (exc && typeof exc.index === 'number' && VARS[exc.index]) ? VARS[exc.index].name : null;
       console.error('[FlightBrief] [SimConnect] exception reçue', exc, badVar ? `(variable suspectée : ${badVar})` : '');
       this.emit('status', {
@@ -549,14 +618,93 @@ class FlightTracker extends EventEmitter {
     this._processTelemetry(data);
   }
 
+  _handleFastPacket(packet) {
+    const d = packet.data;
+    const s = { ts: Date.now() };
+    try { FAST_VARS.forEach(v => { s[v.key] = d.readFloat64(); }); }
+    catch (e) { return; }
+    s.onGround = s.onGround > 0.5;
+    this._fastLast = s;
+    this._fast.push(s);
+    const cutoff = s.ts - FAST_BUFFER_MS;
+    while (this._fast.length && this._fast[0].ts < cutoff) this._fast.shift();
+    // Valeur « résiduelle » du toucher précédent, mémorisée tant qu'on est en l'air : à
+    // l'impact, le simu la remplace par la nouvelle — c'est ce changement qui la valide.
+    if (this._phase === 'airborne' && !s.onGround && !this._touchdownPoint) this._tdvAirborne = s.tdv;
+  }
+
+  _fastFresh() {
+    return !this._fastFailed && this._fastLast && (Date.now() - this._fastLast.ts) < 3000 ? this._fastLast : null;
+  }
+
   _point(data, now) {
-    return {
+    const f = this._fastFresh();
+    const p = {
       lat: data.lat, lon: data.lon, altFt: Math.round(data.altFt || 0),
       gsKt: Math.round(data.gsKt || 0), iasKt: Math.round(data.iasKt || 0),
       vsFpm: Math.round(data.vsFpm || 0), hdg: Math.round(data.headingDeg || 0),
       bankDeg: Math.round((data.bankDeg || 0) * 10) / 10, pitchDeg: Math.round((data.pitchDeg || 0) * 10) / 10,
       onGround: data.onGround > 0.5, ts: now
     };
+    if (f && Number.isFinite(f.agl)) p.aglFt = Math.round(f.agl);
+    return p;
+  }
+
+  /* ---------------- v1.5 — atterrissage mesuré précisément ----------------
+     Appelée TOUCHDOWN_FINALIZE_MS après le premier contact (pour disposer des échantillons
+     qui suivent l'impact : pic de G, rebond). Ordre de préférence pour le taux :
+       1. PLANE TOUCHDOWN NORMAL VELOCITY : valeur exacte figée par le simu à l'impact ;
+       2. vitesse verticale du flux 10 Hz juste avant le contact ;
+       3. repli historique : vario lu à 1 Hz à la trame précédente. */
+  _finalizeTouchdown(token) {
+    if (token !== this._flightToken || this._tdFinalized || !this._touchdownPoint) return;
+    this._tdFinalized = true;
+    this._tdTimer = null;
+    const td = this._touchdownPoint;
+    const at = this._touchdownAt;
+    const buf = this._fastFailed ? [] : this._fast.slice();
+    let source = 'vs-1hz';
+
+    // Instant réel du contact : 1er échantillon au sol précédé d'un échantillon en l'air.
+    let tdIdx = -1;
+    for (let i = 1; i < buf.length; i++) {
+      if (buf[i].onGround && !buf[i - 1].onGround && buf[i].ts >= at - 2500 && buf[i].ts <= at + 800) { tdIdx = i; break; }
+    }
+    const tdTs = tdIdx >= 0 ? buf[tdIdx].ts : at;
+    const before = tdIdx > 0 ? buf[tdIdx - 1] : null;
+
+    let fpm = this._landingRate;
+    if (before && Number.isFinite(before.vs)) { fpm = Math.round(before.vs); source = 'vs-10hz'; }
+    const after = buf.filter(s => s.ts >= tdTs);
+    const tdvNew = after.length ? after[after.length - 1].tdv : null;
+    if (Number.isFinite(tdvNew) && tdvNew > 0.05 && tdvNew < 60 && tdvNew !== this._tdvAirborne) {
+      fpm = -Math.round(tdvNew * 60);
+      source = 'touchdown-velocity';
+    }
+    const gWin = buf.filter(s => s.ts >= tdTs - 300 && s.ts <= tdTs + 2200 && Number.isFinite(s.g));
+    const gForce = gWin.length ? Math.round(Math.max(...gWin.map(s => s.g)) * 100) / 100 : null;
+    const windSrc = before || (buf.length ? buf[Math.max(0, (tdIdx >= 0 ? tdIdx : buf.length) - 1)] : null);
+
+    this._landingRate = fpm;
+    td.vsFpm = fpm;
+    td.measure = source;
+    if (gForce != null) td.gForce = gForce;
+    if (windSrc && Number.isFinite(windSrc.windDir)) { td.windDir = Math.round(windSrc.windDir); td.windKt = Math.round(windSrc.windKt); }
+
+    // Piste + composantes du vent tout de suite (rapport, carte d'atterrissage, paris Twitch).
+    const arr = nearestAirport(td.lat, td.lon, this._rendererDir);
+    let zone = null;
+    try { zone = arr ? computeTouchdownZone(td, arr.icao, this._rendererDir) : null; } catch (e) { zone = null; }
+    const wc = windComponents(td.windDir, td.windKt, zone ? zone.runwayHdg : td.hdg);
+    if (wc) { td.headwindKt = wc.headwindKt; td.crosswindKt = wc.crosswindKt; }
+
+    this.emit('flight-landed', {
+      landingRate: fpm, bounceCount: this._bounceCount, gForce, measure: source,
+      windDir: td.windDir ?? null, windKt: td.windKt ?? null,
+      headwindKt: td.headwindKt ?? null, crosswindKt: td.crosswindKt ?? null,
+      arr: arr ? { icao: arr.icao, name: arr.name } : null, zone,
+      touchdown: { ...td, zone }, ts: tdTs
+    });
   }
 
   // Suivi du roulis en continu pendant que l'avion est en l'air : détecte le début/fin de
@@ -621,7 +769,11 @@ class FlightTracker extends EventEmitter {
         this._lastFuel = data.fuelLbs;
         this._lastVs = data.vsFpm || 0;
         this._trackBank(data);
-        if (now - this._lastPathTs >= AIR_SAMPLE_MS) {
+        // Échantillonnage resserré en approche (sous 2 500 ft sol, en descente) : le trajet
+        // garde alors un point par seconde, assez pour rejouer l'approche finale en 3D.
+        const fastNow = this._fastFresh();
+        const sampleMs = (fastNow && fastNow.agl < APPROACH_SAMPLE_AGL_FT && (data.vsFpm || 0) < 0) ? APPROACH_SAMPLE_MS : AIR_SAMPLE_MS;
+        if (now - this._lastPathTs >= sampleMs) {
           this._path.push({ ...this._point(data, now), phase: 'air' });
           this._lastPathTs = now;
           pathChanged = true;
@@ -635,7 +787,8 @@ class FlightTracker extends EventEmitter {
           // Premier impact uniquement : si l'avion a déjà touché puis rebondi (voir le cas
           // 'landed' juste en dessous), touchdownPoint/landingRate/touchdownAt sont déjà
           // renseignés et ne doivent PAS être écrasés par ce nouvel impact.
-          if (!this._touchdownPoint) {
+          const firstTouch = !this._touchdownPoint;
+          if (firstTouch) {
             this._touchdownAt = now;
             this._landingRate = Math.round(this._lastVs);
             this._touchdownPoint = this._point(data, now);
@@ -644,7 +797,13 @@ class FlightTracker extends EventEmitter {
           this._lastPathTs = now;
           this._stationarySince = null;
           pathChanged = true;
-          this.emit('flight-landed', { landingRate: this._landingRate, bounceCount: this._bounceCount });
+          // v1.5 : l'événement part une seule fois, quelques secondes après le 1er contact,
+          // avec les mesures fines (voir _finalizeTouchdown). Sans flux rapide : tout de suite.
+          if (firstTouch) {
+            const token = this._flightToken;
+            if (this._fastFailed || !this._fastLast) this._finalizeTouchdown(token);
+            else this._tdTimer = setTimeout(() => this._finalizeTouchdown(token), TOUCHDOWN_FINALIZE_MS);
+          }
         }
         break;
 
@@ -671,12 +830,17 @@ class FlightTracker extends EventEmitter {
     // computeLivePhases), plutôt que calculés uniquement une fois le vol terminé.
     if (pathChanged && this._path.length) this._emitProgress(now);
 
+    const fast = this._fastFresh();
     this.emit('telemetry', {
       ...data,
       altFt: Math.round(data.altFt || 0), iasKt: Math.round(data.iasKt || 0), gsKt: Math.round(data.gsKt || 0),
       vsFpm: Math.round(data.vsFpm || 0), headingDeg: Math.round(data.headingDeg || 0),
       comFreqMhz: data.comFreqMhz ? Math.round(data.comFreqMhz * 1000) / 1000 : null,
-      onGround, phase: this._phase
+      onGround, phase: this._phase,
+      aglFt: fast && Number.isFinite(fast.agl) ? Math.round(fast.agl) : null,
+      windDir: fast && Number.isFinite(fast.windDir) ? Math.round(fast.windDir) : null,
+      windKt: fast && Number.isFinite(fast.windKt) ? Math.round(fast.windKt) : null,
+      gForce: fast && Number.isFinite(fast.g) ? Math.round(fast.g * 100) / 100 : null
     });
   }
 
@@ -746,6 +910,11 @@ class FlightTracker extends EventEmitter {
 
     const airDuration = (this._touchdownAt || now) - this._takeoffAt;
     if (airDuration < MIN_FLIGHT_MIN * 60 * 1000) { this._resetFlightState(); return { ok: false, reason: 'too_short' }; }
+    // Vol clôturé juste après le toucher (arrêt manuel) : on fige les mesures tout de suite.
+    if (this._touchdownPoint && !this._tdFinalized) {
+      if (this._tdTimer) { clearTimeout(this._tdTimer); this._tdTimer = null; }
+      this._finalizeTouchdown(this._flightToken);
+    }
 
     const first = this._path[0], last = this._path[this._path.length - 1];
     const depAirport = nearestAirport(first.lat, first.lon, this._rendererDir);
@@ -763,6 +932,10 @@ class FlightTracker extends EventEmitter {
     const touchdownZone = this._touchdownPoint
       ? computeTouchdownZone(this._touchdownPoint, arrAirport && arrAirport.icao, this._rendererDir)
       : null;
+    if (this._touchdownPoint && touchdownZone) {
+      const wc = windComponents(this._touchdownPoint.windDir, this._touchdownPoint.windKt, touchdownZone.runwayHdg);
+      if (wc) { this._touchdownPoint.headwindKt = wc.headwindKt; this._touchdownPoint.crosswindKt = wc.crosswindKt; }
+    }
 
     const turnStats = {
       totalTurns: this._turns.length,
@@ -815,4 +988,4 @@ class FlightTracker extends EventEmitter {
   }
 }
 
-module.exports = { FlightTracker, nearestAirport, loadAirports, loadRunways, computeTouchdownZone, computePhases, computeLivePhases };
+module.exports = { FlightTracker, nearestAirport, loadAirports, loadRunways, computeTouchdownZone, computePhases, computeLivePhases, windComponents };

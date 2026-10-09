@@ -378,6 +378,125 @@
     </svg>`;
   }
 
+  /* =========================================================
+     v1.5 — NOTE D'ATTERRISSAGE (A+ … F, sur 100)
+     ---------------------------------------------------------
+     Combine ce qui fait un bon atterrissage, pas seulement le taux :
+       taux de toucher (50 pts, selon les seuils de la catégorie de l'avion),
+       facteur de charge au toucher (15), rebonds (10),
+       zone de toucher : distance au seuil (15), écart à l'axe (10).
+     Un critère non mesuré (ancien vol, piste non identifiée…) est simplement ignoré :
+     la note est ramenée sur 100 à partir des critères disponibles. */
+  function interp(x, xs, ys){
+    if(x <= xs[0]) return ys[0];
+    for(let i = 1; i < xs.length; i++){
+      if(x <= xs[i]){ const t = (x - xs[i-1]) / (xs[i] - xs[i-1]); return ys[i-1] + t * (ys[i] - ys[i-1]); }
+    }
+    return ys[ys.length - 1];
+  }
+  const SCORE_LETTERS = [
+    { min: 95, letter: 'A+', color: '#39e88f' }, { min: 85, letter: 'A', color: '#39e88f' },
+    { min: 72, letter: 'B', color: '#54d6e8' }, { min: 58, letter: 'C', color: '#ffd166' },
+    { min: 42, letter: 'D', color: '#ffb020' }, { min: -1, letter: 'F', color: '#ff5c5c' }
+  ];
+  // td : { fpm, gForce, bounces, zone:{distanceFromThresholdFt, lateralOffsetFt} }
+  function landingScore(td, cat){
+    if(!td || td.fpm == null || isNaN(td.fpm)) return null;
+    const th = _thresholds[catKey(cat)] || DEFAULT_LANDING_THRESHOLDS.none;
+    const a = Math.abs(td.fpm);
+    const parts = [];
+    parts.push({ key: 'rate', label: 'Taux de toucher', pts: interp(a, [0, th.butter, th.smooth, th.firm, th.firm * 1.6], [50, 47, 38, 22, 0]), max: 50 });
+    if(td.gForce != null && !isNaN(td.gForce)) parts.push({ key: 'g', label: 'Facteur de charge', pts: interp(td.gForce, [1.0, 1.2, 1.4, 1.7, 2.1], [15, 15, 11, 5, 0]), max: 15 });
+    if(td.bounces != null) parts.push({ key: 'bounce', label: 'Rebonds', pts: td.bounces <= 0 ? 10 : td.bounces === 1 ? 4 : 0, max: 10 });
+    const z = td.zone;
+    if(z && z.distanceFromThresholdFt != null){
+      const d = z.distanceFromThresholdFt;
+      const pts = d < 400 ? interp(d, [0, 400], [4, 12]) : d <= 2000 ? 15 : interp(d, [2000, 3000, 5000], [15, 10, 0]);
+      parts.push({ key: 'zone', label: 'Distance au seuil', pts, max: 15 });
+    }
+    if(z && z.lateralOffsetFt != null) parts.push({ key: 'center', label: "Écart à l'axe", pts: interp(Math.abs(z.lateralOffsetFt), [0, 10, 25, 50, 80], [10, 10, 7, 3, 0]), max: 10 });
+    const got = parts.reduce((s, p) => s + p.pts, 0), max = parts.reduce((s, p) => s + p.max, 0);
+    const score = Math.round(100 * got / max);
+    const l = SCORE_LETTERS.find(x => score >= x.min);
+    return { score, letter: l.letter, color: l.color, parts: parts.map(p => ({ ...p, pts: Math.round(p.pts * 10) / 10 })), grade: landingGrade(td.fpm, cat) };
+  }
+  // Données d'un vol du logbook -> entrée de landingScore.
+  function flightLandingInput(f){
+    const td = f && f.trackData;
+    const fpm = flightLandingRate(f);
+    if(fpm == null) return null;
+    const t = td && td.touchdown;
+    return { fpm, gForce: t && t.gForce != null ? t.gForce : null, bounces: td ? (td.bounceCount || 0) : null, zone: t && t.zone ? t.zone : null };
+  }
+  function flightLandingScore(f){
+    const inp = flightLandingInput(f);
+    return inp ? landingScore(inp, flightCategory(f)) : null;
+  }
+
+  /* ---------------- Continent d'un aéroport (préfixe OACI) ----------------
+     Les 1res lettres du code OACI désignent la région du monde. Pour la Russie (U…),
+     on tranche Europe / Asie avec la longitude (Oural ≈ 60° E). */
+  const CONTINENT_LABELS = { EU: 'Europe', AS: 'Asie', AF: 'Afrique', NA: 'Amérique du Nord', SA: 'Amérique du Sud', OC: 'Océanie' };
+  function continentOf(icao, lon){
+    const c = up(icao);
+    if(!/^[A-Z]{2}/.test(c)) return null;
+    const a = c[0], two = c.slice(0, 2);
+    if(two === 'BI' || two === 'BK') return 'EU';           // Islande, Kosovo
+    if(two === 'BG') return 'NA';                            // Groenland
+    if(two === 'PA' || two === 'PH' || two === 'PF' || two === 'PO' || two === 'PP') return 'NA'; // Alaska, Hawaï
+    if(two === 'GC') return 'AF';                            // Canaries
+    if(two === 'LL' || two === 'LC') return 'AS';            // Israël, Chypre (Asie géographique)
+    if(two === 'UA' || two === 'UB' || two === 'UC' || two === 'UT' || two === 'UG' || two === 'UD') return 'AS'; // Asie centrale, Caucase
+    if(a === 'U') return lon != null && lon < 60 ? 'EU' : 'AS';
+    if(a === 'E' || a === 'L') return 'EU';
+    if(a === 'K' || a === 'C' || a === 'M' || a === 'T') return 'NA';
+    if(a === 'S') return 'SA';
+    if(a === 'D' || a === 'F' || a === 'G' || a === 'H') return 'AF';
+    if(a === 'O' || a === 'V' || a === 'W' || a === 'Z' || a === 'R') return 'AS';
+    if(a === 'Y' || a === 'N' || a === 'A' || a === 'P') return 'OC';
+    return null;
+  }
+
+  /* ---------------- Hauteur du soleil (vol de nuit) ----------------
+     Formule NOAA simplifiée (précision ~0,5°, largement suffisante ici). Nuit = soleil à
+     plus de 6° sous l'horizon (fin du crépuscule civil), comme en aéronautique. */
+  function sunElevationDeg(lat, lon, date){
+    const d = new Date(date);
+    if(isNaN(d) || lat == null || lon == null) return null;
+    const rad = Math.PI / 180;
+    const jd = d.getTime() / 86400000 + 2440587.5;
+    const n = jd - 2451545.0;
+    const L = (280.46 + 0.9856474 * n) % 360;
+    const g = ((357.528 + 0.9856003 * n) % 360) * rad;
+    const lambda = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad;
+    const eps = (23.439 - 0.0000004 * n) * rad;
+    const decl = Math.asin(Math.sin(eps) * Math.sin(lambda));
+    const ra = Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda));
+    const gmst = (18.697374558 + 24.06570982441908 * n) % 24;
+    const lst = (gmst * 15 + lon) * rad;
+    const ha = lst - ra;
+    const el = Math.asin(Math.sin(lat * rad) * Math.sin(decl) + Math.cos(lat * rad) * Math.cos(decl) * Math.cos(ha));
+    return el / rad;
+  }
+  function isNightAt(lat, lon, date){
+    const e = sunElevationDeg(lat, lon, date);
+    return e == null ? null : e < -6;
+  }
+
+  /* ---------------- v1.5 — icônes avion (vue de dessus, nez vers le haut, viewBox 64) ----------------
+     4 styles au choix (Admin → Icône de l'avion). Couleur : variable CSS --plane-color,
+     contour blanc pour rester lisible sur n'importe quel fond de carte. */
+  const PLANE_ICONS = {
+    airliner: { label: 'Avion de ligne', svg: '<path class="pl-body" d="M32 3C34.7 3 35.6 7.5 35.6 12V25L58.5 37.6Q60 38.5 60 40V41.2Q60 42.2 58.8 42L35.6 36.4V49.5L43.2 55.6Q44 56.3 44 57.3V58.2Q44 59 43.1 58.8L34.2 56.8L33 61Q32 62.3 31 61L29.8 56.8L20.9 58.8Q20 59 20 58.2V57.3Q20 56.3 20.8 55.6L28.4 49.5V36.4L5.2 42Q4 42.2 4 41.2V40Q4 38.5 5.5 37.6L28.4 25V12C28.4 7.5 29.3 3 32 3Z"/><ellipse class="pl-eng" cx="19.6" cy="31" rx="2.1" ry="4.3"/><ellipse class="pl-eng" cx="44.4" cy="31" rx="2.1" ry="4.3"/><path class="pl-hl" d="M32 6C33.3 6 33.8 9 33.8 12V50L32 54L30.2 50V12C30.2 9 30.7 6 32 6Z"/><path class="pl-glass" d="M29.8 10.2Q32 8.6 34.2 10.2L34 11.6Q32 10.6 30 11.6Z"/>' },
+    ownship: { label: 'Silhouette', svg: '<path class="pl-body" d="M32 4.5Q35 4.5 35 9V23.5L57 31Q59.5 32 59.5 34.5V36.5L35 32.5V47L42.5 52.5V56.5L32 53.5L21.5 56.5V52.5L29 47V32.5L4.5 36.5V34.5Q4.5 32 7 31L29 23.5V9Q29 4.5 32 4.5Z"/>' },
+    ga: { label: 'Aviation légère', svg: '<path class="pl-body" d="M30.4 6.5H33.6L34.4 18.5H58.5Q61 18.5 61 21V24.5Q61 26.5 58.5 26.5H34.2L33.4 46H41.5Q43 46 43 47.5V50.5Q43 52 41.5 52H33.2L32.8 58Q32 60 31.2 58L30.8 52H22.5Q21 52 21 50.5V47.5Q21 46 22.5 46H30.6L29.8 26.5H5.5Q3 26.5 3 24.5V21Q3 18.5 5.5 18.5H29.6Z"/><rect class="pl-prop" x="24.5" y="3.2" width="15" height="2.2" rx="1.1"/><path class="pl-hl" d="M31.3 9H32.7L33.2 44H30.8Z"/>' },
+    arrow: { label: 'Flèche', svg: '<path class="pl-body" d="M32 4L55 57.5Q55.6 59.2 54 58.6L32 47.5L10 58.6Q8.4 59.2 9 57.5Z"/><path class="pl-hl" d="M32 12L47 51.5L32 44Z"/>' }
+  };
+  function planeSvg(style){
+    const ic = PLANE_ICONS[style] || PLANE_ICONS.airliner;
+    return '<svg class="fb-plane" viewBox="0 0 64 64" aria-hidden="true">' + ic.svg + '</svg>';
+  }
+
   setLandingThresholds(null);
   const api = {
     up, low, haversineNm, greatCirclePoints,
@@ -386,7 +505,8 @@
     landingGradesFor, setFlightCategoryResolver, flightCategory, landingGrade, flightLandingGrade, fmtFpm, fmtHm, fmtNm, fmtDateFr, daysBetween,
     hangarMatchKeys, assignFlightsToHangar, suggestHangarAircraft, aircraftStats,
     tourIsComplete, tourLegFlights, tourStats,
-    runwayDiagramSvg
+    runwayDiagramSvg,
+    landingScore, flightLandingInput, flightLandingScore, SCORE_LETTERS, continentOf, CONTINENT_LABELS, sunElevationDeg, isNightAt, planeSvg, PLANE_ICONS
   };
   if(typeof module !== 'undefined' && module.exports) module.exports = api;
   root.FBShared = api;

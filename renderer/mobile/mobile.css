@@ -213,8 +213,14 @@ body.is-live .tabbar .live-dot{display:block;}
 .live-follow{position:absolute; right:10px; bottom:10px; z-index:500; background:rgba(10,13,17,.85); color:var(--text-2); border:1px solid var(--hairline); border-radius:20px; padding:7px 12px; font-family:var(--font-display); font-weight:600; font-size:12px;}
 .live-follow.on{color:var(--phosphor); border-color:rgba(57,232,143,.45);}
 .live-plane{background:none; border:none;}
-.live-plane div{width:34px; height:34px; display:flex; align-items:center; justify-content:center; transition:transform .6s linear; filter:drop-shadow(0 0 6px rgba(255,176,32,.8));}
-.live-plane svg{width:26px; height:26px; fill:#ffb020; stroke:#0a0d11; stroke-width:.7;}
+.live-plane div{position:relative; width:34px; height:34px; display:flex; align-items:center; justify-content:center; transition:transform .6s linear; filter:drop-shadow(0 2px 4px rgba(0,0,0,.55)) drop-shadow(0 0 5px rgba(255,176,32,.55));}
+.live-plane svg{position:relative; width:30px; height:30px;}
+.live-plane .pl-body{fill:#ffb020; stroke:#fff; stroke-width:1.7; stroke-linejoin:round; paint-order:stroke;}
+.live-plane .pl-eng{fill:#ffb020; stroke:#fff; stroke-width:1.1; filter:brightness(.72);}
+.live-plane .pl-prop{fill:#fff; opacity:.75;}
+.live-plane .pl-hl{fill:#fff; opacity:.28;}
+.live-plane .pl-glass{fill:#0a0d11; opacity:.8;}
+.live-plane .plane-halo{position:absolute; inset:3px; border-radius:50%; background:radial-gradient(circle, rgba(255,176,32,.28), rgba(255,176,32,0) 70%);}
 .live-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
 .lg{background:var(--panel); border:1px solid var(--hairline); border-radius:12px; padding:9px 10px;}
 .lg.big{grid-column:span 1;}
@@ -250,3 +256,15 @@ main, #gate{flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrol
 main{padding:14px 14px 24px;}
 .tabbar{position:relative; left:auto; right:auto; bottom:auto; flex:none;}
 .toast{bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 12px);}
+
+/* ---------- v1.5 — barre d'onglets collée au bord bas ----------
+   Sur iPhone en appli installée (barre d'état « black-translucent »), 100vh / 100dvh
+   valent parfois la hauteur d'écran MOINS la barre d'état : la colonne flex s'arrêtait
+   alors ~1 cm avant le bas et la barre d'onglets flottait au-dessus du vide. Le body est
+   maintenant ancré aux quatre bords (position:fixed; inset:0), ce qui couvre toujours
+   l'écran entier quelle que soit la version d'iOS. La marge sous les icônes est aussi
+   resserrée : on garde juste ce qu'il faut pour ne pas chevaucher la barre d'accueil d'iOS. */
+html{height:100%; min-height:100%;}
+body{position:fixed; top:0; right:0; bottom:0; left:0; height:auto; width:auto;}
+.tabbar{padding-bottom:max(4px, calc(var(--safe-bottom) - 18px));}
+.tabbar button{height:56px;}

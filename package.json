@@ -1,7 +1,7 @@
 {
   "name": "flightbrief",
   "productName": "FlightBrief",
-  "version": "1.3.4",
+  "version": "1.5.0",
   "description": "Briefing de vol, logbook, suivi de carrière et tracking de vol en direct (SimConnect) pour les créateurs de contenu simu aérienne, avec source OBS intégrée.",
   "main": "main.js",
   "author": "FlightBrief",
@@ -15,13 +15,14 @@
     "start": "electron .",
     "icons": "electron-icon-builder --input=./build/icon.png --output=./build --flatten",
     "predist": "node scripts/check-build.js",
-    "dist": "electron-builder",
+    "dist": "electron-builder --publish never",
     "predist:win": "node scripts/check-build.js",
-    "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac",
-    "dist:linux": "electron-builder --linux"
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
   },
   "dependencies": {
+    "electron-updater": "^6.3.9",
     "multicast-dns": "^7.2.5",
     "node-forge": "^1.4.0",
     "node-simconnect": "^4.2.0"
@@ -39,6 +40,9 @@
       "preload.js",
       "server.js",
       "tracker.js",
+      "backups.js",
+      "atc.js",
+      "twitch.js",
       "mobile-tls.js",
       "renderer/**/*",
       "build/icon.png",
@@ -83,6 +87,12 @@
       "icon": "build/icon.png",
       "category": "Utility"
     },
-    "publish": null
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "LLCenLive",
+        "repo": "FlightBrief"
+      }
+    ]
   }
 }

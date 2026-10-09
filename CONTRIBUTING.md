@@ -67,6 +67,8 @@ npm run dist:linux   # .AppImage / .deb pour Linux
 
 Les fichiers apparaissent dans `dist/`. Va ensuite sur la page du dépôt → **Releases** (dans la colonne de droite) → **Create a new release** → glisse les fichiers générés → **Publish release**. Tes amis les téléchargent directement depuis cette page, sans rien installer d'autre.
 
+> **Depuis la v1.5 (mise à jour en un clic)** : pour Windows, glisse **trois** fichiers dans la Release : `FlightBrief-Setup-X.Y.Z.exe`, `FlightBrief-Setup-X.Y.Z.exe.blockmap` et **`latest.yml`**. C'est `latest.yml` que l'appli installée lit pour se mettre à jour toute seule ; sans lui, elle renvoie simplement vers la page de téléchargement.
+
 ### Option B — Laisser GitHub construire les installeurs pour toi (recommandé)
 
 Le dépôt inclut déjà `.github/workflows/build.yml` : un robot GitHub qui construit automatiquement les versions Windows, macOS **et** Linux à chaque fois que tu publies un tag de version, et les attache directement à une Release.

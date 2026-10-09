@@ -9,6 +9,29 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '1.5.0',
+    date: '2026-10-10',
+    title: 'Twitch, atterrissages notés & approche en 3D',
+    items: [
+      ['new', "Nouvel onglet Twitch : un bot répond dans ton chat à !eta, !route, !metar, !avion, !alt, !landing et !fb, avec le nom que tu lui donnes. Sans compte connecté, il lit le chat et répond sur l'overlay."],
+      ['new', "Paris d'atterrissage : le chat devine ton taux au toucher avec !pari 180. Ouverture au début de la descente, fermeture en courte finale, podium à l'écran et classement (!top)."],
+      ['new', "3e source OBS « Alertes » (localhost:4814/alerts) : carte d'atterrissage, paris, succès débloqués et réponses du bot, avec position, durée et taille réglables."],
+      ['new', "Atterrissage mesuré précisément : vitesse verticale exacte à l'impact (lue dans le simulateur), facteur G, vent et vent traversier sur la piste, et une note de A+ à F."],
+      ['new', "Début de descente (TOD) et heure d'arrivée (ETA) en direct, calculés le long de la route de l'OFP SimBrief. Ils s'affichent dans le Briefing et peuvent être ajoutés à l'overlay live."],
+      ['new', "Approche finale rejouée en 3D dans le détail de chaque vol, comparée au plan de descente de 3°, avec plusieurs vues et un relief accentué."],
+      ['new', "26 succès à débloquer dans le Profil (beurre, vol de nuit, globe-trotter, tour du monde…), avec une animation dans l'appli et sur le stream."],
+      ['new', "ATC en ligne VATSIM et IVAO sur la carte du Briefing : secteurs des centres, cercles d'approche et badges d'aéroport (ATIS, sol, tour, approche). Un clic donne le détail, et la liste en dessous montre tes aéroports de départ et d'arrivée."],
+      ['new', "Sauvegardes automatiques : une copie par jour, les 7 dernières gardées, restauration automatique si le fichier de données devient illisible (Admin → Sauvegardes)."],
+      ['new', "Mise à jour en un clic : la nouvelle version se télécharge et s'installe depuis l'appli."],
+      ['improved', "Nouvelles icônes d'avion sur les cartes (PC et téléphone), au choix dans Admin : avion de ligne, silhouette, aviation légère ou flèche."],
+      ['improved', "Logbook : colonne « Atterro » avec la note de chaque vol, et la colonne Durée est de nouveau alignée."],
+      ['improved', "Barre de navigation rangée par usage (Vol · Carnet · Stream), avec des icônes, Profil et Admin à droite, et les raccourcis Ctrl+1 à Ctrl+9."],
+      ['improved', "Carte du Briefing : route prévue avec départ, arrivée, TOC et TOD, bouton « Vol entier », plein écran, bandeau de vol sur la carte (phase, altitude, vitesse, TOD, ETA), zoom plus fin, légende ATC et raccourcis F / V / P."],
+      ['fix', "Compagnon mobile : la barre d'onglets touche de nouveau le bas de l'écran sur iPhone (appli installée)."],
+      ['fix', "Overlay live : les libellés personnalisés et les textes libres s'affichent maintenant aussi dans OBS, pas seulement dans l'aperçu."]
+    ]
+  },
+  {
     version: '1.3.4',
     date: '2026-09-30',
     title: 'OFP SimBrief, suivi de la carte & mises à jour',

@@ -11,12 +11,57 @@ contextBridge.exposeInMainWorld('api', {
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
   checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
   releaseNotes: (version) => ipcRenderer.invoke('app:releaseNotes', version),
+  reload: () => ipcRenderer.invoke('app:reload'),
   pushLiveUpdate: (data) => ipcRenderer.send('live:update', data),
   onObsServerError: (cb) => ipcRenderer.on('obs:serverError', (_, msg) => cb(msg)),
   onLiveOverlayServerError: (cb) => ipcRenderer.on('liveOverlay:serverError', (_, msg) => cb(msg)),
   pushLiveOverlayUpdate: (data) => ipcRenderer.send('live:updateOverlay', data),
   lookupAirport: (icao) => ipcRenderer.invoke('airport:lookup', icao),
   airportIndexInfo: () => ipcRenderer.invoke('airport:indexInfo')
+});
+
+// v1.5 — sauvegardes automatiques du fichier de données
+contextBridge.exposeInMainWorld('backups', {
+  list: () => ipcRenderer.invoke('backups:list'),
+  now: () => ipcRenderer.invoke('backups:now'),
+  restore: (name) => ipcRenderer.invoke('backups:restore', name),
+  openFolder: () => ipcRenderer.invoke('backups:openFolder'),
+  recoveryInfo: () => ipcRenderer.invoke('backups:recoveryInfo')
+});
+
+// v1.5 — mise à jour en un clic
+contextBridge.exposeInMainWorld('updater', {
+  download: () => ipcRenderer.invoke('update:download'),
+  install: () => ipcRenderer.invoke('update:install'),
+  onProgress: (cb) => ipcRenderer.on('update:progress', (_, d) => cb(d)),
+  onDownloaded: (cb) => ipcRenderer.on('update:downloaded', (_, d) => cb(d)),
+  onError: (cb) => ipcRenderer.on('update:error', (_, d) => cb(d))
+});
+
+// v1.5 — contrôleurs en ligne (VATSIM + IVAO)
+contextBridge.exposeInMainWorld('atc', {
+  get: (opts) => ipcRenderer.invoke('atc:get', opts || {})
+});
+
+// v1.5 — overlay d'alertes (OBS) et bot Twitch
+contextBridge.exposeInMainWorld('alerts', {
+  push: (a) => ipcRenderer.send('alerts:push', a),
+  setConfig: (c) => ipcRenderer.send('alerts:config', c),
+  getPort: () => ipcRenderer.invoke('alerts:getPort'),
+  onPushed: (cb) => ipcRenderer.on('alerts:pushed', (_, a) => cb(a))
+});
+contextBridge.exposeInMainWorld('twitch', {
+  getState: () => ipcRenderer.invoke('twitch:getState'),
+  setConfig: (c) => ipcRenderer.invoke('twitch:setConfig', c),
+  startLogin: () => ipcRenderer.invoke('twitch:startLogin'),
+  cancelLogin: () => ipcRenderer.invoke('twitch:cancelLogin'),
+  logout: () => ipcRenderer.invoke('twitch:logout'),
+  reconnect: () => ipcRenderer.invoke('twitch:reconnect'),
+  bet: (action) => ipcRenderer.invoke('twitch:bet', action),
+  test: (kind) => ipcRenderer.invoke('twitch:test', kind),
+  landingInfo: (info) => ipcRenderer.send('twitch:landingInfo', info),
+  onState: (cb) => ipcRenderer.on('twitch:state', (_, s) => cb(s)),
+  onLoginResult: (cb) => ipcRenderer.on('twitch:loginResult', (_, r) => cb(r))
 });
 
 // Compagnon mobile (PWA servie sur le réseau local, voir main.js / server.js)
