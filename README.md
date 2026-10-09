@@ -105,12 +105,12 @@ L'appli installée lit **`latest.yml`** dans la Release GitHub pour savoir quoi 
 
 Sans `latest.yml`, l'appli propose simplement d'ouvrir la page de téléchargement, comme avant. Le workflow GitHub Actions joint ces fichiers automatiquement.
 
-## Bot Twitch : Client ID (une seule fois)
+## Bot Twitch : application propre à chaque utilisateur
 
-La connexion d'un compte Twitch (pour que le bot réponde dans le chat) a besoin d'un **Client ID** d'application Twitch :
+FlightBrief n'embarque **aucun Client ID** : chaque streamer déclare sa propre application Twitch, depuis l'onglet **Twitch → Ton application Twitch** (assistant pas à pas) :
 
-1. https://dev.twitch.tv/console/apps → « Enregistrer votre application ».
-2. Nom : `FlightBrief` · URL de redirection OAuth : `http://localhost` · Catégorie : `Chat Bot` · **Type de client : Public**.
-3. Copie l'« ID client » dans `DEFAULT_CLIENT_ID` en haut de `twitch.js` (ce n'est pas un secret, il peut être publié).
+1. https://dev.twitch.tv/console/apps/create (double authentification Twitch requise).
+2. Nom unique (ex. `FlightBrief-tonpseudo`) · URL de redirection OAuth : `http://localhost` · Catégorie : `Chat Bot` · **Type de client : Public**.
+3. Copier l'« ID client » dans l'appli → « Valider » : FlightBrief vérifie l'ID auprès de Twitch avant de l'enregistrer.
 
-Sans Client ID, le bot fonctionne quand même en lecture seule (réponses affichées sur l'overlay Alertes).
+L'ID est enregistré localement avec le jeton du compte connecté (chiffré). Changer d'application déconnecte le compte lié à l'ancienne. Sans application déclarée, le bot reste utilisable en lecture seule (réponses affichées sur l'overlay Alertes).

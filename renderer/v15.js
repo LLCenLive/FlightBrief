@@ -990,7 +990,6 @@ function bindTwitch(){
   $('twChannel').value = c.channel;
   $('twBotName').value = c.botName;
   $('twPrefix').checked = c.prefixMessages;
-  $('twClientId').value = c.clientId || '';
   $('twCooldown').value = c.cooldownSec; $('twCooldownVal').textContent = c.cooldownSec + ' s'; updateRangeFill($('twCooldown'));
   $('twReplyOverlay').checked = !!c.replyOnOverlay;
   $('twBetAutoOpen').checked = c.bets.autoOpen;
@@ -1004,7 +1003,6 @@ function bindTwitch(){
   on('twChannel', 'change', e => { twCfg().channel = e.target.value.trim().replace(/^.*twitch\.tv\//i, '').replace(/^[#@]/, '').toLowerCase(); e.target.value = twCfg().channel; pushTwitchCfg(); });
   on('twBotName', 'input', e => { twCfg().botName = e.target.value.trim() || 'FlightBot'; pushTwitchCfg(); });
   on('twPrefix', 'change', e => { twCfg().prefixMessages = e.target.checked; pushTwitchCfg(); });
-  on('twClientId', 'change', e => { twCfg().clientId = e.target.value.trim(); pushTwitchCfg(); });
   on('twCooldown', 'input', e => { twCfg().cooldownSec = +e.target.value; $('twCooldownVal').textContent = e.target.value + ' s'; updateRangeFill(e.target); pushTwitchCfg(); });
   on('twReplyOverlay', 'change', e => { twCfg().replyOnOverlay = e.target.checked; pushTwitchCfg(); });
   on('twBetAutoOpen', 'change', e => { twCfg().bets.autoOpen = e.target.checked; pushTwitchCfg(); });
@@ -1029,9 +1027,12 @@ function renderTwitch(){
   dot.style.boxShadow = c.enabled && st.state === 'connected' ? '0 0 8px var(--phosphor)' : 'none';
 
   const a = s.auth || {};
-  $('twAccountBox').innerHTML = a.loggedIn
+  renderTwitchApp();
+  $('twAccountBox').innerHTML = !c.clientId
+    ? `<div class="tw-acc-row tw-locked"><span class="tw-avatar off">?</span><div><b>Lecture seule</b><div class="hint" style="margin:0;">Déclare d'abord ton application Twitch ci-dessus pour pouvoir connecter un compte.</div></div></div>`
+    : a.loggedIn
     ? `<div class="tw-acc-row"><span class="tw-avatar">${esc((a.login || '?')[0].toUpperCase())}</span><div><b>${esc(a.login)}</b><div class="hint" style="margin:0;">Le bot répond dans le chat avec ce compte${c.prefixMessages ? `, sous la forme « [${esc(c.botName)}] … »` : ''}.</div></div><button class="btn small" onclick="FBv15.twitchLogout()">Déconnecter</button></div>`
-    : `<div class="tw-acc-row"><span class="tw-avatar off">?</span><div><b>Lecture seule</b><div class="hint" style="margin:0;">Aucun compte connecté.</div></div><button class="btn small primary" onclick="FBv15.twitchLogin()" ${a.hasClientId || c.clientId ? '' : 'disabled title="Client ID Twitch manquant (Réglages avancés)"'}>Connecter un compte</button></div>`;
+    : `<div class="tw-acc-row"><span class="tw-avatar off">?</span><div><b>Lecture seule</b><div class="hint" style="margin:0;">Aucun compte connecté.</div></div><button class="btn small primary" onclick="FBv15.twitchLogin()">Connecter un compte</button></div>`;
 
   const b = s.bet || {};
   const stateLabel = { closed: 'Fermé', open: 'Ouvert', locked: 'Verrouillé — en attente du toucher', resolved: 'Terminé' }[b.state] || b.state;
@@ -1056,6 +1057,74 @@ function renderTwitch(){
   const kindIcon = { cmd: '💬', reply: '🤖', bet: '🎲', error: '⚠', info: 'ℹ' };
   $('twLog').innerHTML = (s.log || []).length ? s.log.map(l => `<div class="tw-log-row k-${esc(l.kind)}"><span class="t">${new Date(l.at).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })}</span><span>${kindIcon[l.kind] || ''}</span><span>${l.user ? '<b>' + esc(l.user) + '</b> ' : ''}${esc(l.text)}${l.kind === 'reply' && !l.inChat ? ' <i>(overlay)</i>' : ''}</span></div>`).join('') : '<div class="hint">Rien pour l\'instant. Tape <code>!fb</code> dans ton chat pour tester.</div>';
 }
+/* ---- Application Twitch propre à chaque utilisateur (Client ID) ---- */
+let twAppEditing = false;
+function renderTwitchApp(){
+  const box = $('twAppBox');
+  if(!box) return;
+  const c = twCfg();
+  if(c.clientId && !twAppEditing){
+    box.innerHTML = `<div class="tw-app-ok"><span class="tw-app-ic">✓</span><div><b>Application déclarée</b><div class="hint" style="margin:0;">ID client <code>${esc(c.clientId.slice(0, 4) + '…' + c.clientId.slice(-4))}</code></div></div>
+      <button class="btn small" onclick="FBv15.twitchAppEdit(true)">Modifier</button></div>`;
+    return;
+  }
+  const handle = (c.channel || (db.userProfile && db.userProfile.twitchHandle) || 'tonpseudo').replace(/[^a-z0-9_]/gi, '');
+  box.innerHTML = `<div class="tw-app-setup">
+    <p class="hint" style="margin:0 0 10px;">Pour que le bot puisse parler dans ton chat, Twitch demande que chaque streamer déclare <b>sa propre application</b> (gratuit, 2 minutes, une seule fois). Elle reste à toi : FlightBrief n'utilise aucun identifiant commun.</p>
+    <ol class="tw-steps">
+      <li><span>Ouvre la console développeur de Twitch et connecte-toi avec ton compte.</span>
+        <button class="btn small" onclick="window.api.openExternal('https://dev.twitch.tv/console/apps/create')">Ouvrir la console Twitch ↗</button>
+        <div class="hint">Si Twitch le demande, active d'abord la double authentification sur ton compte.</div></li>
+      <li><span>Remplis le formulaire « Enregistrer votre application » :</span>
+        <div class="tw-form">
+          <div><small>Nom</small><code>FlightBrief-${esc(handle)}</code><button class="tw-copy" onclick="FBv15.copyText('FlightBrief-${esc(handle)}', this)">Copier</button></div>
+          <div><small>URL de redirection OAuth</small><code>http://localhost</code><button class="tw-copy" onclick="FBv15.copyText('http://localhost', this)">Copier</button></div>
+          <div><small>Catégorie</small><b>Chat Bot</b></div>
+          <div><small>Type de client</small><b class="tw-must">Public</b></div>
+        </div>
+        <div class="hint">Le nom doit être unique sur tout Twitch : garde ton pseudo dedans. « Public » est indispensable, c'est ce qui permet la connexion par code sans mot de passe.</div></li>
+      <li><span>Clique sur « Créer », puis sur « Gérer » à côté de ton application, et copie l'<b>ID client</b> ici :</span>
+        <div class="simbrief-row" style="margin-top:6px;">
+          <input type="text" id="twClientIdInput" placeholder="ex : abcd1234efgh5678ijkl9012mnop34" value="${esc(c.clientId || '')}" spellcheck="false" autocomplete="off">
+          <button class="btn small primary" id="twClientIdSave" onclick="FBv15.twitchSaveClientId()">Valider</button>
+        </div>
+        <div class="status-msg" id="twClientIdMsg"></div></li>
+    </ol>
+    ${c.clientId ? '<div class="btn-row"><button class="btn small" onclick="FBv15.twitchAppEdit(false)">Annuler</button><button class="btn small danger" onclick="FBv15.twitchClearClientId()">Retirer l\'application</button></div>' : ''}
+  </div>`;
+}
+FBv15.copyText = async (txt, btn) => {
+  await window.api.copyToClipboard(txt);
+  if(btn){ const t = btn.textContent; btn.textContent = 'Copié ✓'; setTimeout(() => { btn.textContent = t; }, 1400); }
+};
+FBv15.twitchAppEdit = (on) => { twAppEditing = !!on; renderTwitchApp(); };
+FBv15.twitchSaveClientId = async () => {
+  const input = $('twClientIdInput'), msg = $('twClientIdMsg'), btn = $('twClientIdSave');
+  const id = (input.value || '').trim().toLowerCase().replace(/\s+/g, '');
+  input.value = id;
+  msg.className = 'status-msg'; msg.textContent = 'Vérification auprès de Twitch…';
+  btn.disabled = true;
+  const r = window.twitch.checkClientId ? await window.twitch.checkClientId(id) : { ok: /^[a-z0-9]{30}$/.test(id) };
+  btn.disabled = false;
+  if(!r.ok){ msg.className = 'status-msg err'; msg.textContent = r.error || 'ID client refusé.'; return; }
+  const changed = twCfg().clientId !== id;
+  twCfg().clientId = id;
+  twAppEditing = false;
+  queueSaveDb();
+  twState = await window.twitch.setConfig(twCfg());
+  renderTwitch();
+  const m = $('twLoginMsg');
+  m.className = 'status-msg ok';
+  m.textContent = changed ? 'Application Twitch enregistrée ✓ — tu peux maintenant connecter le compte qui parlera dans le chat.' : 'Application Twitch inchangée ✓';
+};
+FBv15.twitchClearClientId = async () => {
+  if(!confirm('Retirer ton application Twitch ? Le compte connecté sera déconnecté et le bot repassera en lecture seule.')) return;
+  twCfg().clientId = '';
+  twAppEditing = false;
+  queueSaveDb();
+  twState = await window.twitch.setConfig(twCfg());
+  renderTwitch();
+};
 FBv15.twitchLogin = async () => {
   const m = $('twLoginMsg'); m.className = 'status-msg'; m.textContent = 'Ouverture de Twitch…';
   const r = await window.twitch.startLogin();

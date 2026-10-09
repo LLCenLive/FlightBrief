@@ -941,3 +941,21 @@ body.map-full-open .topnav{z-index:400;}
 /* Petit trait reliant le badge ATC au terrain */
 .atc-ap-badge-wrap .atc-ap-badge::after{content:''; position:absolute; left:50%; bottom:-9px; height:8px; border-left:1px solid var(--net); opacity:.7;}
 .atc-ap-badge{position:relative;}
+
+/* ---- Twitch : application propre à chaque utilisateur ---- */
+.tw-app-ok{display:flex; align-items:center; gap:10px; padding:10px; border:1px solid rgba(57,232,143,.3); border-radius:10px; background:rgba(57,232,143,.05); margin-bottom:8px; font-size:12px;}
+.tw-app-ok > div{flex:1;}
+.tw-app-ic{width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(57,232,143,.15); color:var(--phosphor); font-weight:700;}
+.tw-app-setup{border:1px dashed rgba(145,70,255,.45); border-radius:10px; padding:12px; margin-bottom:8px; background:rgba(145,70,255,.04);}
+.tw-steps{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:12px; font-size:12px;}
+.tw-steps li > span{display:block; margin-bottom:6px; line-height:1.45;}
+.tw-steps li::marker{color:#bf94ff; font-weight:700;}
+.tw-form{display:flex; flex-direction:column; gap:4px; margin:4px 0;}
+.tw-form > div{display:grid; grid-template-columns:1fr auto; align-items:center; gap:2px 8px; padding:5px 8px; border-radius:7px; background:rgba(255,255,255,.03); border:1px solid var(--hairline);}
+.tw-form small{grid-column:1 / -1; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-secondary);}
+.tw-form code{font-family:var(--font-mono); font-size:11.5px; color:var(--accent-ifr); overflow:hidden; text-overflow:ellipsis;}
+.tw-form b{font-size:12px;}
+.tw-must{color:#bf94ff;}
+.tw-copy{background:none; border:1px solid var(--hairline); color:var(--text-secondary); border-radius:6px; font-size:10px; padding:2px 7px; cursor:pointer;}
+.tw-copy:hover{color:var(--text-primary);}
+#twClientIdInput{font-family:var(--font-mono); font-size:11.5px;}

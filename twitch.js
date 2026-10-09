@@ -7,6 +7,8 @@
      - Compte connecté (connexion Twitch par code, « Device Code Flow ») : le bot répond
        aussi directement dans le chat, sous le nom du compte connecté (ton compte ou un
        compte dédié au bot), préfixé du nom de bot choisi.
+     - Chaque utilisateur déclare SA PROPRE application Twitch (Client ID saisi dans
+       l'onglet Twitch, assistant pas à pas) : aucun identifiant n'est intégré à FlightBrief.
    • Commandes : !eta !route !metar !avion !alt !landing !pari !top !fb
    • Pari sur l'atterrissage : ouverture auto au début de la descente, fermeture auto
      sous 1 000 ft sol, résultat au toucher (le plus proche du taux réel gagne).
@@ -16,15 +18,9 @@ const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 
-/* ⚙️ Client ID de l'application Twitch de FlightBrief.
-   À créer UNE FOIS sur https://dev.twitch.tv/console/apps → « Enregistrer votre application » :
-     - Nom : FlightBrief (ou autre)
-     - URL de redirection OAuth : http://localhost
-     - Catégorie : Chat Bot
-     - Type de client : PUBLIC (important : pas de secret, c'est ce qui permet la connexion par code)
-   puis colle ici le « ID client » obtenu. Un Client ID n'est pas un secret : il peut être
-   publié dans le dépôt. Les utilisateurs peuvent aussi en saisir un autre dans l'appli. */
-const DEFAULT_CLIENT_ID = '';
+// Client ID : fourni par chaque utilisateur (sa propre application Twitch, type « Public »).
+// Format Twitch : 30 caractères minuscules / chiffres.
+const CLIENT_ID_RE = /^[a-z0-9]{30}$/;
 
 const SCOPES = 'chat:read chat:edit';
 const IRC_HOST = 'irc.chat.twitch.tv';
@@ -57,13 +53,36 @@ class TwitchAuth {
       fs.writeFileSync(this.file, this.crypt ? this.crypt.encrypt(json) : json);
     } catch (e) { /* best effort */ }
   }
-  clientId(override) { return String(override || this.data.clientId || DEFAULT_CLIENT_ID || '').trim(); }
+  clientId(override) { return String(override || this.data.clientId || '').trim(); }
   isLoggedIn() { return !!(this.data.accessToken && this.data.login); }
-  publicInfo() { return { loggedIn: this.isLoggedIn(), login: this.data.login || null, hasClientId: !!this.clientId() }; }
+  publicInfo() {
+    const id = this.clientId();
+    return { loggedIn: this.isLoggedIn(), login: this.data.login || null, hasClientId: !!id, clientIdMasked: id ? id.slice(0, 4) + '…' + id.slice(-4) : null };
+  }
+
+  // Vérifie un Client ID auprès de Twitch sans rien ouvrir : une demande de code de connexion
+  // réussit seulement si l'application existe et accepte la connexion par code (type Public).
+  async checkClientId(id) {
+    id = String(id || '').trim();
+    if (!CLIENT_ID_RE.test(id)) return { ok: false, error: "Ce n'est pas un ID client Twitch : il fait 30 caractères (lettres minuscules et chiffres)." };
+    try {
+      const res = await this.fetch('https://id.twitch.tv/oauth2/device', {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form({ client_id: id, scopes: SCOPES })
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.device_code) return { ok: true };
+      const msg = String(j.message || '').toLowerCase();
+      if (msg.includes('invalid client')) return { ok: false, error: "Twitch ne connaît pas cet ID client. Vérifie le copier-coller depuis la console Twitch." };
+      return { ok: false, error: j.message || ('Twitch a répondu HTTP ' + res.status) };
+    } catch (e) {
+      return { ok: false, error: 'Twitch injoignable (' + (e.message || e) + '). Réessaie dans un instant.' };
+    }
+  }
 
   async startDevice(clientIdOverride) {
     const clientId = this.clientId(clientIdOverride);
-    if (!clientId) throw new Error("Aucun Client ID Twitch configuré (voir « Réglages avancés »).");
+    if (!clientId) throw new Error("Commence par déclarer ton application Twitch (étape 1 de l'onglet Twitch).");
     const res = await this.fetch('https://id.twitch.tv/oauth2/device', {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: form({ client_id: clientId, scopes: SCOPES })
@@ -95,6 +114,7 @@ class TwitchAuth {
       }
       const msg = String(j.message || '').toLowerCase();
       if (msg.includes('slow_down')) interval += 2000;
+      else if (msg.includes('client secret') || msg.includes('invalid client')) throw new Error("ton application Twitch doit être de type « Public » (Console Twitch → ton application → Gérer → Type de client).");
       else if (!msg.includes('authorization_pending')) throw new Error(j.message || ('HTTP ' + res.status));
       onTick && onTick();
     }
@@ -148,7 +168,16 @@ class TwitchAuth {
       }).catch(() => {});
     }
   }
-  setClientId(id) { this.data.clientId = String(id || '').trim(); this._save(); }
+  // Nouveau Client ID : le jeton éventuel appartenait à l'ancienne application -> déconnexion.
+  setClientId(id) {
+    id = String(id || '').trim();
+    if (id === (this.data.clientId || '')) return false;
+    const hadSession = this.isLoggedIn();
+    if (hadSession) this.logout();
+    this.data.clientId = id;
+    this._save();
+    return hadSession;
+  }
 }
 
 /* ---------------- Chat IRC ---------------- */
@@ -515,4 +544,4 @@ function fmtMin(min) {
 }
 function fmtFpm(v) { return v == null ? '—' : `−${Math.abs(Math.round(v))} ft/min`; }
 
-module.exports = { TwitchAuth, TwitchChat, FlightBot, DEFAULT_CONFIG, mergeConfig, COMMANDS, parseLine, DEFAULT_CLIENT_ID };
+module.exports = { TwitchAuth, TwitchChat, FlightBot, DEFAULT_CONFIG, mergeConfig, COMMANDS, parseLine, CLIENT_ID_RE };

@@ -13,7 +13,7 @@ window.FB_CHANGELOG = [
     date: '2026-10-10',
     title: 'Twitch, atterrissages notés & approche en 3D',
     items: [
-      ['new', "Nouvel onglet Twitch : un bot répond dans ton chat à !eta, !route, !metar, !avion, !alt, !landing et !fb, avec le nom que tu lui donnes. Sans compte connecté, il lit le chat et répond sur l'overlay."],
+      ['new', "Nouvel onglet Twitch : un bot répond dans ton chat à !eta, !route, !metar, !avion, !alt, !landing et !fb, avec le nom que tu lui donnes. Chaque streamer utilise sa propre application Twitch, déclarée en 2 minutes grâce à un assistant intégré. Sans compte connecté, le bot lit le chat et répond sur l'overlay."],
       ['new', "Paris d'atterrissage : le chat devine ton taux au toucher avec !pari 180. Ouverture au début de la descente, fermeture en courte finale, podium à l'écran et classement (!top)."],
       ['new', "3e source OBS « Alertes » (localhost:4814/alerts) : carte d'atterrissage, paris, succès débloqués et réponses du bot, avec position, durée et taille réglables."],
       ['new', "Atterrissage mesuré précisément : vitesse verticale exacte à l'impact (lue dans le simulateur), facteur G, vent et vent traversier sur la piste, et une note de A+ à F."],

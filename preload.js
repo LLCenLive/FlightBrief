@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('twitch', {
   setConfig: (c) => ipcRenderer.invoke('twitch:setConfig', c),
   startLogin: () => ipcRenderer.invoke('twitch:startLogin'),
   cancelLogin: () => ipcRenderer.invoke('twitch:cancelLogin'),
+  checkClientId: (id) => ipcRenderer.invoke('twitch:checkClientId', id),
   logout: () => ipcRenderer.invoke('twitch:logout'),
   reconnect: () => ipcRenderer.invoke('twitch:reconnect'),
   bet: (action) => ipcRenderer.invoke('twitch:bet', action),

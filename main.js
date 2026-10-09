@@ -836,9 +836,10 @@ ipcMain.handle('twitch:getState', () => twitchPublicState());
 ipcMain.handle('twitch:setConfig', (evt, cfg) => {
   const prev = twitchConfig;
   twitchConfig = mergeTwitchConfig(cfg);
-  if (twitchConfig.clientId !== (prev.clientId || '')) getTwitchAuth().setClientId(twitchConfig.clientId);
+  // Client ID propre à l'utilisateur : changer d'application déconnecte le compte lié à l'ancienne.
+  const loggedOut = getTwitchAuth().setClientId(twitchConfig.clientId);
   flightBot.setConfig(twitchConfig);
-  if (prev.enabled !== twitchConfig.enabled || prev.channel !== twitchConfig.channel) applyTwitchConnection();
+  if (loggedOut || prev.enabled !== twitchConfig.enabled || prev.channel !== twitchConfig.channel) applyTwitchConnection();
   sendTwitchState();
   return twitchPublicState();
 });
@@ -854,6 +855,7 @@ ipcMain.handle('twitch:startLogin', async () => {
     return { ok: true, userCode: _twitchDevice.userCode, verificationUri: _twitchDevice.verificationUri, expiresIn: _twitchDevice.expiresIn };
   } catch (e) { return { ok: false, error: e.message }; }
 });
+ipcMain.handle('twitch:checkClientId', (evt, id) => getTwitchAuth().checkClientId(id));
 ipcMain.handle('twitch:cancelLogin', () => { getTwitchAuth().cancelPoll(); _twitchDevice = null; return true; });
 ipcMain.handle('twitch:logout', () => { getTwitchAuth().logout(); applyTwitchConnection(); sendTwitchState(); return twitchPublicState(); });
 ipcMain.handle('twitch:reconnect', () => { applyTwitchConnection(); return true; });

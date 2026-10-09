@@ -41,12 +41,3 @@ try {
 } catch (e) {
   console.warn('[check-build] renderer/changelog.js introuvable — la fenêtre « Quoi de neuf » sera vide.');
 }
-
-// v1.5 : rappel (non bloquant) — sans Client ID Twitch, le bot ne peut pas se connecter à un
-// compte pour répondre dans le chat (il reste utilisable en lecture seule).
-try {
-  const tw = fs.readFileSync(path.join(root, 'twitch.js'), 'utf-8');
-  if (/const DEFAULT_CLIENT_ID = '';/.test(tw)) {
-    console.warn("[check-build] ATTENTION : DEFAULT_CLIENT_ID est vide dans twitch.js — le bot Twitch ne pourra répondre dans le chat que si l'utilisateur saisit son propre Client ID (voir README).");
-  }
-} catch (e) { /* twitch.js absent : rien à vérifier */ }

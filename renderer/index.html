@@ -561,6 +561,9 @@
         <div class="field"><label>Nom du bot</label><input type="text" id="twBotName" placeholder="FlightBot" maxlength="25"></div>
         <div class="switch-row"><span>Préfixer ses messages par [nom du bot]</span><label class="switch"><input type="checkbox" id="twPrefix" checked><span class="slider"></span></label></div>
 
+        <h2>Ton application Twitch</h2>
+        <div id="twAppBox"></div>
+
         <h2>Compte qui parle dans le chat</h2>
         <div id="twAccountBox" class="tw-account"></div>
         <div class="tw-device hidden" id="twDeviceBox">
@@ -588,11 +591,6 @@
         </div>
         <div class="switch-row"><span>Annoncer l'ouverture et le résultat dans le chat</span><label class="switch"><input type="checkbox" id="twBetAnnounce" checked><span class="slider"></span></label></div>
 
-        <details class="tw-advanced">
-          <summary>Réglages avancés</summary>
-          <div class="field"><label>Client ID de l'application Twitch</label><input type="text" id="twClientId" placeholder="Laisser vide pour utiliser celui de FlightBrief"></div>
-          <div class="hint">Utile seulement si tu veux utiliser ta propre application Twitch (dev.twitch.tv → type de client « Public »).</div>
-        </details>
       </div>
 
       <div class="card-col">
