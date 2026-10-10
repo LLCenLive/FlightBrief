@@ -865,6 +865,8 @@ function liveOverlayBlocks(cfg){
 function pushLiveOverlayConfig(){
   if(!window.api || !window.api.pushLiveOverlayUpdate) return;
   window.api.pushLiveOverlayUpdate({ config: currentLiveOverlayConfig() });
+  // v1.6.1 : les alertes « assorties à l'overlay live » suivent ses changements de style.
+  if(window.FBv15 && FBv15.onLiveStyleChanged) FBv15.onLiveStyleChanged();
 }
 function pushLiveOverlayTelemetry(){
   if(!window.api || !window.api.pushLiveOverlayUpdate) return;
@@ -3240,6 +3242,7 @@ function maybeShowOnboarding(){
 }
 async function completeOnboarding(startTourAfter){
   db.userProfile = {...db.userProfile, ...readUserProfileForm('ob'), onboarded:true};
+  if(window.FBv15 && FBv15.refreshNavProfile) FBv15.refreshNavProfile();
   await saveDbNow();
   el('onboardingModalOverlay').classList.add('hidden');
   fillUserProfileForm('pf', db.userProfile);
@@ -3248,6 +3251,7 @@ async function completeOnboarding(startTourAfter){
 
 async function saveUserProfile(){
   db.userProfile = {...db.userProfile, ...readUserProfileForm('pf'), onboarded:true};
+  if(window.FBv15 && FBv15.refreshNavProfile) FBv15.refreshNavProfile();
   await saveDbNow();
   const statusEl = el('pfStatus');
   statusEl.textContent = 'Profil enregistré ✓';

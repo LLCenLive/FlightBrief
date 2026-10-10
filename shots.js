@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const DEFAULTS = { hotkey: 'Ctrl+Alt+F12', source: 'auto', auto: { takeoff: true, cruise: true, landing: true }, sound: true };
+const DEFAULTS = { hotkey: 'Ctrl+Alt+F12', source: 'auto', autoEnabled: true, auto: { takeoff: true, cruise: true, landing: true }, sound: true, volume: 50 };
 const SIM_WINDOW_RE = /microsoft flight simulator|flightsimulator|x-plane|prepar3d/i;
 
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -44,6 +44,8 @@ class Shots {
       return { ok: true, hotkey: acc };
     } catch (e) { return { ok: false, hotkey: acc, error: 'Raccourci invalide.' }; }
   }
+  // v1.6.1 : capture automatique autorisée pour cette étape du vol ?
+  autoOn(k) { return this.config.autoEnabled !== false && !!(this.config.auto || {})[k]; }
   dispose() { if (this.registered) { try { this.e.globalShortcut.unregister(this.registered); } catch (e) { /* ignoré */ } } }
 
   _isBlack(img) {

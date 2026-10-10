@@ -923,17 +923,17 @@ app.on('will-quit', () => { try { if (shots) shots.dispose(); globalShortcut.unr
 let autoShot = { flightKey: 0, takeoff: false, cruise: false };
 tracker.on('flight-start', () => { autoShot = { flightKey: Date.now(), takeoff: false, cruise: false }; });
 tracker.on('telemetry', d => {
-  const a = getShots().config.auto || {};
-  if (a.takeoff && !autoShot.takeoff && d.phase === 'airborne' && (d.aglFt == null || d.aglFt > 150)) {
+  const sh = getShots();
+  if (sh.autoOn('takeoff') && !autoShot.takeoff && d.phase === 'airborne' && (d.aglFt == null || d.aglFt > 150)) {
     autoShot.takeoff = true;
-    setTimeout(() => getShots().capture('décollage'), 15000);
+    setTimeout(() => { if (sh.autoOn('takeoff')) sh.capture('décollage'); }, 15000);
   }
-  if (a.cruise && !autoShot.cruise && currentDetailedPhase() === 'cruise') {
+  if (sh.autoOn('cruise') && !autoShot.cruise && currentDetailedPhase() === 'cruise') {
     autoShot.cruise = true;
-    setTimeout(() => getShots().capture('croisière'), 20000);
+    setTimeout(() => { if (sh.autoOn('cruise')) sh.capture('croisière'); }, 20000);
   }
 });
-tracker.on('flight-landed', () => { if ((getShots().config.auto || {}).landing) setTimeout(() => getShots().capture('atterrissage'), 4000); });
+tracker.on('flight-landed', () => { if (getShots().autoOn('landing')) setTimeout(() => { if (getShots().autoOn('landing')) getShots().capture('atterrissage'); }, 4000); });
 
 /* =========================================================
    v1.6 — Rappel « tracker non lancé »

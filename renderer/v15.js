@@ -132,17 +132,45 @@ const ALERT_THEMES = {
   minimal:     { label: 'Minimal', bg: '#0b0e12', bg2: '#0b0e12', text: '#f0f3f6', sub: '#8a96a2', opacity: 80, blur: false, accent: '#39e88f' },
   light:       { label: 'Clair', bg: '#ffffff', bg2: '#eef2f6', text: '#0f1720', sub: '#5b6875', opacity: 96, blur: false, accent: '#2563eb' }
 };
+// Cartes d'événement : couleur propre à chaque type ('' = couleur par défaut) et titre modifiable.
+const ALERT_CARD_TYPES = [
+  { k: 'landing', icon: '🛬', label: 'Atterrissage', def: '#54d6e8', title: 'Atterrissage', grade: true },
+  { k: 'bet', icon: '🎯', label: 'Paris', def: '#ffd166' },
+  { k: 'achievement', icon: '🏆', label: 'Succès', def: '#ffd166', title: 'Succès débloqué' },
+  { k: 'chat', icon: '💬', label: 'Réponse du bot', def: '#9146ff' }
+];
+function defaultAlertCards(){ return { landing: { color: '', byGrade: true, label: '' }, bet: { color: '', label: '' }, achievement: { color: '', label: '' }, chat: { color: '', label: '' } }; }
 function defaultAlertStyle(theme){
   const t = ALERT_THEMES[theme] || ALERT_THEMES.flightbrief;
-  return { theme: theme || 'flightbrief', bg: t.bg, bg2: t.bg2, text: t.text, sub: t.sub, opacity: t.opacity, accent: t.accent, accentMode: 'type',
-    font: "'Space Grotesk',sans-serif", width: 420, radius: 18, animation: 'drop', border: true, stripe: true, shadow: true, blur: t.blur, timer: true, sound: false, volume: 60 };
+  return { theme: theme || 'flightbrief', bg: t.bg, bg2: t.bg2, gradient: t.bg2 !== t.bg, text: t.text, sub: t.sub, opacity: t.opacity, accent: t.accent, accentMode: 'type',
+    font: "'Space Grotesk',sans-serif", width: 420, textScale: 100, radius: 18, animation: 'drop', border: true, borderColor: theme === 'light' ? '#0f1720' : '#e7edf2', borderWidth: 1,
+    stripe: true, shadow: true, blur: t.blur, timer: true, sound: false, volume: 60, matchLive: false, cards: defaultAlertCards() };
 }
 function alertsCfg(){
   db.alertsOverlay = Object.assign({ durationSec: 9, position: 'top-right', scale: 100, types: { landing: true, bet: true, achievement: true, chat: true } }, db.alertsOverlay || {});
   db.alertsOverlay.types = Object.assign({ landing: true, bet: true, achievement: true, chat: true }, db.alertsOverlay.types || {});
-  db.alertsOverlay.style = Object.assign(defaultAlertStyle(db.alertsOverlay.style && db.alertsOverlay.style.theme), db.alertsOverlay.style || {});
+  const st = db.alertsOverlay.style || {};
+  db.alertsOverlay.style = Object.assign(defaultAlertStyle(st.theme), st);
+  // Fusion EN PLACE (les objets doivent rester les mêmes : le formulaire garde des références).
+  const def = defaultAlertCards(), cards = db.alertsOverlay.style.cards = (st.cards && typeof st.cards === 'object') ? st.cards : {};
+  Object.keys(def).forEach(k => { const cur = cards[k] || (cards[k] = {}); Object.keys(def[k]).forEach(x => { if(!(x in cur)) cur[x] = def[k][x]; }); });
   return db.alertsOverlay;
 }
+function hexToRgbaStr(hex, pct){
+  const h = String(hex || '#e7edf2').replace('#', ''), n = h.length === 3 ? h.split('').map(c => c + c).join('') : h.padEnd(6, '0');
+  return `rgba(${parseInt(n.slice(0, 2), 16) || 0},${parseInt(n.slice(2, 4), 16) || 0},${parseInt(n.slice(4, 6), 16) || 0},${(pct / 100).toFixed(2)})`;
+}
+// Style réellement envoyé à OBS : en mode « Assortir », les réglages visuels viennent de
+// l'overlay live (Outil Live) et suivent ses changements.
+function effectiveAlertStyle(){
+  const st = alertsCfg().style;
+  if(!st.matchLive) return { ...st };
+  const lo = (db.liveOverlay && db.liveOverlay.style) || {};
+  return { ...st, theme: 'custom', bg: lo.bg || '#0a0d11', bg2: lo.bg || '#0a0d11', gradient: false, text: lo.text || '#e7edf2', sub: hexToRgbaStr(lo.text || '#e7edf2', 62),
+    opacity: lo.bgOpacity != null ? lo.bgOpacity : 78, accent: lo.accent || '#39e88f', font: lo.font || st.font, radius: lo.radius != null ? lo.radius : 12,
+    border: lo.border !== false, borderColor: lo.borderColor || '#ffffff', borderAlpha: 22, borderWidth: 1, shadow: lo.shadow !== false, blur: lo.blur !== false };
+}
+function alertsPayload(){ const c = alertsCfg(); return { ...c, style: effectiveAlertStyle() }; }
 function landingAlertData(d){
   const cat = currentFlightCategory(d);
   const zone = d.zone || (d.touchdown && d.touchdown.zone) || null;
@@ -434,12 +462,24 @@ function celebrateRank(info){
   fx(`<div class="rank-toast"><div class="rank-badge big lvl-${info.level}">${info.rank.icon}<b>${info.level}</b></div><div><div class="lc-eyebrow">Nouveau rang FlightBrief</div><div class="ach-title">${esc(info.rank.name)}</div><div class="hint" style="margin:0;">${fmtInt(info.xp)} XP${info.next ? ` · prochain rang : ${esc(info.next.name)} à ${fmtInt(info.next.xp)} XP` : ' · rang maximal !'}</div></div></div>`, 'fx-rank', 9000);
   if(window.alerts && alertsCfg().types.achievement) window.alerts.push({ type: 'achievement', title: 'Nouveau rang : ' + info.rank.name, text: `Niveau ${info.level} · ${fmtInt(info.xp)} XP FlightBrief`, icon: info.rank.icon });
 }
+// Onglet Profil : prénom (ou pseudo Twitch) + icône du rang — plus de pastille chiffrée qui
+// ressemblait à un compteur de notifications.
+function refreshNavProfile(info){
+  info = info || xpInfo();
+  const btn = document.querySelector('.tabs button[data-view="profil"]');
+  const lbl = btn && btn.querySelector('.tab-label');
+  if(!lbl) return;
+  const p = db.userProfile || {};
+  const name = (p.firstName || '').trim() || (p.twitchHandle || '').trim() || 'Profil';
+  lbl.innerHTML = `<span class="nav-name">${esc(name)}</span><span class="nav-rank lvl-${info.level}">${info.rank.icon}</span>`;
+  btn.title = `${name} · ${info.rank.name} (niveau ${info.level}, ${fmtInt(info.xp)} XP) — Ctrl+8`;
+}
+FBv15.refreshNavProfile = () => refreshNavProfile();
 function rankBadge(info, cls){ return `<div class="rank-badge ${cls || ''} lvl-${info.level}" title="Niveau ${info.level}">${info.rank.icon}<b>${info.level}</b></div>`; }
 // Carte « rang » du Profil + aperçu des derniers succès ; la liste complète est dans la modale.
 function renderAchievements(s){
   const info = xpInfo();
-  const navTab = document.querySelector('.tabs button[data-view="profil"] .tab-label');
-  if(navTab) navTab.innerHTML = `Profil <span class="nav-lvl lvl-${info.level}">${info.level}</span>`;
+  refreshNavProfile(info);
   const grid = $('achGrid');
   if(!grid) return;
   const st = achState();
@@ -1055,6 +1095,7 @@ function initMapUx(){
       if(!$('lightbox').classList.contains('hidden')){ FBv15.lightboxClose(); e.stopImmediatePropagation(); return; }
       if(!$('galleryOverlay').classList.contains('hidden')){ FBv15.closeGallery(); e.stopImmediatePropagation(); return; }
       if(!$('achModalOverlay').classList.contains('hidden')){ FBv15.closeAchievements(); e.stopImmediatePropagation(); return; }
+      if($('shotsModalOverlay') && !$('shotsModalOverlay').classList.contains('hidden')){ FBv15.closeShotsSettings(); e.stopImmediatePropagation(); return; }
     }
     if(!$('lightbox').classList.contains('hidden') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')){ FBv15.lightboxStep(e.key === 'ArrowLeft' ? -1 : 1); e.preventDefault(); return; }
     if(typing || e.ctrlKey || e.metaKey || e.altKey || !el('view-briefing').classList.contains('active')) return;
@@ -1198,27 +1239,69 @@ FBv15.renderFreeCanvas = function(){
    5 quater. CAPTURES D'ÉCRAN DES VOLS (v1.6)
    ========================================================= */
 function shotsCfg(){
-  db.shotsCfg = Object.assign({ hotkey: 'Ctrl+Alt+F12', source: 'auto', auto: { takeoff: true, cruise: true, landing: true }, sound: true }, db.shotsCfg || {});
+  db.shotsCfg = Object.assign({ hotkey: 'Ctrl+Alt+F12', source: 'auto', autoEnabled: true, auto: { takeoff: true, cruise: true, landing: true }, sound: true, volume: 50 }, db.shotsCfg || {});
   db.shotsCfg.auto = Object.assign({ takeoff: true, cruise: true, landing: true }, db.shotsCfg.auto || {});
   return db.shotsCfg;
 }
+// Volume perçu : l'oreille est logarithmique, un curseur linéaire ne s'entend presque pas
+// entre 40 et 100 %. On applique donc une courbe (≈ −12 dB à 50 %, silence à 0).
+function volGain(pct, max){ const v = Math.max(0, Math.min(100, +pct || 0)) / 100; return (max || 1) * v * v; }
+const hotkeyLabel = acc => String(acc || '').split('+').filter(Boolean).map(k => k === 'Shift' ? 'Maj' : k === 'Control' ? 'Ctrl' : k);
+function renderHotkeyCaps(acc, recording){
+  const box = $('hotkeyCaps'); if(!box) return;
+  box.innerHTML = recording ? '<span class="rec-dot"></span><span class="rec-txt">Appuie sur ta combinaison… <small>(Échap pour annuler)</small></span>'
+    : acc ? hotkeyLabel(acc).map(k => `<kbd>${esc(k)}</kbd>`).join('<span class="plus">+</span>') : '<span class="hint" style="margin:0;">Aucun raccourci</span>';
+  $('hotkeyBox').classList.toggle('rec', !!recording);
+}
+function renderShotsSummary(){
+  const c = shotsCfg();
+  if($('shotKeyHint')) $('shotKeyHint').textContent = c.hotkey ? hotkeyLabel(c.hotkey).join('+') : '';
+  const chip = $('shotAutoChip');
+  if(chip){ chip.classList.toggle('on', c.autoEnabled !== false); chip.title = c.autoEnabled !== false ? 'Captures automatiques activées (clic pour les couper)' : 'Captures automatiques désactivées (clic pour les activer)'; }
+  const sum = $('shotsSummary');
+  if(sum){
+    const steps = [['takeoff','décollage'],['cruise','croisière'],['landing','atterrissage']].filter(([k]) => c.auto[k]).map(([, l]) => l);
+    sum.innerHTML = `<div><span>Raccourci</span><b>${c.hotkey ? hotkeyLabel(c.hotkey).map(k => `<kbd>${esc(k)}</kbd>`).join('+') : 'aucun'}</b></div>
+      <div><span>Captures auto</span><b>${c.autoEnabled !== false && steps.length ? esc(steps.join(', ')) : 'désactivées'}</b></div>
+      <div><span>Son</span><b>${c.sound ? c.volume + ' %' : 'coupé'}</b></div>`;
+  }
+}
 async function pushShotsCfg(){
+  renderShotsSummary();
   if(!window.shots) return;
   const r = await window.shots.setConfig(shotsCfg());
   const m = $('shotHotkeyMsg');
-  if(m){ m.className = 'status-msg ' + (r.ok ? 'ok' : 'err'); m.textContent = r.ok ? (r.hotkey ? `Raccourci actif : ${r.hotkey}` : 'Aucun raccourci.') : r.error; }
-  if($('shotKeyHint')) $('shotKeyHint').textContent = r.ok && r.hotkey ? r.hotkey : '';
+  if(m && !hotkeyRec){ m.className = 'status-msg ' + (r.ok ? 'ok' : 'err'); m.textContent = r.ok ? (r.hotkey ? `Raccourci actif : ${hotkeyLabel(r.hotkey).join(' + ')}` : 'Aucun raccourci : utilise le bouton du Briefing.') : r.error; }
+  return r;
 }
-function shutterSound(){
-  if(!shotsCfg().sound) return;
+// Son de capture : petit « tic » doux à deux notes (l'ancien bruit blanc faisait sursauter).
+function shutterSound(force){
+  const c = shotsCfg();
+  if(!c.sound && !force) return;
+  const vol = volGain(c.volume, 0.22);
+  if(vol <= 0) return;
   try{
     const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const len = ac.sampleRate * 0.09, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
-    for(let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3) * 0.35;
-    const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination); src.start();
-    setTimeout(() => ac.close(), 400);
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.connect(ac.destination);
+    [[1318, 0], [1760, 0.075]].forEach(([f, t0]) => {
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + t0;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.connect(g); g.connect(lp); o.start(t); o.stop(t + 0.18);
+    });
+    setTimeout(() => ac.close(), 600);
   }catch(e){ /* pas d'audio */ }
 }
+FBv15.shutterTest = () => shutterSound(true);
+FBv15.toggleAutoShots = () => {
+  const c = shotsCfg();
+  c.autoEnabled = c.autoEnabled === false;
+  if(c.autoEnabled && !c.auto.takeoff && !c.auto.cruise && !c.auto.landing) c.auto = { takeoff: true, cruise: true, landing: true };
+  loadShotsForm(); queueSaveDb(); pushShotsCfg();
+  fx(`<div class="lc-eyebrow">Captures automatiques ${c.autoEnabled ? 'activées' : 'désactivées'}</div><div class="hint" style="margin:4px 0 0;">${c.autoEnabled ? 'Décollage, croisière et atterrissage, selon tes réglages.' : 'Seuls le bouton et le raccourci prennent des captures.'}</div>`, 'fx-shot', 2600);
+};
+FBv15.openShotsSettings = () => { loadShotsForm(); $('shotsModalOverlay').classList.remove('hidden'); pushShotsCfg(); };
+FBv15.closeShotsSettings = () => { if(hotkeyRec) hotkeyStop(true); $('shotsModalOverlay').classList.add('hidden'); };
 FBv15.takeShot = async () => {
   const btn = $('shotBtn'); if(btn) btn.disabled = true;
   const r = await window.shots.capture('manuel');
@@ -1305,40 +1388,92 @@ async function renderRouteShots(f){
   box.classList.toggle('hidden', !items.length);
   $('routeShotsStrip').innerHTML = items.map(g => `<img src="${esc(g.url)}" loading="lazy" alt="" onclick="FBv15.openGallery('${f.id}')">`).join('');
 }
-function bindShotsSettings(){
+function loadShotsForm(){
   const c = shotsCfg();
-  if(!$('shotsPanel')) return;
-  $('shotHotkey').value = c.hotkey || '';
+  if(!$('shotsModalOverlay')) return;
+  renderHotkeyCaps(c.hotkey, hotkeyRec);
   $('shotSource').value = c.source;
+  $('shotAutoAll').checked = c.autoEnabled !== false;
   $('shotAutoTakeoff').checked = c.auto.takeoff; $('shotAutoCruise').checked = c.auto.cruise; $('shotAutoLanding').checked = c.auto.landing;
+  $('shotAutoSub').classList.toggle('disabled', c.autoEnabled === false);
   $('shotSound').checked = c.sound;
+  $('shotVolume').value = c.volume; $('shotVolumeVal').textContent = c.volume + '%'; updateRangeFill($('shotVolume'));
+  renderShotsSummary();
+}
+// Enregistrement du raccourci : le raccourci actuel est libéré pendant l'écoute (sinon il
+// serait intercepté par Windows avant d'arriver ici), puis réenregistré ou remplacé.
+let hotkeyRec = false, hotkeyPrev = '';
+function hotkeyKeyName(e){
+  if(/^F([1-9]|1[0-9]|2[0-4])$/.test(e.key)) return e.key;
+  if(/^[a-z]$/i.test(e.key)) return e.key.toUpperCase();             // lettres : selon la disposition (AZERTY…)
+  if(e.code && /^Key[A-Z]$/.test(e.code)) return e.code.slice(3);
+  if(e.code && /^Digit\d$/.test(e.code)) return e.code.slice(5);     // chiffres : touche physique (sans Maj en AZERTY)
+  if(e.code && /^Numpad\d$/.test(e.code)) return 'num' + e.code.slice(6);
+  const map = { Space: 'Space', PrintScreen: 'PrintScreen', Insert: 'Insert', Delete: 'Delete', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+    ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', NumpadAdd: 'numadd', NumpadSubtract: 'numsub', NumpadMultiply: 'nummult', NumpadDivide: 'numdiv', NumpadDecimal: 'numdec', Pause: 'Pause', ScrollLock: 'Scrolllock' };
+  return map[e.code] || map[e.key] || null;
+}
+FBv15.hotkeyRecord = async () => {
+  if(hotkeyRec){ hotkeyStop(true); return; }
+  hotkeyRec = true; hotkeyPrev = shotsCfg().hotkey || '';
+  if(window.shots) await window.shots.setConfig({ ...shotsCfg(), hotkey: '' });
+  renderHotkeyCaps('', true);
+  $('hotkeyRecordBtn').textContent = 'Annuler';
+  const m = $('shotHotkeyMsg'); m.className = 'status-msg'; m.textContent = 'Exemples : Ctrl+Alt+S, Maj+F10, F9, Impr. écran.';
+};
+async function hotkeyStop(cancel, acc){
+  hotkeyRec = false;
+  if($('hotkeyRecordBtn')) $('hotkeyRecordBtn').textContent = 'Modifier';
+  const c = shotsCfg();
+  if(cancel){ c.hotkey = hotkeyPrev; renderHotkeyCaps(c.hotkey); await pushShotsCfg(); return; }
+  c.hotkey = acc;
+  renderHotkeyCaps(acc);
+  const r = await pushShotsCfg();
+  if(r && !r.ok){
+    // Raccourci refusé (déjà pris par une autre appli) : on garde l'ancien.
+    c.hotkey = hotkeyPrev; renderHotkeyCaps(c.hotkey);
+    const m = $('shotHotkeyMsg'); const err = r.error;
+    await pushShotsCfg();
+    m.className = 'status-msg err'; m.textContent = `${hotkeyLabel(acc).join(' + ')} : ${err} L'ancien raccourci est conservé.`;
+    return;
+  }
+  queueSaveDb();
+}
+function onHotkeyKeydown(e){
+  if(!hotkeyRec) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if(e.key === 'Escape'){ hotkeyStop(true); return; }
+  const mods = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean);
+  if(['Control','Alt','Shift','Meta','AltGraph'].includes(e.key)){
+    $('hotkeyCaps').innerHTML = mods.map(k => `<kbd>${k === 'Shift' ? 'Maj' : k}</kbd>`).join('<span class="plus">+</span>') + '<span class="plus">+</span><span class="rec-txt">…</span>';
+    return;
+  }
+  const k = hotkeyKeyName(e);
+  const m = $('shotHotkeyMsg');
+  if(!k){ m.className = 'status-msg err'; m.textContent = `Touche « ${e.key} » non prise en charge : essaie une lettre, un chiffre ou une touche F.`; return; }
+  if(!mods.length && !/^F\d{1,2}$|^PrintScreen$|^Pause$|^Scrolllock$|^num/.test(k)){ m.className = 'status-msg err'; m.textContent = 'Ajoute Ctrl, Alt ou Maj (sauf pour les touches F1–F24, Impr. écran et le pavé numérique).'; return; }
+  hotkeyStop(false, [...mods, k].join('+'));
+}
+function bindShotsSettings(){
+  if(!$('shotsModalOverlay')) return;
+  const c = shotsCfg();
+  loadShotsForm();
   const save = () => { queueSaveDb(); pushShotsCfg(); };
   $('shotSource').addEventListener('change', e => { c.source = e.target.value; save(); });
-  [['shotAutoTakeoff','takeoff'],['shotAutoCruise','cruise'],['shotAutoLanding','landing']].forEach(([id, k]) => $(id).addEventListener('change', e => { c.auto[k] = e.target.checked; save(); }));
-  $('shotSound').addEventListener('change', e => { c.sound = e.target.checked; save(); });
-  // Enregistreur de raccourci : clique dans le champ puis appuie sur la combinaison.
-  const keyName = e => {
-    if(/^F\d{1,2}$/.test(e.key)) return e.key;
-    if(e.code && /^Key[A-Z]$/.test(e.code)) return e.code.slice(3);
-    if(e.code && /^Digit\d$/.test(e.code)) return e.code.slice(5);
-    const map = { ' ': 'Space', 'PrintScreen': 'PrintScreen', 'Insert': 'Insert', 'Home': 'Home', 'End': 'End', 'PageUp': 'PageUp', 'PageDown': 'PageDown', 'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right' };
-    return map[e.key] || null;
-  };
-  $('shotHotkey').addEventListener('keydown', e => {
-    e.preventDefault();
-    if(['Control','Alt','Shift','Meta'].includes(e.key)) return;
-    const k = keyName(e);
-    if(!k){ $('shotHotkeyMsg').className = 'status-msg err'; $('shotHotkeyMsg').textContent = 'Touche non prise en charge.'; return; }
-    const mods = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean);
-    if(!mods.length && !/^F\d{1,2}$|PrintScreen/.test(k)){ $('shotHotkeyMsg').className = 'status-msg err'; $('shotHotkeyMsg').textContent = 'Ajoute Ctrl, Alt ou Maj (sauf pour les touches F1–F12).'; return; }
-    c.hotkey = [...mods, k].join('+');
-    $('shotHotkey').value = c.hotkey;
-    $('shotHotkey').blur();
-    save();
+  $('shotAutoAll').addEventListener('change', e => {
+    c.autoEnabled = e.target.checked;
+    if(c.autoEnabled && !c.auto.takeoff && !c.auto.cruise && !c.auto.landing) c.auto = { takeoff: true, cruise: true, landing: true };
+    loadShotsForm(); save();
   });
-  $('shotHotkey').addEventListener('focus', () => { $('shotHotkeyMsg').className = 'status-msg'; $('shotHotkeyMsg').textContent = 'Appuie sur la combinaison voulue…'; });
+  [['shotAutoTakeoff','takeoff'],['shotAutoCruise','cruise'],['shotAutoLanding','landing']].forEach(([id, k]) => $(id).addEventListener('change', e => { c.auto[k] = e.target.checked; save(); }));
+  $('shotSound').addEventListener('change', e => { c.sound = e.target.checked; save(); if(c.sound) shutterSound(true); });
+  $('shotVolume').addEventListener('input', e => { c.volume = +e.target.value; $('shotVolumeVal').textContent = e.target.value + '%'; updateRangeFill(e.target); });
+  $('shotVolume').addEventListener('change', () => { save(); shutterSound(true); });
+  // Écoute du clavier AVANT tous les autres raccourcis de l'appli (Ctrl+1…9, F, V, P…).
+  window.addEventListener('keydown', onHotkeyKeydown, true);
 }
-FBv15.shotHotkeyClear = () => { shotsCfg().hotkey = ''; $('shotHotkey').value = ''; queueSaveDb(); pushShotsCfg(); };
+FBv15.shotHotkeyClear = () => { if(hotkeyRec) hotkeyRec = false; $('hotkeyRecordBtn').textContent = 'Modifier'; shotsCfg().hotkey = ''; renderHotkeyCaps(''); queueSaveDb(); pushShotsCfg(); };
+FBv15.shotHotkeyReset = () => { if(hotkeyRec) hotkeyRec = false; $('hotkeyRecordBtn').textContent = 'Modifier'; shotsCfg().hotkey = 'Ctrl+Alt+F12'; renderHotkeyCaps('Ctrl+Alt+F12'); queueSaveDb(); pushShotsCfg(); };
 
 /* =========================================================
    5 quinquies. RAPPEL « TRACKER NON LANCÉ » (v1.6)
@@ -1350,7 +1485,7 @@ function watchCfgR(){
 let watchMuteUntil = 0, watchBanner = null;
 function watchSound(){
   try{
-    const vol = watchCfgR().volume / 100 * 0.35;
+    const vol = volGain(watchCfgR().volume, 0.3);
     if(vol <= 0) return;
     const ac = new (window.AudioContext || window.webkitAudioContext)();
     // Trois bips montants façon « master caution ».
@@ -1388,6 +1523,7 @@ function bindWatchSettings(){
   $('watchEnabled').addEventListener('change', e => { c.enabled = e.target.checked; push(); });
   $('watchAutoStart').addEventListener('change', e => { c.autoStart = e.target.checked; push(); });
   $('watchVolume').addEventListener('input', e => { c.volume = +e.target.value; $('watchVolumeVal').textContent = e.target.value + '%'; updateRangeFill(e.target); queueSaveDb(); });
+  $('watchVolume').addEventListener('change', () => watchSound());
   window.watch.onMoving(onWatchMoving);
   window.watch.onAutoStarted(() => fx(`<div class="lc-eyebrow">Tracker lancé automatiquement</div><div class="hint" style="margin:4px 0 0;">Ton avion bougeait : le suivi du vol a démarré tout seul.</div>`, 'fx-shot', 6000));
   window.watch.onFocusTracker(() => switchView('briefing'));
@@ -1676,7 +1812,7 @@ function bindAlertsOverlay(){
   $('alDuration').value = c.durationSec; $('alDurationVal').textContent = c.durationSec + ' s'; updateRangeFill($('alDuration'));
   $('alScale').value = c.scale; $('alScaleVal').textContent = c.scale + '%'; updateRangeFill($('alScale'));
   $('alTypeLanding').checked = c.types.landing; $('alTypeBet').checked = c.types.bet; $('alTypeAchievement').checked = c.types.achievement; $('alTypeChat').checked = c.types.chat;
-  const push = () => { queueSaveDb(); window.alerts && window.alerts.setConfig(alertsCfg()); };
+  const push = () => { queueSaveDb(); window.alerts && window.alerts.setConfig(alertsPayload()); };
   $('alPosition').addEventListener('change', e => { alertsCfg().position = e.target.value; push(); });
   $('alDuration').addEventListener('input', e => { alertsCfg().durationSec = +e.target.value; $('alDurationVal').textContent = e.target.value + ' s'; updateRangeFill(e.target); push(); });
   $('alScale').addEventListener('input', e => { alertsCfg().scale = +e.target.value; $('alScaleVal').textContent = e.target.value + '%'; updateRangeFill(e.target); push(); });
@@ -1684,37 +1820,107 @@ function bindAlertsOverlay(){
   bindAlertsDesign(push);
   push();
 }
-/* ---- Design des alertes (v1.6) ---- */
+/* ---- Design des alertes (v1.6, enrichi en v1.6.1) ---- */
 function loadAlertsDesignForm(){
-  const st = alertsCfg().style;
+  const st = alertsCfg().style, eff = effectiveAlertStyle();
   $('alThemes').innerHTML = Object.entries(ALERT_THEMES).map(([k, t]) => `<button class="al-theme ${st.theme === k ? 'on' : ''}" data-theme="${k}" style="--tb:${t.bg};--tt:${t.text};--ta:${t.accent}"><i></i>${t.label}</button>`).join('');
-  $('alThemes').querySelectorAll('button').forEach(b => b.onclick = () => { const keep = { sound: st.sound, volume: st.volume, width: alertsCfg().style.width, font: alertsCfg().style.font, animation: alertsCfg().style.animation }; alertsCfg().style = Object.assign(defaultAlertStyle(b.dataset.theme), keep); loadAlertsDesignForm(); _pushAlerts(); });
-  $('alsBg').value = st.bg; $('alsText').value = st.text; $('alsSub').value = st.sub; $('alsAccent').value = st.accent;
+  $('alThemes').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const cur = alertsCfg().style;
+    const keep = { sound: cur.sound, volume: cur.volume, width: cur.width, textScale: cur.textScale, font: cur.font, animation: cur.animation, cards: cur.cards, accentMode: cur.accentMode, stripe: cur.stripe, timer: cur.timer };
+    alertsCfg().style = Object.assign(defaultAlertStyle(b.dataset.theme), keep); loadAlertsDesignForm(); _pushAlerts();
+  });
+  // En mode « Assortir », le formulaire montre les valeurs reprises de l'overlay live.
+  const hex = v => /^#[0-9a-f]{6}$/i.test(v || '') ? v : '#e7edf2';
+  $('alsMatch').checked = !!st.matchLive;
+  $('alsLockable').classList.toggle('locked', !!st.matchLive);
+  $('alsBg').value = hex(eff.bg); $('alsBg2').value = hex(eff.bg2 || eff.bg); $('alsText').value = hex(eff.text); $('alsSub').value = st.matchLive ? hex(eff.text) : hex(eff.sub);
+  $('alsAccent').value = hex(eff.accent); $('alsBorderColor').value = hex(eff.borderColor);
+  $('alsGradient').checked = !!eff.gradient; $('alsBg2').disabled = !eff.gradient;
   $('alsAccentByType').checked = st.accentMode !== 'custom';
   const rng = (id, v, suf) => { $(id).value = v; $(id + 'Val').textContent = v + suf; updateRangeFill($(id)); };
-  rng('alsOpacity', st.opacity, '%'); rng('alsWidth', st.width, ' px'); rng('alsRadius', st.radius, ' px'); rng('alsVolume', st.volume, '%');
-  $('alsFont').value = st.font; $('alsAnim').value = st.animation;
-  ['Border','Stripe','Shadow','Blur','Timer','Sound'].forEach(k => { $('als' + k).checked = !!st[k.toLowerCase()]; });
+  rng('alsOpacity', eff.opacity, '%'); rng('alsWidth', st.width, ' px'); rng('alsRadius', eff.radius, ' px'); rng('alsVolume', st.volume, '%');
+  rng('alsTextScale', st.textScale || 100, '%'); rng('alsBorderWidth', eff.borderWidth || 1, ' px');
+  $('alsFont').value = eff.font; if(!$('alsFont').value) $('alsFont').selectedIndex = 0;
+  $('alsAnim').value = st.animation;
+  ['Border','Stripe','Shadow','Blur','Timer','Sound'].forEach(k => { $('als' + k).checked = !!eff[k.toLowerCase()]; });
+  renderAlertCards();
 }
+function renderAlertCards(){
+  const st = alertsCfg().style, byType = st.accentMode !== 'custom';
+  $('alsCards').classList.toggle('single', !byType);
+  $('alsCards').innerHTML = ALERT_CARD_TYPES.map(t => {
+    const c = st.cards[t.k] || {};
+    const gradeLock = t.grade && c.byGrade !== false;
+    return `<div class="al-card-row" data-k="${t.k}">
+      <span class="al-card-name">${t.icon} ${t.label}</span>
+      <input type="color" class="al-card-color" value="${esc(c.color || t.def)}" ${!byType || gradeLock ? 'disabled' : ''} title="Couleur de cette carte">
+      ${t.grade ? `<label class="al-card-opt"><input type="checkbox" class="al-card-grade" ${gradeLock ? 'checked' : ''} ${!byType ? 'disabled' : ''}> selon la note</label>` : '<span></span>'}
+      ${t.title ? `<input type="text" class="al-card-label" maxlength="32" placeholder="${esc(t.title)}" value="${esc(c.label || '')}" title="Titre affiché sur la carte">` : '<span class="hint" style="margin:0;">—</span>'}
+    </div>`;
+  }).join('') + `<div class="hint" style="margin:6px 0 0;">${byType ? 'Chaque type de carte garde sa couleur. Laisse un titre vide pour garder celui par défaut.' : 'Toutes les cartes utilisent la couleur d\'accent ci-dessus.'}</div>`;
+  $('alsCards').querySelectorAll('.al-card-row').forEach(row => {
+    const c = st.cards[row.dataset.k];
+    const color = row.querySelector('.al-card-color'), grade = row.querySelector('.al-card-grade'), label = row.querySelector('.al-card-label');
+    color.addEventListener('input', () => { c.color = color.value; _pushAlerts(); });
+    if(grade) grade.addEventListener('change', () => { c.byGrade = grade.checked; if(!grade.checked && !c.color) c.color = '#54d6e8'; renderAlertCards(); _pushAlerts(); });
+    if(label) label.addEventListener('input', () => { c.label = label.value.trim(); _pushAlerts(); });
+  });
+}
+// Carillon des alertes, joué dans l'appli pour régler le volume (même courbe que dans OBS).
+function alertsChime(type){
+  const st = alertsCfg().style;
+  const vol = volGain(st.volume != null ? st.volume : 60, 0.3);
+  if(vol <= 0) return;
+  try{
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = type === 'achievement' ? [660, 880, 1320] : type === 'landing' ? [523, 784] : [784];
+    notes.forEach((f, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + i * 0.13;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.65);
+    });
+    setTimeout(() => ac.close(), 1300);
+  }catch(e){ /* pas d'audio */ }
+}
+FBv15.alertsChimeTest = () => alertsChime('achievement');
 let _pushAlerts = () => {};
 function bindAlertsDesign(push){
   if(!$('alDesign')) return;
   _pushAlerts = push;
   loadAlertsDesignForm();
   const st = () => alertsCfg().style;
-  const custom = () => { st().theme = st().theme || 'flightbrief'; };
-  [['alsBg','bg'],['alsText','text'],['alsSub','sub']].forEach(([id, k]) => $(id).addEventListener('input', e => { st()[k] = e.target.value; if(k === 'bg') st().bg2 = e.target.value; custom(); push(); }));
-  $('alsAccent').addEventListener('input', e => { st().accent = e.target.value; st().accentMode = 'custom'; $('alsAccentByType').checked = false; push(); });
-  $('alsAccentByType').addEventListener('change', e => { st().accentMode = e.target.checked ? 'type' : 'custom'; push(); });
-  [['alsOpacity','opacity','%'],['alsWidth','width',' px'],['alsRadius','radius',' px'],['alsVolume','volume','%']].forEach(([id, k, suf]) => $(id).addEventListener('input', e => { st()[k] = +e.target.value; $(id + 'Val').textContent = e.target.value + suf; updateRangeFill(e.target); push(); }));
-  $('alsFont').addEventListener('change', e => { st().font = e.target.value; push(); });
+  const unlockedOnly = fn => e => { if(st().matchLive) return; fn(e); };
+  $('alsMatch').addEventListener('change', e => {
+    st().matchLive = e.target.checked;
+    if(e.target.checked) st().accentMode = 'custom';   // une seule couleur : celle de l'overlay live
+    loadAlertsDesignForm(); push();
+  });
+  [['alsBg','bg'],['alsBg2','bg2'],['alsText','text'],['alsSub','sub'],['alsBorderColor','borderColor']].forEach(([id, k]) => $(id).addEventListener('input', unlockedOnly(e => { st()[k] = e.target.value; if(k === 'bg' && !st().gradient) st().bg2 = e.target.value; push(); })));
+  $('alsAccent').addEventListener('input', unlockedOnly(e => { st().accent = e.target.value; st().accentMode = 'custom'; $('alsAccentByType').checked = false; renderAlertCards(); push(); }));
+  $('alsGradient').addEventListener('change', unlockedOnly(e => { st().gradient = e.target.checked; if(!e.target.checked) st().bg2 = st().bg; else if(st().bg2 === st().bg) st().bg2 = '#06080b'; loadAlertsDesignForm(); push(); }));
+  $('alsAccentByType').addEventListener('change', e => { st().accentMode = e.target.checked ? 'type' : 'custom'; renderAlertCards(); push(); });
+  const ranges = [['alsOpacity','opacity','%', true],['alsRadius','radius',' px', true],['alsBorderWidth','borderWidth',' px', true],['alsWidth','width',' px'],['alsTextScale','textScale','%'],['alsVolume','volume','%']];
+  ranges.forEach(([id, k, suf, lockable]) => $(id).addEventListener('input', e => {
+    if(lockable && st().matchLive){ loadAlertsDesignForm(); return; }
+    st()[k] = +e.target.value; $(id + 'Val').textContent = e.target.value + suf; updateRangeFill(e.target); push();
+  }));
+  $('alsVolume').addEventListener('change', () => alertsChime('achievement'));
+  $('alsFont').addEventListener('change', unlockedOnly(e => { st().font = e.target.value; push(); }));
   $('alsAnim').addEventListener('change', e => { st().animation = e.target.value; push(); });
-  ['Border','Stripe','Shadow','Blur','Timer','Sound'].forEach(k => $('als' + k).addEventListener('change', e => { st()[k.toLowerCase()] = e.target.checked; push(); }));
+  ['Border','Shadow','Blur'].forEach(k => $('als' + k).addEventListener('change', e => { if(st().matchLive){ loadAlertsDesignForm(); return; } st()[k.toLowerCase()] = e.target.checked; push(); }));
+  ['Stripe','Timer','Sound'].forEach(k => $('als' + k).addEventListener('change', e => { st()[k.toLowerCase()] = e.target.checked; push(); if(k === 'Sound' && e.target.checked) alertsChime('achievement'); }));
   $('alDesign').addEventListener('toggle', () => {
     const f = $('alPreviewFrame');
     if($('alDesign').open && alertsUrl && !f.src) f.src = alertsUrl + '?preview=1';
   });
 }
+// Appelé par app.js quand le style de l'overlay live change.
+FBv15.onLiveStyleChanged = () => {
+  if(!alertsCfg().style.matchLive) return;
+  if(window.alerts) window.alerts.setConfig(alertsPayload());
+  if($('alDesign')) loadAlertsDesignForm();
+};
 FBv15.alertsDesignReset = () => {
   if(!confirm('Revenir au design FlightBrief par défaut pour les alertes ?')) return;
   alertsCfg().style = defaultAlertStyle('flightbrief');

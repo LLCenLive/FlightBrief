@@ -9,6 +9,20 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '1.6.1',
+    date: '2026-10-10',
+    title: 'Patch : alertes sur mesure, captures & profil',
+    items: [
+      ['new', "Cartes d'événement personnalisables comme l'overlay live : couleur et titre propres à chaque type de carte (atterrissage, paris, succès, réponse du bot), couleur et épaisseur de bordure, fond en dégradé, taille du texte."],
+      ['new', "Option « Assortir à mon overlay live » : les alertes reprennent les couleurs, la police, les arrondis, la bordure, l'ombre et le flou de ton overlay, et suivent ses changements."],
+      ['new', "Réglages des captures dans une fenêtre dédiée (⚙ à côté du bouton de capture, ou Admin) : nouveau raccourci en une touche avec un vrai enregistreur, retour au raccourci par défaut, captures automatiques activables d'un clic (bouton « Auto » dans le Briefing)."],
+      ['improved', "Volumes réglables pour de vrai : le curseur suit l'oreille (50 % s'entend nettement moins fort) et le son est joué quand tu relâches le curseur, pour l'alerte du tracker, le son des alertes OBS et le son de capture."],
+      ['improved', "Nouveau son de capture : un petit « tic » doux à la place du bruit qui faisait sursauter, avec son propre volume."],
+      ['improved', "Onglet Profil : ton prénom (ou ton pseudo Twitch) et l'icône de ton rang, au lieu du chiffre qui ressemblait à une notification."],
+      ['fix', "Enregistrer un raccourci comme Ctrl+1 ne change plus d'onglet, et l'ancien raccourci ne bloque plus l'enregistrement du nouveau."]
+    ]
+  },
+  {
     version: '1.6.0',
     date: '2026-10-10',
     title: 'Captures, rangs & overlays à ta façon',

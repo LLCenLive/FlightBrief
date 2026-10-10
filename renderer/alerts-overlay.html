@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Sora:wght@500;600;700&family=Rajdhani:wght@600;700&family=Oswald:wght@500;600&family=Chakra+Petch:wght@500;600;700&family=Barlow+Condensed:wght@600;700&family=Inter:wght@500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{ --bg:rgba(14,18,24,.94); --bg2:rgba(10,13,17,.94); --panel:#12171c; --line:rgba(231,237,242,.1); --text:#e7edf2; --sub:#8a96a2; --ok:#39e88f; --ifr:#54d6e8; --vfr:#ffb020; --bad:#ff5c5c; --gold:#ffd166; --scale:1;
-    --radius:18px; --w:420px; --font:'Space Grotesk',sans-serif; --mono:'IBM Plex Mono',monospace; --tile:rgba(255,255,255,.04); }
+    --radius:18px; --w:420px; --font:'Space Grotesk',sans-serif; --mono:'IBM Plex Mono',monospace; --tile:rgba(255,255,255,.04); --cardline:rgba(231,237,242,.1); --bw:1px; --fs:1; }
   *{box-sizing:border-box;}
   html,body{margin:0; padding:0; background:transparent; overflow:hidden; width:100vw; height:100vh;}
   body{font-family:var(--font); color:var(--text);}
@@ -21,7 +21,7 @@
   .pos-preview{position:static; padding:16px; display:grid; grid-template-columns:repeat(2, max-content); gap:14px; transform:none; align-items:start;}
   .pos-preview .al .timer{animation-iteration-count:infinite;}
 
-  .al{position:relative; width:var(--w); background:linear-gradient(160deg, var(--bg), var(--bg2)); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; overflow:hidden; animation:alIn .55s cubic-bezier(.2,1.2,.3,1) both;}
+  .al{position:relative; width:calc(var(--w) / var(--fs)); zoom:var(--fs); background:linear-gradient(160deg, var(--bg), var(--bg2)); border:var(--bw) solid var(--cardline); border-radius:var(--radius); padding:18px 20px; overflow:hidden; animation:alIn .55s cubic-bezier(.2,1.2,.3,1) both;}
   body.shadow .al{box-shadow:0 24px 60px rgba(0,0,0,.45);}
   body.blur .al{backdrop-filter:blur(10px);}
   body.no-border .al{border-color:transparent;}
@@ -87,7 +87,7 @@
 
   /* Succès */
   .ach{display:flex; gap:16px; align-items:center;}
-  .ach .badge{width:70px; height:70px; flex:none; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:34px; background:radial-gradient(circle, rgba(255,209,102,.35), rgba(255,209,102,.05) 70%); border:1px solid rgba(255,209,102,.6); animation:pop .8s .2s cubic-bezier(.2,1.7,.4,1) both;}
+  .ach .badge{width:70px; height:70px; flex:none; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:34px; background:radial-gradient(circle, color-mix(in srgb, var(--accent) 35%, transparent), color-mix(in srgb, var(--accent) 5%, transparent) 70%); border:1px solid color-mix(in srgb, var(--accent) 60%, transparent); animation:pop .8s .2s cubic-bezier(.2,1.7,.4,1) both;}
   .ach .t{font-size:22px; font-weight:700; margin:2px 0;}
   .ach .d{font-size:14px; color:var(--sub);}
 
@@ -136,7 +136,7 @@ function landingHtml(e){
     <div class="ld-top">
       <div class="ld-letter">${esc(a.letter || '—')}</div>
       <div>
-        <div class="eyebrow">Atterrissage${a.icao ? ' · ' + esc(a.icao) : ''}${z ? ' · piste ' + esc(String(z.runway).split('/')[0]) : ''}</div>
+        <div class="eyebrow">${esc(cardLabel('landing', 'Atterrissage'))}${a.icao ? ' · ' + esc(a.icao) : ''}${z ? ' · piste ' + esc(String(z.runway).split('/')[0]) : ''}</div>
         <div class="ld-fpm">${esc(fpm(a.fpm))}</div>
         <div class="ld-grade" style="color:${esc(a.gradeColor || '#e7edf2')}">${esc(a.gradeLabel || '')}${a.score != null ? ' · ' + a.score + '/100' : ''}</div>
       </div>
@@ -162,7 +162,7 @@ function betHtml(e){
   return { accent: open ? '#39e88f' : '#ffb020', html: `<div class="banner"><div class="ic">${open ? '🛬' : '🔒'}</div><div><div class="t">${esc(e.title)}</div><div class="s">${open ? 'Devine le taux de toucher : <code>!pari 180</code>' : esc(e.text || '')}</div></div></div>` };
 }
 function achHtml(e){
-  return { accent: '#ffd166', html: `<div class="ach"><div class="badge">${esc(e.icon || '🏆')}</div><div><div class="eyebrow">Succès débloqué</div><div class="t">${esc(e.title)}</div><div class="d">${esc(e.text || '')}</div></div></div>` };
+  return { accent: '#ffd166', html: `<div class="ach"><div class="badge">${esc(e.icon || '🏆')}</div><div><div class="eyebrow">${esc(cardLabel('achievement', 'Succès débloqué'))}</div><div class="t">${esc(e.title)}</div><div class="d">${esc(e.text || '')}</div></div></div>` };
 }
 function chatHtml(e){
   return { accent: '#9146ff', html: `<div class="chat"><div class="who"><span class="bot">${esc(e.title || 'FlightBot')}</span>${e.user ? `<span class="to">répond à ${esc(e.user)}</span>` : ''}</div><div class="txt">${esc(e.text)}</div></div>` };
@@ -170,7 +170,7 @@ function chatHtml(e){
 function renderForce(e){
   const c = category(e.type);
   const r = c === 'landing' ? landingHtml(e) : c === 'bet' ? betHtml(e) : c === 'achievement' ? achHtml(e) : chatHtml(e);
-  return { ...r, accent: accentFor(r.accent) };
+  return { ...r, accent: accentFor(r.accent, c) };
 }
 function render(e){
   const c = category(e.type);
@@ -206,13 +206,16 @@ function applyCfg(c){
   const op = st.opacity != null ? st.opacity : th.opacity;
   r.setProperty('--scale', PREVIEW ? 1 : (cfg.scale || 100) / 100);
   r.setProperty('--bg', hexA(st.bg || th.bg, op));
-  r.setProperty('--bg2', hexA(st.bg2 || st.bg || th.bg2, op));
+  r.setProperty('--bg2', hexA(st.gradient === false ? (st.bg || th.bg) : (st.bg2 || st.bg || th.bg2), op));
   r.setProperty('--text', st.text || th.text);
   r.setProperty('--sub', st.sub || th.sub);
   r.setProperty('--radius', (st.radius != null ? st.radius : 18) + 'px');
   r.setProperty('--w', (st.width || 420) + 'px');
   r.setProperty('--font', st.font || "'Space Grotesk',sans-serif");
   r.setProperty('--line', st.theme === 'light' ? 'rgba(15,23,32,.12)' : 'rgba(231,237,242,.1)');
+  r.setProperty('--cardline', st.borderColor ? hexA(st.borderColor, st.borderAlpha || (st.theme === 'light' ? 16 : 14)) : (st.theme === 'light' ? 'rgba(15,23,32,.12)' : 'rgba(231,237,242,.1)'));
+  r.setProperty('--bw', (st.borderWidth || 1) + 'px');
+  r.setProperty('--fs', Math.max(0.7, Math.min(1.5, (st.textScale || 100) / 100)));
   r.setProperty('--tile', st.theme === 'light' ? 'rgba(15,23,32,.05)' : 'rgba(255,255,255,.04)');
   const b = document.body;
   ['th-flightbrief','th-glass','th-neon','th-minimal','th-light'].forEach(k => b.classList.remove(k));
@@ -227,7 +230,15 @@ function applyCfg(c){
   if(PREVIEW) renderPreview();
 }
 // Couleur d'accent : celle du type d'alerte, ou une couleur unique choisie par l'utilisateur.
-function accentFor(def){ const st = cfg.style || {}; return st.accentMode === 'custom' && st.accent ? st.accent : def; }
+// v1.6.1 : couleur propre à chaque type de carte (la carte d'atterrissage peut garder la couleur de la note).
+function accentFor(def, cat){
+  const st = cfg.style || {};
+  if(st.accentMode === 'custom' && st.accent) return st.accent;
+  const card = (st.cards || {})[cat] || {};
+  if(cat === 'landing' && card.byGrade !== false) return def;
+  return card.color || def;
+}
+function cardLabel(cat, def){ const card = ((cfg.style || {}).cards || {})[cat] || {}; return card.label || def; }
 // Petit carillon (Web Audio, aucun fichier) joué à l'apparition d'une alerte, si activé.
 let _ac = null;
 function chime(type){
@@ -235,7 +246,9 @@ function chime(type){
   if(!st.sound || PREVIEW) return;
   try{
     _ac = _ac || new (window.AudioContext || window.webkitAudioContext)();
-    const vol = Math.max(0, Math.min(100, st.volume != null ? st.volume : 60)) / 100 * 0.25;
+    // Courbe perçue (même réglage que dans l'appli) : 50 % ≈ −12 dB, 0 = muet.
+    const v = Math.max(0, Math.min(100, st.volume != null ? st.volume : 60)) / 100, vol = v * v * 0.3;
+    if(vol <= 0) return;
     const notes = type === 'achievement' ? [660, 880, 1320] : type === 'landing' || type === 'bet-result' ? [523, 784] : [784];
     notes.forEach((f, i) => {
       const o = _ac.createOscillator(), g = _ac.createGain(), t = _ac.currentTime + i * 0.13;
