@@ -65,6 +65,27 @@ contextBridge.exposeInMainWorld('twitch', {
   onLoginResult: (cb) => ipcRenderer.on('twitch:loginResult', (_, r) => cb(r))
 });
 
+// v1.6 — captures d'écran des vols
+contextBridge.exposeInMainWorld('shots', {
+  setConfig: (c) => ipcRenderer.invoke('shots:setConfig', c),
+  capture: (reason) => ipcRenderer.invoke('shots:capture', reason),
+  list: (range) => ipcRenderer.invoke('shots:list', range),
+  resolve: (names) => ipcRenderer.invoke('shots:resolve', names),
+  remove: (name) => ipcRenderer.invoke('shots:delete', name),
+  stats: () => ipcRenderer.invoke('shots:stats'),
+  openFolder: () => ipcRenderer.invoke('shots:openFolder'),
+  openFile: (name) => ipcRenderer.invoke('shots:openFile', name),
+  importFiles: () => ipcRenderer.invoke('shots:import'),
+  onTaken: (cb) => ipcRenderer.on('shots:taken', (_, s) => cb(s))
+});
+// v1.6 — rappel « tracker non lancé »
+contextBridge.exposeInMainWorld('watch', {
+  setConfig: (c) => ipcRenderer.invoke('watch:setConfig', c),
+  onMoving: (cb) => ipcRenderer.on('watch:moving', (_, d) => cb(d)),
+  onAutoStarted: (cb) => ipcRenderer.on('watch:autostarted', () => cb()),
+  onFocusTracker: (cb) => ipcRenderer.on('watch:focus-tracker', () => cb())
+});
+
 // Compagnon mobile (PWA servie sur le réseau local, voir main.js / server.js)
 contextBridge.exposeInMainWorld('mobile', {
   setEnabled: (enabled) => ipcRenderer.invoke('mobile:setEnabled', !!enabled),

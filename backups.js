@@ -67,10 +67,48 @@ class DataStore {
     fs.renameSync(tmp, this.file);
   }
 
+  // v1.6 — écriture NON bloquante : avant, chaque sauvegarde écrivait le fichier en
+  // synchrone (plusieurs Mo avec les trajets) puis le relisait en entier pour la sauvegarde
+  // du jour, en bloquant le processus principal… et donc l'interface qui attendait la réponse.
+  // Désormais : JSON compact, écriture asynchrone en arrière-plan, une seule à la fois ; si
+  // d'autres sauvegardes arrivent pendant ce temps, seule la plus récente est écrite ensuite.
   write(data) {
-    const json = JSON.stringify(data, null, 2);
-    this._atomicWrite(json);
-    this.dailyBackup(false);
+    this._pending = data;
+    if (!this._writing) this._drain();
+    return true;
+  }
+  async _drain() {
+    this._writing = true;
+    try {
+      while (this._pending) {
+        const data = this._pending;
+        this._pending = null;
+        const json = JSON.stringify(data);
+        try {
+          await fs.promises.mkdir(this.dir, { recursive: true });
+          const tmp = this.file + '.tmp';
+          await fs.promises.writeFile(tmp, json, 'utf-8');
+          await fs.promises.rename(tmp, this.file);
+          this._afterWrite(json);
+        } catch (e) { this.lastWriteError = e.message || String(e); }
+      }
+    } finally { this._writing = false; }
+  }
+  // À la fermeture : écrit tout de suite ce qui reste en attente (synchrone).
+  flushSync() {
+    if (!this._pending) return;
+    const data = this._pending; this._pending = null;
+    try { this._atomicWrite(JSON.stringify(data)); } catch (e) { /* rien de plus à faire */ }
+  }
+  // Sauvegarde du jour : on vient d'écrire un JSON valide, inutile de le relire.
+  _afterWrite(json) {
+    const target = path.join(this.backupDir, PREFIX + localDay() + '.json');
+    if (this._backupDay === localDay()) return;
+    fs.promises.mkdir(this.backupDir, { recursive: true })
+      .then(() => fs.promises.access(target).then(() => true, () => false))
+      .then(exists => exists ? null : fs.promises.writeFile(target, json, 'utf-8'))
+      .then(() => { this._backupDay = localDay(); this.prune(); })
+      .catch(() => {});
   }
 
   // Copie du jour (au plus une par jour, sauf si force) puis rotation.
@@ -81,6 +119,7 @@ class DataStore {
       fs.mkdirSync(this.backupDir, { recursive: true });
       const target = path.join(this.backupDir, PREFIX + localDay() + '.json');
       if (force || !fs.existsSync(target)) fs.copyFileSync(this.file, target);
+      this._backupDay = localDay();
       this.prune();
       return target;
     } catch (e) { return null; }
@@ -113,6 +152,7 @@ class DataStore {
   }
 
   restore(name) {
+    this._pending = null; // une sauvegarde en attente ne doit pas écraser la restauration
     const b = this.list().find(x => x.name === name);
     if (!b) throw new Error('Sauvegarde introuvable.');
     const data = this._validJson(b.path);

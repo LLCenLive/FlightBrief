@@ -75,9 +75,20 @@ const defaultLiveOverlay = {
   custom: { text1:'', text2:'' },
   style: {
     bg:'#0a0d11', text:'#e7edf2', accent:'#39e88f', bgOpacity:78, font:"'Space Grotesk',sans-serif", scale:100, radius:12, layout:'bar',
-    border:true, borderColor:'#ffffff', shadow:true, blur:true, gap:1, icons:false, uppercase:false, divider:true
-  }
+    border:true, borderColor:'#ffffff', shadow:true, blur:true, gap:1, icons:false, uppercase:false, divider:true,
+    anchor:'top-left', margin:18
+  },
+  // v1.6 : ordre des blocs (glisser-déposer) et positions du mode « Libre » (% de 1920×1080).
+  order: [...LIVE_OVERLAY_FIELD_ORDER, 'custom1', 'custom2'],
+  positions: {}
 };
+// Ordre complet et valide : clés connues, sans doublon, avec les clés manquantes ajoutées à la fin.
+function normLiveOverlayOrder(order){
+  const all = [...LIVE_OVERLAY_FIELD_ORDER, 'custom1', 'custom2'];
+  const out = (Array.isArray(order) ? order : []).filter((k, i, a) => all.includes(k) && a.indexOf(k) === i);
+  all.forEach(k => { if(!out.includes(k)) out.push(k); });
+  return out;
+}
 
 // Profil utilisateur, récupéré au premier lancement (onboarding) et modifiable
 // ensuite depuis l'onglet Profil. `onboarded`/`tourDone` pilotent respectivement
@@ -87,7 +98,7 @@ const defaultUserProfile = {
   onboarded:false, tourDone:false
 };
 
-let db = { logbook: [], careers: [], hangar: [], mobile: { enabled:false }, theme: {...defaultTheme}, simbriefUsername: '', ofp: null, trackFollow: true, updateDismissed: '', lastSeenVersion: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, custom:{...defaultLiveOverlay.custom}, style:{...defaultLiveOverlay.style}}, userProfile: {...defaultUserProfile} };
+let db = { logbook: [], careers: [], hangar: [], mobile: { enabled:false }, theme: {...defaultTheme}, simbriefUsername: '', ofp: null, trackFollow: true, updateDismissed: '', lastSeenVersion: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, custom:{...defaultLiveOverlay.custom}, style:{...defaultLiveOverlay.style}, order:[...defaultLiveOverlay.order], positions:{}}, userProfile: {...defaultUserProfile} };
 
 async function loadDb(){
   try{
@@ -108,7 +119,9 @@ async function loadDb(){
         fields: {...defaultLiveOverlay.fields, ...(storedLo.fields || {})},
         labels: {...defaultLiveOverlay.labels, ...(storedLo.labels || {})},
         custom: {...defaultLiveOverlay.custom, ...(storedLo.custom || {})},
-        style: {...defaultLiveOverlay.style, ...(storedLo.style || {})}
+        style: {...defaultLiveOverlay.style, ...(storedLo.style || {})},
+        order: normLiveOverlayOrder(storedLo.order),
+        positions: {...(storedLo.positions || {})}
       };
       db.userProfile = {...defaultUserProfile, ...(stored.userProfile || {})};
       // v1.5 : on conserve aussi les sections ajoutées par les nouveautés (bot Twitch, alertes,
@@ -186,6 +199,7 @@ function switchView(name){
   // on force juste un recalcul de sa taille à chaque fois qu'on revient sur cet onglet,
   // Leaflet ayant besoin de ça quand son conteneur était caché (display:none).
   if(name === 'briefing') setTimeout(() => trackMap && trackMap.invalidateSize(), 60);
+  if(name === 'livetool') renderLiveOverlayPreview(true);
   if(window.FBv15) FBv15.onViewChange(name);
 }
 
@@ -726,7 +740,8 @@ let _overlayTelemetry = { callsign:null, dep:null, arr:null, altFt:null, heading
 
 function currentLiveOverlayConfig(){
   // v1.5 : les libellés personnalisés partent aussi vers OBS (avant, seul l'aperçu les affichait).
-  return { fields: {...db.liveOverlay.fields}, labels: {...db.liveOverlay.labels}, custom: {...db.liveOverlay.custom}, style: {...db.liveOverlay.style} };
+  return { fields: {...db.liveOverlay.fields}, labels: {...db.liveOverlay.labels}, custom: {...db.liveOverlay.custom}, style: {...db.liveOverlay.style},
+    order: normLiveOverlayOrder(db.liveOverlay.order), positions: {...(db.liveOverlay.positions || {})} };
 }
 
 // Rendu d'un texte libre personnalisé (aucun libellé/cap au-dessus, juste le texte du
@@ -817,16 +832,34 @@ function hexToRgbaJs(hex, opacityPct){
   return `rgba(${r},${g},${b},${a.toFixed(2)})`;
 }
 
-function renderLiveOverlayPreview(){
+function renderLiveOverlayPreview(force){
+  // v1.6 : l'aperçu n'est redessiné que si l'onglet Outil Live est affiché (avant : 2 fois
+  // par seconde pendant tout le vol, même invisible). Il est rafraîchi à l'ouverture de l'onglet.
+  const view = el('view-livetool');
+  if(!force && view && !view.classList.contains('active')) return;
   const cfg = db.liveOverlay;
   const t = _overlayTelemetry;
+  const free = cfg.style.layout === 'free';
+  el('loBarShell').classList.toggle('hidden', free);
+  el('loFreeWrap').classList.toggle('hidden', !free);
+  if(el('loFreeHint')) el('loFreeHint').style.display = free ? '' : 'none';
+  if(el('loAnchorField')) el('loAnchorField').style.display = free ? 'none' : '';
+  if(free){ if(window.FBv15) FBv15.renderFreeCanvas(); return; }
   const bar = el('loPreviewBar');
   applyLiveOverlayStyleVars(bar, cfg);
-
-  const visible = LIVE_OVERLAY_FIELD_ORDER.filter(k => cfg.fields[k]);
-  const customTexts = [(cfg.custom && cfg.custom.text1), (cfg.custom && cfg.custom.text2)].filter(t2 => t2 && t2.trim());
-  bar.innerHTML = visible.map(k => liveOverlayFieldHtml(k, t, cfg)).join('') + customTexts.map(t2 => liveOverlayCustomHtml(t2.trim())).join('');
-  el('loPreviewBar').classList.toggle('lo-empty', visible.length === 0 && customTexts.length === 0);
+  const blocks = liveOverlayBlocks(cfg);
+  bar.innerHTML = blocks.map(b => b.html(t)).join('');
+  el('loPreviewBar').classList.toggle('lo-empty', blocks.length === 0);
+}
+// Blocs visibles dans l'ordre choisi par l'utilisateur (champs cochés + textes libres non vides).
+function liveOverlayBlocks(cfg){
+  return normLiveOverlayOrder(cfg.order).map(k => {
+    if(k === 'custom1' || k === 'custom2'){
+      const txt = ((cfg.custom || {})[k === 'custom1' ? 'text1' : 'text2'] || '').trim();
+      return txt ? { key: k, html: () => liveOverlayCustomHtml(txt) } : null;
+    }
+    return cfg.fields[k] ? { key: k, html: tt => liveOverlayFieldHtml(k, tt, cfg) } : null;
+  }).filter(Boolean);
 }
 
 function pushLiveOverlayConfig(){
@@ -841,12 +874,13 @@ function pushLiveOverlayTelemetry(){
 function setLiveOverlayLayout(layout){
   db.liveOverlay.style.layout = layout;
   el('loLayoutToggle').dataset.layout = layout;
-  const order = ['bar','stack','cards'];
+  const order = ['bar','stack','cards','free'];
   document.querySelectorAll('#loLayoutToggle button').forEach((b,i) => {
     b.classList.remove('active-vfr','active-ifr');
     if(order[i] === layout) b.classList.add('active-vfr');
   });
-  renderLiveOverlayPreview();
+  if(layout === 'free' && window.FBv15) FBv15.ensureFreePositions();
+  renderLiveOverlayPreview(true);
   pushLiveOverlayConfig();
   queueSaveDb();
 }
@@ -892,7 +926,7 @@ function loadLiveOverlayIntoForm(cfg){
   el('loDivider').checked = cfg.style.divider !== false;
 
   el('loLayoutToggle').dataset.layout = cfg.style.layout;
-  const order = ['bar','stack','cards'];
+  const order = ['bar','stack','cards','free'];
   document.querySelectorAll('#loLayoutToggle button').forEach((b,i) => {
     b.classList.remove('active-vfr','active-ifr');
     if(order[i] === cfg.style.layout) b.classList.add('active-vfr');
@@ -1156,6 +1190,7 @@ function renderLogbook(){
       <td><span class="pill ${pClass}">${pLabel}</span></td>
       <td><div class="row-actions">
         ${f.trackData ? `<button class="icon-btn" onclick="openRouteModal('${f.id}')">Carte</button>` : ''}
+        ${(() => { const n = ((f.trackData && f.trackData.screenshots) || []).length + (f.screenshots || []).length; return `<button class="icon-btn shot-btn${n ? ' has' : ''}" title="Captures d'écran du vol" onclick="FBv15.openGallery('${f.id}')">📷${n ? ' ' + n : ''}</button>`; })()}
         <button class="icon-btn" onclick="editLogbookEntry('${f.id}')">Modifier</button>
         <button class="icon-btn" onclick="deleteLogbookEntry('${f.id}')">Suppr.</button>
       </div></td>
@@ -2414,6 +2449,7 @@ async function applyTrackedFlightToLogbook(switchToLogbook){
   if(!_lastTrackedFlight) return;
   const data = _lastTrackedFlight;
   populateLogbookFieldsFromTrackedFlight(data);
+  if(window.FBv15) await FBv15.attachFlightShots(data);
   await saveLogbookEntry();
   dismissTrackedFlight();
   if(switchToLogbook !== false) switchView('logbook');

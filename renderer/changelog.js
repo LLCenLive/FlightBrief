@@ -9,6 +9,21 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '1.6.0',
+    date: '2026-10-10',
+    title: 'Captures, rangs & overlays à ta façon',
+    items: [
+      ['new', "Captures d'écran de tes vols : bouton dans le Briefing, raccourci clavier global (Ctrl+Alt+F12 par défaut, utilisable pendant que le simulateur a le focus) et captures automatiques au décollage, en croisière et à l'atterrissage. Elles sont rattachées au vol enregistré : galerie depuis le logbook (📷) et dans le détail du trajet."],
+      ['new', "Rappel « tracker non lancé » : si l'avion roule ou vole alors que le suivi est arrêté, une alerte sonore et un bandeau te préviennent, avec un bouton pour le lancer. Le tracker peut aussi démarrer tout seul (Admin)."],
+      ['new', "Design des alertes du bot (succès, paris, atterrissage…) entièrement personnalisable : 5 thèmes, couleurs, police, largeur, arrondis, animation, ombre, flou, son, avec un aperçu en direct."],
+      ['new', "Outil Live : réordonne les blocs de l'overlay par glisser-déposer, choisis le coin de l'écran où il s'affiche, ou passe en mode « Libre » pour placer chaque bloc où tu veux sur une scène 1920×1080, avec magnétisme et guides."],
+      ['new', "Rangs FlightBrief : chaque succès et chaque vol rapporte de l'XP, avec 9 rangs de « Élève pilote » à « Légende de l'air ». Ton niveau s'affiche à côté de l'onglet Profil."],
+      ['new', "67 succès (au lieu de 26), classés en bronze, argent, or et platine : réseaux VATSIM et IVAO, vols contrôlés par l'ATC, stream et bot Twitch, captures, flotte… Ils se consultent dans une fenêtre dédiée, avec des filtres et la progression de chacun."],
+      ['improved', "Appli plus réactive : les sauvegardes du logbook se font en arrière-plan au lieu de bloquer l'interface à chaque clic, et l'aperçu de l'overlay n'est plus recalculé quand l'onglet Outil Live est fermé."],
+      ['improved', "Touche Échap pour fermer la galerie, la visionneuse et la fenêtre des succès ; flèches ← → pour passer d'une capture à l'autre."]
+    ]
+  },
+  {
     version: '1.5.0',
     date: '2026-10-10',
     title: 'Twitch, atterrissages notés & approche en 3D',

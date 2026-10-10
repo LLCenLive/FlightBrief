@@ -125,9 +125,22 @@ function initEta(){
 /* =========================================================
    2. CARTE D'ATTERRISSAGE
    ========================================================= */
+const ALERT_THEMES = {
+  flightbrief: { label: 'FlightBrief', bg: '#181e25', bg2: '#0c1014', text: '#e7edf2', sub: '#8a96a2', opacity: 94, blur: false, accent: '#54d6e8' },
+  glass:       { label: 'Verre', bg: '#1b2430', bg2: '#0f141b', text: '#ffffff', sub: '#b7c3cf', opacity: 62, blur: true, accent: '#7cc4ff' },
+  neon:        { label: 'Néon', bg: '#07080d', bg2: '#07080d', text: '#f2f5ff', sub: '#8d93b8', opacity: 88, blur: false, accent: '#bf5af2' },
+  minimal:     { label: 'Minimal', bg: '#0b0e12', bg2: '#0b0e12', text: '#f0f3f6', sub: '#8a96a2', opacity: 80, blur: false, accent: '#39e88f' },
+  light:       { label: 'Clair', bg: '#ffffff', bg2: '#eef2f6', text: '#0f1720', sub: '#5b6875', opacity: 96, blur: false, accent: '#2563eb' }
+};
+function defaultAlertStyle(theme){
+  const t = ALERT_THEMES[theme] || ALERT_THEMES.flightbrief;
+  return { theme: theme || 'flightbrief', bg: t.bg, bg2: t.bg2, text: t.text, sub: t.sub, opacity: t.opacity, accent: t.accent, accentMode: 'type',
+    font: "'Space Grotesk',sans-serif", width: 420, radius: 18, animation: 'drop', border: true, stripe: true, shadow: true, blur: t.blur, timer: true, sound: false, volume: 60 };
+}
 function alertsCfg(){
   db.alertsOverlay = Object.assign({ durationSec: 9, position: 'top-right', scale: 100, types: { landing: true, bet: true, achievement: true, chat: true } }, db.alertsOverlay || {});
   db.alertsOverlay.types = Object.assign({ landing: true, bet: true, achievement: true, chat: true }, db.alertsOverlay.types || {});
+  db.alertsOverlay.style = Object.assign(defaultAlertStyle(db.alertsOverlay.style && db.alertsOverlay.style.theme), db.alertsOverlay.style || {});
   return db.alertsOverlay;
 }
 function landingAlertData(d){
@@ -188,25 +201,70 @@ function landingCardHtml(a){
 function showLandingToast(a){ fx(landingCardHtml(a), 'fx-landing', 14000); }
 
 /* =========================================================
-   3. SUCCÈS
+   3. SUCCÈS, XP ET RANGS (v1.5, étendus en v1.6)
+   ---------------------------------------------------------
+   Chaque succès a un palier (bronze, argent, or, platine) qui rapporte de l'XP FlightBrief.
+   L'XP = succès débloqués + 10 XP par vol enregistré. Elle donne un rang (9 rangs).
    ========================================================= */
 const WORLD_NM = 21600;
+const TIERS = { bronze: { label: 'Bronze', xp: 50, color: '#d08b52' }, silver: { label: 'Argent', xp: 120, color: '#c3ccd6' }, gold: { label: 'Or', xp: 300, color: '#ffd166' }, platinum: { label: 'Platine', xp: 750, color: '#9fe3ff' } };
+const XP_PER_FLIGHT = 10;
+const RANKS = [
+  { xp: 0,     name: 'Élève pilote',        icon: '🪶' },
+  { xp: 300,   name: 'Pilote privé',        icon: '🛩️' },
+  { xp: 800,   name: 'Pilote professionnel', icon: '🧭' },
+  { xp: 1600,  name: 'Copilote',            icon: '👨‍✈️' },
+  { xp: 3000,  name: 'Commandant de bord',  icon: '⭐' },
+  { xp: 5000,  name: 'Instructeur',         icon: '🎓' },
+  { xp: 8000,  name: 'Chef pilote',         icon: '🎖️' },
+  { xp: 12000, name: "Pilote d'essai",      icon: '🚀' },
+  { xp: 18000, name: "Légende de l'air",    icon: '👑' }
+];
+const ACH_CATS = { carnet: 'Carnet de vol', landing: 'Atterrissages', explore: 'Exploration', online: 'Réseaux & ATC', stream: 'Stream', fleet: 'Hangar & carrière' };
+// Pays approximatif depuis le préfixe OACI (assez juste pour compter des pays visités).
+function countryOf(icao){
+  const c = FBShared.up(icao);
+  if(!/^[A-Z]{2}/.test(c)) return null;
+  const a = c[0], two = c.slice(0, 2);
+  if(a === 'K' || ['PA','PH','PF','PO','PP','PG','PW'].includes(two)) return 'US';
+  if(a === 'C') return 'CA';
+  if(a === 'Y') return 'AU';
+  if(a === 'Z' && !['ZK','ZM'].includes(two)) return 'CN';
+  if(a === 'U' && !['UA','UB','UC','UD','UG','UK','UM','UT'].includes(two)) return 'RU';
+  return two;
+}
+let _extraStats = { shots: 0, betsResolved: 0 };
 function achievementStats(){
   const lb = db.logbook || [];
   const lookup = cachedAirportLookup;
-  const s = { flights: lb.length, minutes: 0, nm: 0, airports: new Set(), continents: new Set(), butter: 0, perfect: 0, longest: 0, night: 0, ifr: 0, vfr: 0, crosswind15: 0, cleanStreak: 0, bestCleanStreak: 0 };
+  const s = { flights: lb.length, minutes: 0, nm: 0, airports: new Set(), continents: new Set(), countries: new Set(), frAirports: new Set(),
+    butter: 0, perfect: 0, longest: 0, shortest: Infinity, night: 0, ifr: 0, vfr: 0, crosswind15: 0, crosswind25: 0, cleanStreak: 0, bestCleanStreak: 0,
+    vatsim: 0, ivao: 0, vatsimMin: 0, ivaoMin: 0, online: 0, atcArr: 0, featherG: 0, tdz: 0, centerline: 0, fl400: 0, highAp: 0,
+    heavy: 0, light: 0, bestStreakDays: 0, maxPerDay: 0 };
   const sorted = [...lb].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  const days = new Map();
+  const cats = {};
+  (db.hangar || []).forEach(h => { cats[h.id] = h.category; });
   sorted.forEach(f => {
-    s.minutes += f.durationMin || 0;
-    s.longest = Math.max(s.longest, f.durationMin || 0);
+    const min = f.durationMin || 0;
+    s.minutes += min;
+    s.longest = Math.max(s.longest, min);
+    if(min > 0) s.shortest = Math.min(s.shortest, min);
     if(f.rules === 'IFR') s.ifr++; else if(f.rules === 'VFR') s.vfr++;
     const d = FBShared.flightDistance(f, lookup); if(d.nm != null) s.nm += d.nm;
     [f.dep, f.arr].forEach(icao => {
       const k = FBShared.up(icao); if(!k) return;
       s.airports.add(k);
+      if(k.startsWith('LF')) s.frAirports.add(k);
       const ap = lookup(k);
       const c = FBShared.continentOf(k, ap ? ap.lon : null); if(c) s.continents.add(c);
+      const co = countryOf(k); if(co) s.countries.add(co);
     });
+    const arrAp = lookup(FBShared.up(f.arr));
+    if(arrAp && arrAp.elevFt >= 5000) s.highAp++;
+    const net = String(f.network || '').toUpperCase();
+    if(net.includes('VATSIM')){ s.vatsim++; s.vatsimMin += min; s.online++; }
+    else if(net.includes('IVAO')){ s.ivao++; s.ivaoMin += min; s.online++; }
     const lr = FBShared.flightLandingRate(f);
     if(lr != null && Math.abs(lr) > 0 && Math.abs(lr) < 100) s.butter++;
     const sc = FBShared.flightLandingScore(f);
@@ -218,92 +276,226 @@ function achievementStats(){
       if(ts) night = FBShared.isNightAt(td.lat, td.lon, ts);
     }
     if(night) s.night++;
-    if(td && td.crosswindKt != null && Math.abs(td.crosswindKt) >= 15) s.crosswind15++;
+    if(td && td.crosswindKt != null){ if(Math.abs(td.crosswindKt) >= 15) s.crosswind15++; if(Math.abs(td.crosswindKt) >= 25) s.crosswind25++; }
+    if(td && td.gForce != null && td.gForce <= 1.10) s.featherG++;
+    if(td && td.zone){
+      if(td.zone.distanceFromThresholdFt >= 500 && td.zone.distanceFromThresholdFt <= 2000) s.tdz++;
+      if(td.zone.lateralOffsetFt != null && td.zone.lateralOffsetFt <= 5) s.centerline++;
+    }
+    if(f.trackData && f.trackData.maxAltFt >= 39500) s.fl400++;
+    if(f.trackData && f.trackData.atc && f.trackData.atc.arr > 0) s.atcArr++;
     if(f.trackData && lr != null){
       if(!f.trackData.bounceCount){ s.cleanStreak++; s.bestCleanStreak = Math.max(s.bestCleanStreak, s.cleanStreak); }
       else s.cleanStreak = 0;
     }
+    const cat = (f.aircraftId && cats[f.aircraftId]) || FBShared.flightCategory(f);
+    if(cat === 'heavy' || cat === 'jumbo') s.heavy++;
+    if(cat === 'light') s.light++;
+    if(f.date) days.set(f.date, (days.get(f.date) || 0) + 1);
   });
+  // Jours de vol consécutifs + record de vols en une journée.
+  const dl = [...days.keys()].sort();
+  let run = 0, prev = null;
+  dl.forEach(dd => { const t = new Date(dd + 'T12:00:00').getTime(); run = prev != null && Math.round((t - prev) / 86400000) === 1 ? run + 1 : 1; prev = t; s.bestStreakDays = Math.max(s.bestStreakDays, run); });
+  days.forEach(n => { s.maxPerDay = Math.max(s.maxPerDay, n); });
+  if(s.shortest === Infinity) s.shortest = 0;
   s.hours = s.minutes / 60;
+  s.vatsimHours = s.vatsimMin / 60; s.ivaoHours = s.ivaoMin / 60;
   s.toursDone = (db.careers || []).reduce((n, c) => n + (c.tours || []).filter(t => FBShared.tourIsComplete(t)).length, 0);
   s.fleet = (db.hangar || []).length;
+  s.shots = _extraStats.shots; s.betsResolved = _extraStats.betsResolved;
+  s.botReady = !!(db.twitch && db.twitch.clientId && db.twitch.enabled);
   return s;
 }
+const fmtInt = v => Math.floor(v).toLocaleString('fr-FR');
 const ACHIEVEMENTS = [
-  { id:'first-flight', icon:'🛫', title:'Premier vol', desc:'Enregistrer un premier vol.', target:1, val:s => s.flights },
-  { id:'flights-10', icon:'🧭', title:'Habitué', desc:'10 vols au logbook.', target:10, val:s => s.flights },
-  { id:'flights-50', icon:'🎖️', title:'Pilote de ligne', desc:'50 vols au logbook.', target:50, val:s => s.flights },
-  { id:'flights-100', icon:'💯', title:'Centurion', desc:'100 vols au logbook.', target:100, val:s => s.flights },
-  { id:'flights-250', icon:'👑', title:'Commandant de bord', desc:'250 vols au logbook.', target:250, val:s => s.flights },
-  { id:'hours-10', icon:'⏱️', title:'10 heures', desc:'10 h de vol cumulées.', target:10, val:s => s.hours },
-  { id:'hours-100', icon:'⌛', title:'100 heures', desc:'100 h de vol cumulées.', target:100, val:s => s.hours },
-  { id:'hours-500', icon:'🕰️', title:'500 heures', desc:'500 h de vol cumulées.', target:500, val:s => s.hours },
-  { id:'long-haul', icon:'🌏', title:'Long-courrier', desc:'Un vol de plus de 8 heures.', target:480, val:s => s.longest, fmt:v => FBShared.fmtHm(v) },
-  { id:'nm-10k', icon:'📏', title:'10 000 NM', desc:'10 000 milles nautiques parcourus.', target:10000, val:s => s.nm, fmt:v => Math.round(v).toLocaleString('fr-FR') },
-  { id:'world-tour', icon:'🌍', title:'Tour du monde', desc:"L'équivalent d'un tour de la Terre (21 600 NM).", target:WORLD_NM, val:s => s.nm, fmt:v => Math.round(v).toLocaleString('fr-FR') },
-  { id:'butter', icon:'🧈', title:'Beurre', desc:'Un atterrissage à moins de 100 ft/min.', target:1, val:s => s.butter },
-  { id:'butter-10', icon:'🥐', title:'Boulanger', desc:'10 atterrissages à moins de 100 ft/min.', target:10, val:s => s.butter },
-  { id:'perfect', icon:'💎', title:'Copie parfaite', desc:"Une note d'atterrissage A+.", target:1, val:s => s.perfect },
-  { id:'clean-10', icon:'🎯', title:'Sans rebond', desc:'10 atterrissages trackés d\'affilée sans rebond.', target:10, val:s => s.bestCleanStreak },
-  { id:'crosswind', icon:'🌬️', title:'Vent de travers', desc:'Se poser avec au moins 15 kt de vent traversier.', target:1, val:s => s.crosswind15 },
-  { id:'night-1', icon:'🌙', title:'Première nuit', desc:'Un atterrissage de nuit.', target:1, val:s => s.night },
-  { id:'night-10', icon:'🦉', title:'Oiseau de nuit', desc:'10 atterrissages de nuit.', target:10, val:s => s.night },
-  { id:'continents-3', icon:'🗺️', title:'Intercontinental', desc:'Poser les roues sur 3 continents.', target:3, val:s => s.continents.size },
-  { id:'continents-all', icon:'🌐', title:'Globe-trotter', desc:'Les 6 continents habités.', target:6, val:s => s.continents.size },
-  { id:'airports-25', icon:'📍', title:'Collectionneur', desc:'25 aéroports différents.', target:25, val:s => s.airports.size },
-  { id:'airports-100', icon:'🧳', title:'Explorateur', desc:'100 aéroports différents.', target:100, val:s => s.airports.size },
-  { id:'ifr-25', icon:'📡', title:'Aux instruments', desc:'25 vols IFR.', target:25, val:s => s.ifr },
-  { id:'vfr-25', icon:'👀', title:'Vue du ciel', desc:'25 vols VFR.', target:25, val:s => s.vfr },
-  { id:'tour-1', icon:'🏁', title:'Tour bouclé', desc:'Terminer un tour de carrière.', target:1, val:s => s.toursDone },
-  { id:'fleet-5', icon:'🛩️', title:'Hangar garni', desc:'5 avions dans le hangar.', target:5, val:s => s.fleet }
+  // Carnet de vol
+  { id:'first-flight', cat:'carnet', tier:'bronze', icon:'🛫', title:'Premier vol', desc:'Enregistrer un premier vol.', target:1, val:s => s.flights },
+  { id:'flights-10', cat:'carnet', tier:'bronze', icon:'🧭', title:'Habitué', desc:'10 vols au logbook.', target:10, val:s => s.flights },
+  { id:'flights-50', cat:'carnet', tier:'silver', icon:'🎖️', title:'Pilote de ligne', desc:'50 vols au logbook.', target:50, val:s => s.flights },
+  { id:'flights-100', cat:'carnet', tier:'gold', icon:'💯', title:'Centurion', desc:'100 vols au logbook.', target:100, val:s => s.flights },
+  { id:'flights-250', cat:'carnet', tier:'gold', icon:'👑', title:'Commandant de bord', desc:'250 vols au logbook.', target:250, val:s => s.flights },
+  { id:'flights-500', cat:'carnet', tier:'platinum', icon:'🏛️', title:'Institution', desc:'500 vols au logbook.', target:500, val:s => s.flights },
+  { id:'hours-10', cat:'carnet', tier:'bronze', icon:'⏱️', title:'10 heures', desc:'10 h de vol cumulées.', target:10, val:s => s.hours },
+  { id:'hours-100', cat:'carnet', tier:'silver', icon:'⌛', title:'100 heures', desc:'100 h de vol cumulées.', target:100, val:s => s.hours },
+  { id:'hours-500', cat:'carnet', tier:'gold', icon:'🕰️', title:'500 heures', desc:'500 h de vol cumulées.', target:500, val:s => s.hours },
+  { id:'hours-1000', cat:'carnet', tier:'platinum', icon:'🏆', title:'1 000 heures', desc:'1 000 h de vol cumulées.', target:1000, val:s => s.hours },
+  { id:'short', cat:'carnet', tier:'bronze', icon:'🐇', title:'Saut de puce', desc:'Un vol de moins de 20 minutes.', target:1, val:s => s.shortest > 0 && s.shortest < 20 ? 1 : 0 },
+  { id:'long-haul', cat:'carnet', tier:'silver', icon:'🌏', title:'Long-courrier', desc:'Un vol de plus de 8 heures.', target:480, val:s => s.longest, fmt:v => FBShared.fmtHm(v) },
+  { id:'ultra-long', cat:'carnet', tier:'platinum', icon:'🛰️', title:'Ultra long-courrier', desc:'Un vol de plus de 14 heures.', target:840, val:s => s.longest, fmt:v => FBShared.fmtHm(v) },
+  { id:'fl400', cat:'carnet', tier:'silver', icon:'🌌', title:'Stratosphère', desc:'Monter au FL400 ou plus (vol suivi).', target:1, val:s => s.fl400 },
+  { id:'busy-day', cat:'carnet', tier:'bronze', icon:'📅', title:'Journée chargée', desc:'3 vols le même jour.', target:3, val:s => s.maxPerDay },
+  { id:'streak-7', cat:'carnet', tier:'gold', icon:'🔥', title:'Assidu', desc:'Voler 7 jours d\'affilée.', target:7, val:s => s.bestStreakDays },
+  { id:'ifr-25', cat:'carnet', tier:'silver', icon:'📡', title:'Aux instruments', desc:'25 vols IFR.', target:25, val:s => s.ifr },
+  { id:'vfr-25', cat:'carnet', tier:'silver', icon:'👀', title:'Vue du ciel', desc:'25 vols VFR.', target:25, val:s => s.vfr },
+  { id:'night-1', cat:'carnet', tier:'bronze', icon:'🌙', title:'Première nuit', desc:'Un atterrissage de nuit.', target:1, val:s => s.night },
+  { id:'night-10', cat:'carnet', tier:'silver', icon:'🦉', title:'Oiseau de nuit', desc:'10 atterrissages de nuit.', target:10, val:s => s.night },
+  { id:'night-50', cat:'carnet', tier:'gold', icon:'🌃', title:'Noctambule', desc:'50 atterrissages de nuit.', target:50, val:s => s.night },
+  // Atterrissages
+  { id:'butter', cat:'landing', tier:'bronze', icon:'🧈', title:'Beurre', desc:'Un atterrissage à moins de 100 ft/min.', target:1, val:s => s.butter },
+  { id:'butter-10', cat:'landing', tier:'silver', icon:'🥐', title:'Boulanger', desc:'10 atterrissages à moins de 100 ft/min.', target:10, val:s => s.butter },
+  { id:'butter-25', cat:'landing', tier:'gold', icon:'🧁', title:'Pâtissier étoilé', desc:'25 atterrissages à moins de 100 ft/min.', target:25, val:s => s.butter },
+  { id:'perfect', cat:'landing', tier:'silver', icon:'💎', title:'Copie parfaite', desc:"Une note d'atterrissage A+.", target:1, val:s => s.perfect },
+  { id:'perfect-5', cat:'landing', tier:'gold', icon:'💠', title:'Perfectionniste', desc:"5 notes d'atterrissage A+.", target:5, val:s => s.perfect },
+  { id:'feather', cat:'landing', tier:'silver', icon:'🪶', title:'Plume', desc:'Toucher avec un facteur de charge ≤ 1,10 G.', target:1, val:s => s.featherG },
+  { id:'tdz-10', cat:'landing', tier:'silver', icon:'🎯', title:'Dans la zone', desc:'10 touchers entre 500 et 2 000 ft après le seuil.', target:10, val:s => s.tdz },
+  { id:'centerline', cat:'landing', tier:'silver', icon:'📏', title:"Sur l'axe", desc:"Toucher à moins de 5 ft de l'axe de piste.", target:1, val:s => s.centerline },
+  { id:'clean-10', cat:'landing', tier:'silver', icon:'✅', title:'Sans rebond', desc:"10 atterrissages trackés d'affilée sans rebond.", target:10, val:s => s.bestCleanStreak },
+  { id:'crosswind', cat:'landing', tier:'silver', icon:'🌬️', title:'Vent de travers', desc:'Se poser avec au moins 15 kt de vent traversier.', target:1, val:s => s.crosswind15 },
+  { id:'crosswind-25', cat:'landing', tier:'gold', icon:'🌪️', title:'Tempête', desc:'Se poser avec au moins 25 kt de vent traversier.', target:1, val:s => s.crosswind25 },
+  // Exploration
+  { id:'nm-10k', cat:'explore', tier:'silver', icon:'📐', title:'10 000 NM', desc:'10 000 milles nautiques parcourus.', target:10000, val:s => s.nm, fmt:fmtInt },
+  { id:'world-tour', cat:'explore', tier:'gold', icon:'🌍', title:'Tour du monde', desc:"L'équivalent d'un tour de la Terre (21 600 NM).", target:WORLD_NM, val:s => s.nm, fmt:fmtInt },
+  { id:'nm-50k', cat:'explore', tier:'platinum', icon:'🪐', title:'Grand voyageur', desc:'50 000 milles nautiques parcourus.', target:50000, val:s => s.nm, fmt:fmtInt },
+  { id:'airports-25', cat:'explore', tier:'silver', icon:'📍', title:'Collectionneur', desc:'25 aéroports différents.', target:25, val:s => s.airports.size },
+  { id:'airports-100', cat:'explore', tier:'gold', icon:'🧳', title:'Explorateur', desc:'100 aéroports différents.', target:100, val:s => s.airports.size },
+  { id:'france-10', cat:'explore', tier:'bronze', icon:'🥖', title:'Tour de France', desc:'10 aéroports français différents.', target:10, val:s => s.frAirports.size },
+  { id:'france-50', cat:'explore', tier:'gold', icon:'🗼', title:"L'Hexagone par cœur", desc:'50 aéroports français différents.', target:50, val:s => s.frAirports.size },
+  { id:'countries-10', cat:'explore', tier:'silver', icon:'🛂', title:'Passeport tamponné', desc:'Se poser dans 10 pays.', target:10, val:s => s.countries.size },
+  { id:'countries-30', cat:'explore', tier:'gold', icon:'🗺️', title:'Diplomate', desc:'Se poser dans 30 pays.', target:30, val:s => s.countries.size },
+  { id:'continents-3', cat:'explore', tier:'silver', icon:'🧭', title:'Intercontinental', desc:'Poser les roues sur 3 continents.', target:3, val:s => s.continents.size },
+  { id:'continents-all', cat:'explore', tier:'gold', icon:'🌐', title:'Globe-trotter', desc:'Les 6 continents habités.', target:6, val:s => s.continents.size },
+  { id:'mountain', cat:'explore', tier:'silver', icon:'🏔️', title:'Montagnard', desc:"Se poser sur un terrain à plus de 5 000 ft d'altitude.", target:1, val:s => s.highAp },
+  // Réseaux & ATC
+  { id:'vatsim-1', cat:'online', tier:'bronze', icon:'🟢', title:'Bienvenue sur VATSIM', desc:'Un premier vol sur VATSIM (réseau du logbook).', target:1, val:s => s.vatsim },
+  { id:'vatsim-10', cat:'online', tier:'silver', icon:'📻', title:'Habitué de VATSIM', desc:'10 vols sur VATSIM.', target:10, val:s => s.vatsim },
+  { id:'vatsim-50', cat:'online', tier:'gold', icon:'🛰️', title:'Pilier de VATSIM', desc:'50 vols sur VATSIM.', target:50, val:s => s.vatsim },
+  { id:'vatsim-100h', cat:'online', tier:'gold', icon:'⏳', title:'100 h sur VATSIM', desc:'100 heures de vol sur VATSIM.', target:100, val:s => s.vatsimHours },
+  { id:'ivao-1', cat:'online', tier:'bronze', icon:'🔵', title:'Bienvenue sur IVAO', desc:'Un premier vol sur IVAO (réseau du logbook).', target:1, val:s => s.ivao },
+  { id:'ivao-10', cat:'online', tier:'silver', icon:'🎙️', title:"Habitué d'IVAO", desc:'10 vols sur IVAO.', target:10, val:s => s.ivao },
+  { id:'ivao-50', cat:'online', tier:'gold', icon:'📡', title:"Pilier d'IVAO", desc:'50 vols sur IVAO.', target:50, val:s => s.ivao },
+  { id:'ivao-100h', cat:'online', tier:'gold', icon:'⏳', title:'100 h sur IVAO', desc:'100 heures de vol sur IVAO.', target:100, val:s => s.ivaoHours },
+  { id:'both-nets', cat:'online', tier:'silver', icon:'🤝', title:'Bi-réseau', desc:'Au moins un vol sur VATSIM et un sur IVAO.', target:2, val:s => (s.vatsim ? 1 : 0) + (s.ivao ? 1 : 0) },
+  { id:'online-25', cat:'online', tier:'silver', icon:'🌐', title:'Toujours connecté', desc:'25 vols en ligne (VATSIM ou IVAO).', target:25, val:s => s.online },
+  { id:'atc-1', cat:'online', tier:'bronze', icon:'🗼', title:'Sous contrôle', desc:"Se poser avec un contrôleur en ligne à l'arrivée (ATC activé sur la carte).", target:1, val:s => s.atcArr },
+  { id:'atc-10', cat:'online', tier:'silver', icon:'🎧', title:'Bon élève de la phraséo', desc:"10 arrivées avec un contrôleur en ligne.", target:10, val:s => s.atcArr },
+  // Stream
+  { id:'bot-ready', cat:'stream', tier:'bronze', icon:'🤖', title:'Copilote numérique', desc:'Configurer et activer le bot Twitch.', target:1, val:s => s.botReady ? 1 : 0 },
+  { id:'bets-1', cat:'stream', tier:'bronze', icon:'🎲', title:'Faites vos jeux', desc:"Un premier pari d'atterrissage terminé.", target:1, val:s => s.betsResolved },
+  { id:'bets-25', cat:'stream', tier:'gold', icon:'🎰', title:'Croupier', desc:"25 paris d'atterrissage terminés.", target:25, val:s => s.betsResolved },
+  { id:'shots-1', cat:'stream', tier:'bronze', icon:'📷', title:'Souvenir de vol', desc:"Une première capture d'écran.", target:1, val:s => s.shots },
+  { id:'shots-50', cat:'stream', tier:'silver', icon:'🎞️', title:'Photographe', desc:"50 captures d'écran.", target:50, val:s => s.shots },
+  // Hangar & carrière
+  { id:'fleet-5', cat:'fleet', tier:'bronze', icon:'🛩️', title:'Hangar garni', desc:'5 avions dans le hangar.', target:5, val:s => s.fleet },
+  { id:'fleet-10', cat:'fleet', tier:'silver', icon:'🏗️', title:'Compagnie aérienne', desc:'10 avions dans le hangar.', target:10, val:s => s.fleet },
+  { id:'heavy', cat:'fleet', tier:'bronze', icon:'🐘', title:'Gros porteur', desc:'Un vol en avion « heavy » ou « jumbo » du hangar.', target:1, val:s => s.heavy },
+  { id:'light', cat:'fleet', tier:'bronze', icon:'🪁', title:'Petit coucou', desc:'Un vol en avion léger du hangar.', target:1, val:s => s.light },
+  { id:'tour-1', cat:'fleet', tier:'silver', icon:'🏁', title:'Tour bouclé', desc:'Terminer un tour de carrière.', target:1, val:s => s.toursDone },
+  { id:'tour-5', cat:'fleet', tier:'gold', icon:'🗺️', title:'Globe-tourer', desc:'Terminer 5 tours de carrière.', target:5, val:s => s.toursDone }
 ];
 function achState(){
-  db.achievements = Object.assign({ unlocked: {}, initialized: false }, db.achievements || {});
+  db.achievements = Object.assign({ unlocked: {}, initialized: false, rank: 0 }, db.achievements || {});
   db.achievements.unlocked = db.achievements.unlocked || {};
   return db.achievements;
 }
+function xpInfo(){
+  const st = achState();
+  const achXp = ACHIEVEMENTS.reduce((n, a) => n + (st.unlocked[a.id] ? TIERS[a.tier].xp : 0), 0);
+  const xp = achXp + (db.logbook || []).length * XP_PER_FLIGHT;
+  let idx = 0; RANKS.forEach((r, i) => { if(xp >= r.xp) idx = i; });
+  const cur = RANKS[idx], next = RANKS[idx + 1] || null;
+  const pct = next ? Math.round(100 * (xp - cur.xp) / (next.xp - cur.xp)) : 100;
+  return { xp, achXp, idx, level: idx + 1, rank: cur, next, pct, unlocked: ACHIEVEMENTS.filter(a => st.unlocked[a.id]).length, total: ACHIEVEMENTS.length };
+}
+async function refreshExtraStats(){
+  try{ if(window.shots){ const st = await window.shots.stats(); _extraStats.shots = st.count; } }catch(e){ /* ignoré */ }
+  try{ if(twState && twState.betsResolved != null) _extraStats.betsResolved = twState.betsResolved; }catch(e){ /* ignoré */ }
+}
 async function evaluateAchievements(silent){
-  // Distances estimées et continents (Russie Europe/Asie) : coordonnées chargées d'abord.
+  // Distances estimées, continents, pays, altitude des terrains : coordonnées chargées d'abord.
   const icaos = new Set();
   (db.logbook || []).forEach(f => { [f.dep, f.arr].forEach(i => { const k = FBShared.up(i); if(k) icaos.add(k); }); });
   if(icaos.size) { try { await resolveAirportCoords([...icaos]); } catch(e){ /* ignoré */ } }
+  await refreshExtraStats();
   const st = achState(), s = achievementStats(), fresh = [];
+  const before = xpInfo().idx;
   ACHIEVEMENTS.forEach(a => {
     if(st.unlocked[a.id]) return;
     if(a.val(s) >= a.target){ st.unlocked[a.id] = new Date().toISOString(); fresh.push(a); }
   });
+  const info = xpInfo();
   if(!st.initialized){ st.initialized = true; silent = true; }
-  if(fresh.length || silent) saveDbNow();
-  if(!silent) fresh.forEach((a, i) => setTimeout(() => celebrate(a), 900 + i * 2200));
+  const rankUp = info.idx > (st.rank || 0) && info.idx > before;
+  st.rank = info.idx;
+  if(fresh.length || silent || rankUp) saveDbNow();
+  if(!silent){
+    fresh.forEach((a, i) => setTimeout(() => celebrate(a), 900 + i * 2200));
+    if(rankUp) setTimeout(() => celebrateRank(info), 900 + fresh.length * 2200 + 400);
+  }
   renderAchievements(s);
   return fresh;
 }
 function celebrate(a){
-  fx(`<div class="ach-toast"><div class="ach-burst">${a.icon}</div><div><div class="lc-eyebrow">Succès débloqué</div><div class="ach-title">${esc(a.title)}</div><div class="hint" style="margin:0;">${esc(a.desc)}</div></div></div>`, 'fx-ach', 7000);
-  if(window.alerts && alertsCfg().types.achievement) window.alerts.push({ type: 'achievement', title: a.title, text: a.desc, icon: a.icon });
+  const t = TIERS[a.tier];
+  fx(`<div class="ach-toast"><div class="ach-burst" style="--tier:${t.color}">${a.icon}</div><div><div class="lc-eyebrow">Succès débloqué · <span style="color:${t.color}">${t.label} +${t.xp} XP</span></div><div class="ach-title">${esc(a.title)}</div><div class="hint" style="margin:0;">${esc(a.desc)}</div></div></div>`, 'fx-ach', 7000);
+  if(window.alerts && alertsCfg().types.achievement) window.alerts.push({ type: 'achievement', title: a.title, text: `${a.desc} · ${t.label} +${t.xp} XP`, icon: a.icon });
 }
+function celebrateRank(info){
+  fx(`<div class="rank-toast"><div class="rank-badge big lvl-${info.level}">${info.rank.icon}<b>${info.level}</b></div><div><div class="lc-eyebrow">Nouveau rang FlightBrief</div><div class="ach-title">${esc(info.rank.name)}</div><div class="hint" style="margin:0;">${fmtInt(info.xp)} XP${info.next ? ` · prochain rang : ${esc(info.next.name)} à ${fmtInt(info.next.xp)} XP` : ' · rang maximal !'}</div></div></div>`, 'fx-rank', 9000);
+  if(window.alerts && alertsCfg().types.achievement) window.alerts.push({ type: 'achievement', title: 'Nouveau rang : ' + info.rank.name, text: `Niveau ${info.level} · ${fmtInt(info.xp)} XP FlightBrief`, icon: info.rank.icon });
+}
+function rankBadge(info, cls){ return `<div class="rank-badge ${cls || ''} lvl-${info.level}" title="Niveau ${info.level}">${info.rank.icon}<b>${info.level}</b></div>`; }
+// Carte « rang » du Profil + aperçu des derniers succès ; la liste complète est dans la modale.
 function renderAchievements(s){
+  const info = xpInfo();
+  const navTab = document.querySelector('.tabs button[data-view="profil"] .tab-label');
+  if(navTab) navTab.innerHTML = `Profil <span class="nav-lvl lvl-${info.level}">${info.level}</span>`;
   const grid = $('achGrid');
   if(!grid) return;
-  s = s || achievementStats();
   const st = achState();
-  const done = ACHIEVEMENTS.filter(a => st.unlocked[a.id]).length;
-  $('achCount').textContent = `${done} / ${ACHIEVEMENTS.length}`;
-  grid.innerHTML = ACHIEVEMENTS.map(a => {
-    const unlocked = st.unlocked[a.id];
-    const v = Math.min(a.val(s), a.target);
-    const pct = Math.round(100 * v / a.target);
-    const f = a.fmt || (x => Math.floor(x).toLocaleString('fr-FR'));
-    return `<div class="ach ${unlocked ? 'on' : ''}" title="${esc(a.desc)}">
-      <div class="ach-icon">${a.icon}</div>
-      <div class="ach-body">
-        <div class="ach-name">${esc(a.title)}</div>
-        <div class="ach-desc">${esc(a.desc)}</div>
-        ${unlocked ? `<div class="ach-date">Débloqué le ${new Date(unlocked).toLocaleDateString('fr-FR')}</div>`
-          : `<div class="ach-prog"><i style="width:${pct}%"></i></div><div class="ach-date">${f(v)} / ${f(a.target)}</div>`}
+  $('achCount').textContent = `${info.unlocked} / ${info.total} succès`;
+  const recent = ACHIEVEMENTS.filter(a => st.unlocked[a.id]).sort((a, b) => String(st.unlocked[b.id]).localeCompare(String(st.unlocked[a.id]))).slice(0, 4);
+  grid.innerHTML = `<div class="rank-card">
+      ${rankBadge(info, 'big')}
+      <div class="rank-main">
+        <div class="lc-eyebrow">Rang FlightBrief · niveau ${info.level}</div>
+        <div class="rank-name">${esc(info.rank.name)}</div>
+        <div class="xp-bar"><i style="width:${info.pct}%"></i></div>
+        <div class="xp-meta"><span>${fmtInt(info.xp)} XP</span><span>${info.next ? `${fmtInt(info.next.xp - info.xp)} XP avant « ${esc(info.next.name)} »` : 'Rang maximal atteint'}</span></div>
       </div>
-    </div>`;
-  }).join('');
+      <button class="btn primary small" onclick="FBv15.openAchievements()">Voir tous les succès</button>
+    </div>
+    <div class="ach-recent">${recent.length ? recent.map(a => achTile(a, s, true)).join('') : '<div class="hint">Aucun succès pour l\'instant : enregistre un premier vol !</div>'}</div>`;
+}
+function achTile(a, s, compact){
+  const st = achState();
+  s = s || achievementStats();
+  const unlocked = st.unlocked[a.id], t = TIERS[a.tier];
+  const v = Math.min(a.val(s), a.target), pct = Math.round(100 * v / a.target);
+  const f = a.fmt || fmtInt;
+  return `<div class="ach ${unlocked ? 'on' : ''}${compact ? ' compact' : ''}" style="--tier:${t.color}" title="${esc(a.desc)}">
+    <div class="ach-icon">${a.icon}</div>
+    <div class="ach-body">
+      <div class="ach-name">${esc(a.title)}</div>
+      ${compact ? '' : `<div class="ach-desc">${esc(a.desc)}</div>`}
+      <div class="ach-tier"><span>${t.label}</span><b>+${t.xp} XP</b></div>
+      ${unlocked ? `<div class="ach-date">Débloqué le ${new Date(unlocked).toLocaleDateString('fr-FR')}</div>`
+        : compact ? '' : `<div class="ach-prog"><i style="width:${pct}%"></i></div><div class="ach-date">${f(v)} / ${f(a.target)}</div>`}
+    </div>
+  </div>`;
+}
+let achFilter = { cat: 'all', state: 'all' };
+FBv15.openAchievements = function(){
+  $('achModalOverlay').classList.remove('hidden');
+  renderAchModal();
+};
+FBv15.closeAchievements = () => $('achModalOverlay').classList.add('hidden');
+FBv15.achSetFilter = (k, v) => { achFilter[k] = v; renderAchModal(); };
+function renderAchModal(){
+  const info = xpInfo(), st = achState(), s = achievementStats();
+  $('achModalHead').innerHTML = `${rankBadge(info, 'big')}
+    <div class="rank-main"><div class="lc-eyebrow">Niveau ${info.level} · ${info.unlocked} / ${info.total} succès</div><div class="rank-name">${esc(info.rank.name)}</div>
+      <div class="xp-bar"><i style="width:${info.pct}%"></i></div>
+      <div class="xp-meta"><span>${fmtInt(info.xp)} XP <small>(${fmtInt(info.achXp)} des succès + ${XP_PER_FLIGHT} XP par vol)</small></span><span>${info.next ? `Prochain : ${esc(info.next.name)} · ${fmtInt(info.next.xp)} XP` : 'Rang maximal'}</span></div></div>
+    <div class="rank-ladder">${RANKS.map((r, i) => `<span class="${i <= info.idx ? 'on' : ''}${i === info.idx ? ' cur' : ''}" title="${esc(r.name)} · ${fmtInt(r.xp)} XP">${r.icon}</span>`).join('')}</div>`;
+  const catCount = c => ACHIEVEMENTS.filter(a => a.cat === c).length, catDone = c => ACHIEVEMENTS.filter(a => a.cat === c && st.unlocked[a.id]).length;
+  $('achModalFilters').innerHTML = `<div class="ach-chips">${[['all', 'Tous', ACHIEVEMENTS.length, info.unlocked], ...Object.entries(ACH_CATS).map(([k, l]) => [k, l, catCount(k), catDone(k)])].map(([k, l, n, d]) => `<button class="${achFilter.cat === k ? 'on' : ''}" onclick="FBv15.achSetFilter('cat','${k}')">${esc(l)} <small>${d}/${n}</small></button>`).join('')}</div>
+    <div class="ach-chips">${[['all', 'Tous'], ['done', 'Débloqués'], ['todo', 'À faire']].map(([k, l]) => `<button class="${achFilter.state === k ? 'on' : ''}" onclick="FBv15.achSetFilter('state','${k}')">${l}</button>`).join('')}</div>`;
+  const list = ACHIEVEMENTS.filter(a => (achFilter.cat === 'all' || a.cat === achFilter.cat) && (achFilter.state === 'all' || (achFilter.state === 'done') === !!st.unlocked[a.id]));
+  // À faire : les plus avancés d'abord.
+  const prog = a => Math.min(1, a.val(s) / a.target);
+  list.sort((a, b) => (!!st.unlocked[b.id] - !!st.unlocked[a.id]) || (prog(b) - prog(a)));
+  $('achModalGrid').innerHTML = list.length ? list.map(a => achTile(a, s, false)).join('') : '<div class="hint">Rien ici pour l\'instant.</div>';
 }
 FBv15.afterLogbookChange = () => evaluateAchievements(false);
 
@@ -327,6 +519,7 @@ FBv15.disposeApproach3D = function(){
 };
 FBv15.renderApproach3D = async function(f){
   FBv15.disposeApproach3D();
+  renderRouteShots(f).catch(() => {});
   const sec = $('approach3dSection');
   if(!sec) return;
   const td = f && f.trackData;
@@ -858,6 +1051,12 @@ function initMapUx(){
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable);
     if((e.ctrlKey || e.metaKey) && !e.altKey && /^[1-9]$/.test(e.key)){ e.preventDefault(); switchView(order[+e.key - 1]); return; }
     if(e.key === 'Escape' && document.body.classList.contains('map-full-open')){ FBv15.mapFullscreen(false); e.stopImmediatePropagation(); return; }
+    if(e.key === 'Escape'){
+      if(!$('lightbox').classList.contains('hidden')){ FBv15.lightboxClose(); e.stopImmediatePropagation(); return; }
+      if(!$('galleryOverlay').classList.contains('hidden')){ FBv15.closeGallery(); e.stopImmediatePropagation(); return; }
+      if(!$('achModalOverlay').classList.contains('hidden')){ FBv15.closeAchievements(); e.stopImmediatePropagation(); return; }
+    }
+    if(!$('lightbox').classList.contains('hidden') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')){ FBv15.lightboxStep(e.key === 'ArrowLeft' ? -1 : 1); e.preventDefault(); return; }
     if(typing || e.ctrlKey || e.metaKey || e.altKey || !el('view-briefing').classList.contains('active')) return;
     if(document.querySelector('.modal-overlay:not(.hidden)')) return;
     const k = e.key.toLowerCase();
@@ -865,6 +1064,334 @@ function initMapUx(){
     else if(k === 'v') FBv15.mapFitRoute();
     else if(k === 'p') FBv15.mapFullscreen();
   }, true);
+}
+
+/* =========================================================
+   5 ter. OUTIL LIVE — ordre des blocs, position à l'écran, mode « Libre » (v1.6)
+   ========================================================= */
+const LO_CUSTOM_LABEL = { custom1: 'Texte libre 1', custom2: 'Texte libre 2' };
+function loSaveAndPush(){ pushLiveOverlayConfig(); queueSaveDb(); }
+function initLiveOverlayLayout(){
+  const list = $('loFieldList');
+  if(!list) return;
+  // Lignes triées selon l'ordre enregistré.
+  const order = normLiveOverlayOrder(db.liveOverlay.order);
+  order.forEach(k => { const row = list.querySelector(`[data-key="${k}"]`); if(row) list.appendChild(row); });
+  refreshCustomLabels();
+  ['loCustom1', 'loCustom2'].forEach(id => el(id) && el(id).addEventListener('input', refreshCustomLabels));
+  // Glisser-déposer (poignée ou ligne entière).
+  let dragRow = null;
+  list.addEventListener('dragstart', e => {
+    const row = e.target.closest('.lo-sort');
+    if(!row){ e.preventDefault(); return; }
+    dragRow = row; row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try{ e.dataTransfer.setData('text/plain', row.dataset.key); }catch(err){ /* ignoré */ }
+  });
+  list.addEventListener('dragover', e => {
+    if(!dragRow) return;
+    e.preventDefault();
+    const rows = [...list.querySelectorAll('.lo-sort:not(.dragging)')];
+    const after = rows.find(r => { const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+    if(after) list.insertBefore(dragRow, after); else list.appendChild(dragRow);
+  });
+  const end = () => {
+    if(!dragRow) return;
+    dragRow.classList.remove('dragging'); dragRow = null;
+    db.liveOverlay.order = [...list.querySelectorAll('.lo-sort')].map(r => r.dataset.key);
+    renderLiveOverlayPreview(true); loSaveAndPush();
+  };
+  list.addEventListener('drop', e => { e.preventDefault(); end(); });
+  list.addEventListener('dragend', end);
+  // Position à l'écran (modes barre / bloc / cartes).
+  const st = db.liveOverlay.style;
+  const paintAnchor = () => $('loAnchor').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.a === (st.anchor || 'top-left')));
+  $('loAnchor').querySelectorAll('button').forEach(b => b.onclick = () => { st.anchor = b.dataset.a; paintAnchor(); loSaveAndPush(); });
+  paintAnchor();
+  $('loMargin').value = st.margin != null ? st.margin : 18;
+  $('loMarginVal').textContent = $('loMargin').value + ' px'; updateRangeFill($('loMargin'));
+  $('loMargin').addEventListener('input', e => { st.margin = +e.target.value; $('loMarginVal').textContent = e.target.value + ' px'; updateRangeFill(e.target); loSaveAndPush(); });
+  window.addEventListener('resize', debounce(() => { if(db.liveOverlay.style.layout === 'free') FBv15.renderFreeCanvas(); }, 150));
+}
+function refreshCustomLabels(){
+  [1, 2].forEach(n => { const t = (el('loCustom' + n).value || '').trim(); const lab = $('loSortCustom' + n); if(lab) lab.textContent = t ? '« ' + (t.length > 22 ? t.slice(0, 22) + '…' : t) + ' »' : '(vide, non affiché)'; });
+}
+// Positions par défaut des blocs sans position : une colonne en haut à gauche.
+FBv15.ensureFreePositions = function(){
+  const cfg = db.liveOverlay;
+  cfg.positions = cfg.positions || {};
+  const blocks = liveOverlayBlocks(cfg);
+  let y = 2;
+  blocks.forEach(b => {
+    if(!cfg.positions[b.key]) cfg.positions[b.key] = { x: 1.5, y };
+    y = Math.max(y, cfg.positions[b.key].y) + 7.5;
+  });
+};
+FBv15.freeAutoArrange = function(mode){
+  const cfg = db.liveOverlay;
+  const blocks = liveOverlayBlocks(cfg);
+  cfg.positions = cfg.positions || {};
+  if(mode === 'row'){
+    // Mesure réelle des blocs dans l'éditeur pour les aligner bord à bord en bas de l'écran.
+    const stage = $('loFreeCanvas').querySelector('.lo-free-stage');
+    let x = 1.5;
+    blocks.forEach(b => {
+      const node = stage && stage.querySelector(`[data-key="${b.key}"]`);
+      const w = node ? node.offsetWidth / 1920 * 100 : 8;
+      cfg.positions[b.key] = { x: +x.toFixed(2), y: 91 };
+      x += w + 0.6;
+    });
+  } else {
+    blocks.forEach((b, i) => { cfg.positions[b.key] = { x: 1.5, y: 2 + i * 7.5 }; });
+  }
+  FBv15.renderFreeCanvas(); loSaveAndPush();
+};
+FBv15.renderFreeCanvas = function(){
+  const wrap = $('loFreeCanvas');
+  if(!wrap) return;
+  const cfg = db.liveOverlay, t = _overlayTelemetry;
+  FBv15.ensureFreePositions();
+  const W = wrap.clientWidth || 860, k = W / 1920;
+  wrap.style.height = Math.round(1080 * k) + 'px';
+  const st = cfg.style;
+  const cls = ['lo-bar', 'lo-cards', st.shadow !== false ? 'lo-shadow' : '', st.blur !== false ? 'lo-blur' : '', st.uppercase ? 'lo-uppercase' : ''].join(' ');
+  wrap.innerHTML = `<div class="lo-free-stage" style="transform:scale(${k})"><i class="lo-guide v"></i><i class="lo-guide h"></i>${liveOverlayBlocks(cfg).map(b => {
+    const p = cfg.positions[b.key];
+    return `<div class="lo-free-block ${cls}" data-key="${b.key}" style="left:${p.x}%; top:${p.y}%">${b.html(t)}</div>`;
+  }).join('')}</div>`;
+  const stage = wrap.querySelector('.lo-free-stage');
+  applyLiveOverlayStyleVars(stage, cfg);
+  stage.classList.remove('lo-stack', 'lo-cards', 'lo-shadow', 'lo-blur', 'lo-uppercase', 'lo-divider');
+  // Déplacement à la souris, avec aimantation sur une grille de 0,5 % et sur les centres.
+  stage.querySelectorAll('.lo-free-block').forEach(node => {
+    node.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      node.setPointerCapture(e.pointerId);
+      node.classList.add('moving');
+      const key = node.dataset.key, start = { ...cfg.positions[key] }, sx = e.clientX, sy = e.clientY;
+      const bw = node.offsetWidth / 1920 * 100, bh = node.offsetHeight / 1080 * 100;
+      const gv = stage.querySelector('.lo-guide.v'), gh = stage.querySelector('.lo-guide.h');
+      const move = ev => {
+        let x = start.x + (ev.clientX - sx) / k / 1920 * 100, y = start.y + (ev.clientY - sy) / k / 1080 * 100;
+        x = Math.max(0, Math.min(100 - bw, x)); y = Math.max(0, Math.min(100 - bh, y));
+        let snapV = false, snapH = false;
+        if($('loFreeSnap').checked){
+          x = Math.round(x * 2) / 2; y = Math.round(y * 2) / 2;
+          if(Math.abs(x + bw / 2 - 50) < 1){ x = 50 - bw / 2; snapV = true; }
+          if(Math.abs(y + bh / 2 - 50) < 1.5){ y = 50 - bh / 2; snapH = true; }
+        }
+        gv.classList.toggle('on', snapV); gh.classList.toggle('on', snapH);
+        cfg.positions[key] = { x: +x.toFixed(2), y: +y.toFixed(2) };
+        node.style.left = x + '%'; node.style.top = y + '%';
+      };
+      const up = () => {
+        node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', up);
+        node.classList.remove('moving'); gv.classList.remove('on'); gh.classList.remove('on');
+        loSaveAndPush();
+      };
+      node.addEventListener('pointermove', move); node.addEventListener('pointerup', up);
+    });
+  });
+};
+
+/* =========================================================
+   5 quater. CAPTURES D'ÉCRAN DES VOLS (v1.6)
+   ========================================================= */
+function shotsCfg(){
+  db.shotsCfg = Object.assign({ hotkey: 'Ctrl+Alt+F12', source: 'auto', auto: { takeoff: true, cruise: true, landing: true }, sound: true }, db.shotsCfg || {});
+  db.shotsCfg.auto = Object.assign({ takeoff: true, cruise: true, landing: true }, db.shotsCfg.auto || {});
+  return db.shotsCfg;
+}
+async function pushShotsCfg(){
+  if(!window.shots) return;
+  const r = await window.shots.setConfig(shotsCfg());
+  const m = $('shotHotkeyMsg');
+  if(m){ m.className = 'status-msg ' + (r.ok ? 'ok' : 'err'); m.textContent = r.ok ? (r.hotkey ? `Raccourci actif : ${r.hotkey}` : 'Aucun raccourci.') : r.error; }
+  if($('shotKeyHint')) $('shotKeyHint').textContent = r.ok && r.hotkey ? r.hotkey : '';
+}
+function shutterSound(){
+  if(!shotsCfg().sound) return;
+  try{
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const len = ac.sampleRate * 0.09, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for(let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3) * 0.35;
+    const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination); src.start();
+    setTimeout(() => ac.close(), 400);
+  }catch(e){ /* pas d'audio */ }
+}
+FBv15.takeShot = async () => {
+  const btn = $('shotBtn'); if(btn) btn.disabled = true;
+  const r = await window.shots.capture('manuel');
+  if(btn) btn.disabled = false;
+  if(!r.ok) fx(`<div class="lc-eyebrow">Capture impossible</div><div class="hint" style="margin:4px 0 0;">${esc(r.error)}</div>`, 'fx-warn', 6000);
+};
+function onShotTaken(shot){
+  shutterSound();
+  const labels = { 'manuel': 'Capture', 'raccourci': 'Capture (raccourci)', 'décollage': 'Capture auto · décollage', 'croisière': 'Capture auto · croisière', 'atterrissage': 'Capture auto · atterrissage' };
+  fx(`<div class="shot-toast"><img src="${esc(shot.url)}" alt=""><div><div class="lc-eyebrow">${esc(labels[shot.reason] || 'Capture')}</div><div class="hint" style="margin:2px 0 0;">${shot.from === 'window' ? 'Fenêtre du simulateur' : 'Écran principal'} · ${new Date(shot.ts).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}<br>Rattachée au PIREP de ce vol.</div></div></div>`, 'fx-shot', 3500);
+}
+// Au PIREP : on rattache au vol les captures prises entre son début et sa fin (+ 3 min).
+FBv15.attachFlightShots = async (data) => {
+  if(typeof _pendingTrackData === 'undefined' || !_pendingTrackData) return;
+  // Contrôleurs VATSIM/IVAO présents au départ et à l'arrivée (pour les succès « réseau »).
+  try{
+    const dep = ($('lbDep').value || '').trim().toUpperCase(), arr = ($('lbArr').value || '').trim().toUpperCase();
+    const st = atcStations().filter(x => x.facility !== 'ATIS' && x.ap);
+    const n = icao => icao ? st.filter(x => x.ap.icao === icao).length : 0;
+    if(st.length) _pendingTrackData.atc = { dep: n(dep), arr: n(arr) };
+  }catch(e){ /* sans info ATC */ }
+  if(!window.shots) return;
+  const from = data.startedAt ? new Date(data.startedAt).getTime() - 60000 : null;
+  const to = (data.endedAt ? new Date(data.endedAt).getTime() : Date.now()) + 180000;
+  try{
+    const list = await window.shots.list({ from, to });
+    if(list.length) _pendingTrackData.screenshots = list.map(x => x.name);
+  }catch(e){ /* sans captures */ }
+};
+let galleryFlight = null, galleryItems = [], lbIndex = 0;
+function flightShotNames(f){ return [ ...((f.trackData && f.trackData.screenshots) || []), ...(f.screenshots || []) ]; }
+FBv15.openGallery = async (flightId) => {
+  const f = db.logbook.find(x => x.id === flightId);
+  if(!f) return;
+  galleryFlight = f;
+  $('galleryTitle').textContent = `Captures — ${f.callsign || 'Vol'} (${f.dep || '----'} → ${f.arr || '----'}) · ${FBShared.fmtDateFr(f.date)}`;
+  $('galleryOverlay').classList.remove('hidden');
+  await renderGallery();
+};
+async function renderGallery(){
+  const f = galleryFlight;
+  galleryItems = await window.shots.resolve(flightShotNames(f));
+  // Les fichiers supprimés du disque disparaissent aussi du vol.
+  const valid = new Set(galleryItems.map(x => x.name));
+  if(f.trackData && f.trackData.screenshots) f.trackData.screenshots = f.trackData.screenshots.filter(n => valid.has(n));
+  if(f.screenshots) f.screenshots = f.screenshots.filter(n => valid.has(n));
+  $('galleryGrid').innerHTML = galleryItems.length
+    ? galleryItems.map((g, i) => `<button class="g-item" onclick="FBv15.lightboxOpen(${i})"><img src="${esc(g.url)}" loading="lazy" alt=""><span>${new Date(g.ts).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })}</span></button>`).join('')
+    : `<div class="g-empty"><div style="font-size:30px;">📷</div><b>Aucune capture pour ce vol</b><div class="hint">Pendant un vol suivi, utilise le bouton « Capture d'écran » du Briefing ou ton raccourci. Tu peux aussi ajouter des images existantes.</div></div>`;
+}
+FBv15.closeGallery = () => { $('galleryOverlay').classList.add('hidden'); FBv15.lightboxClose(); renderLogbook(); };
+FBv15.galleryImport = async () => {
+  const added = await window.shots.importFiles();
+  if(!added.length) return;
+  galleryFlight.screenshots = [ ...(galleryFlight.screenshots || []), ...added.map(a => a.name) ];
+  saveDbNow();
+  renderGallery();
+};
+FBv15.lightboxOpen = (i) => { lbIndex = i; $('lightbox').classList.remove('hidden'); showLb(); };
+FBv15.lightboxClose = () => { $('lightbox').classList.add('hidden'); };
+FBv15.lightboxStep = (d) => { if(!galleryItems.length) return; lbIndex = (lbIndex + d + galleryItems.length) % galleryItems.length; showLb(); };
+function showLb(){
+  const g = galleryItems[lbIndex]; if(!g) return FBv15.lightboxClose();
+  $('lightboxImg').src = g.url;
+  $('lightboxCap').textContent = `${lbIndex + 1} / ${galleryItems.length} · ${new Date(g.ts).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'medium' })}`;
+}
+FBv15.lightboxOpenFile = () => { const g = galleryItems[lbIndex]; if(g) window.shots.openFile(g.name); };
+FBv15.lightboxDelete = async () => {
+  const g = galleryItems[lbIndex]; if(!g) return;
+  if(!confirm('Supprimer définitivement cette capture ?')) return;
+  await window.shots.remove(g.name);
+  ['screenshots'].forEach(k => { if(galleryFlight[k]) galleryFlight[k] = galleryFlight[k].filter(n => n !== g.name); });
+  if(galleryFlight.trackData && galleryFlight.trackData.screenshots) galleryFlight.trackData.screenshots = galleryFlight.trackData.screenshots.filter(n => n !== g.name);
+  saveDbNow();
+  await renderGallery();
+  if(galleryItems.length){ lbIndex = Math.min(lbIndex, galleryItems.length - 1); showLb(); } else FBv15.lightboxClose();
+};
+async function renderRouteShots(f){
+  const box = $('routeShots');
+  if(!box || !window.shots) return;
+  const names = flightShotNames(f);
+  if(!names.length){ box.classList.add('hidden'); return; }
+  const items = await window.shots.resolve(names);
+  box.classList.toggle('hidden', !items.length);
+  $('routeShotsStrip').innerHTML = items.map(g => `<img src="${esc(g.url)}" loading="lazy" alt="" onclick="FBv15.openGallery('${f.id}')">`).join('');
+}
+function bindShotsSettings(){
+  const c = shotsCfg();
+  if(!$('shotsPanel')) return;
+  $('shotHotkey').value = c.hotkey || '';
+  $('shotSource').value = c.source;
+  $('shotAutoTakeoff').checked = c.auto.takeoff; $('shotAutoCruise').checked = c.auto.cruise; $('shotAutoLanding').checked = c.auto.landing;
+  $('shotSound').checked = c.sound;
+  const save = () => { queueSaveDb(); pushShotsCfg(); };
+  $('shotSource').addEventListener('change', e => { c.source = e.target.value; save(); });
+  [['shotAutoTakeoff','takeoff'],['shotAutoCruise','cruise'],['shotAutoLanding','landing']].forEach(([id, k]) => $(id).addEventListener('change', e => { c.auto[k] = e.target.checked; save(); }));
+  $('shotSound').addEventListener('change', e => { c.sound = e.target.checked; save(); });
+  // Enregistreur de raccourci : clique dans le champ puis appuie sur la combinaison.
+  const keyName = e => {
+    if(/^F\d{1,2}$/.test(e.key)) return e.key;
+    if(e.code && /^Key[A-Z]$/.test(e.code)) return e.code.slice(3);
+    if(e.code && /^Digit\d$/.test(e.code)) return e.code.slice(5);
+    const map = { ' ': 'Space', 'PrintScreen': 'PrintScreen', 'Insert': 'Insert', 'Home': 'Home', 'End': 'End', 'PageUp': 'PageUp', 'PageDown': 'PageDown', 'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right' };
+    return map[e.key] || null;
+  };
+  $('shotHotkey').addEventListener('keydown', e => {
+    e.preventDefault();
+    if(['Control','Alt','Shift','Meta'].includes(e.key)) return;
+    const k = keyName(e);
+    if(!k){ $('shotHotkeyMsg').className = 'status-msg err'; $('shotHotkeyMsg').textContent = 'Touche non prise en charge.'; return; }
+    const mods = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean);
+    if(!mods.length && !/^F\d{1,2}$|PrintScreen/.test(k)){ $('shotHotkeyMsg').className = 'status-msg err'; $('shotHotkeyMsg').textContent = 'Ajoute Ctrl, Alt ou Maj (sauf pour les touches F1–F12).'; return; }
+    c.hotkey = [...mods, k].join('+');
+    $('shotHotkey').value = c.hotkey;
+    $('shotHotkey').blur();
+    save();
+  });
+  $('shotHotkey').addEventListener('focus', () => { $('shotHotkeyMsg').className = 'status-msg'; $('shotHotkeyMsg').textContent = 'Appuie sur la combinaison voulue…'; });
+}
+FBv15.shotHotkeyClear = () => { shotsCfg().hotkey = ''; $('shotHotkey').value = ''; queueSaveDb(); pushShotsCfg(); };
+
+/* =========================================================
+   5 quinquies. RAPPEL « TRACKER NON LANCÉ » (v1.6)
+   ========================================================= */
+function watchCfgR(){
+  db.watchCfg = Object.assign({ enabled: true, autoStart: false, volume: 70 }, db.watchCfg || {});
+  return db.watchCfg;
+}
+let watchMuteUntil = 0, watchBanner = null;
+function watchSound(){
+  try{
+    const vol = watchCfgR().volume / 100 * 0.35;
+    if(vol <= 0) return;
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    // Trois bips montants façon « master caution ».
+    [[880, 0], [880, 0.22], [1175, 0.44]].forEach(([f, t0]) => {
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + t0;
+      o.type = 'square'; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.setValueAtTime(vol, t + 0.14); g.gain.linearRampToValueAtTime(0, t + 0.17);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.2);
+    });
+    setTimeout(() => ac.close(), 1200);
+  }catch(e){ /* pas d'audio */ }
+}
+FBv15.watchTestSound = () => watchSound();
+function onWatchMoving(d){
+  if(Date.now() < watchMuteUntil) return;
+  watchSound();
+  if(watchBanner && document.body.contains(watchBanner)) return;
+  watchBanner = fx(`<div class="watch-alert"><div class="wa-ic">⚠</div><div><div class="lc-eyebrow">Tracker non lancé</div><div class="ach-title">${d.airborne ? 'Tu voles' : 'Ton avion roule'} sans suivi</div>
+    <div class="hint" style="margin:2px 0 8px;">Ce vol ne sera ni enregistré dans le logbook ni affiché sur ton overlay.</div>
+    <div class="btn-row" style="margin:0;"><button class="btn small primary" onclick="FBv15.watchStartTracker(this)">Lancer le tracker</button><button class="btn small" onclick="FBv15.watchMute(this)">Ignorer 30 min</button></div></div></div>`, 'fx-watch', 0);
+}
+FBv15.watchStartTracker = async (btn) => {
+  const card = btn.closest('.fx-card'); if(card) card.remove();
+  switchView('briefing');
+  if(!(await window.tracker.isConnected())) toggleTrackerConnection();
+};
+FBv15.watchMute = (btn) => { watchMuteUntil = Date.now() + 30 * 60000; const card = btn.closest('.fx-card'); if(card) card.remove(); };
+function bindWatchSettings(){
+  const c = watchCfgR();
+  if(window.watch) window.watch.setConfig({ enabled: c.enabled, autoStart: c.autoStart });
+  if(!$('watchPanel')) return;
+  $('watchEnabled').checked = c.enabled; $('watchAutoStart').checked = c.autoStart;
+  $('watchVolume').value = c.volume; $('watchVolumeVal').textContent = c.volume + '%'; updateRangeFill($('watchVolume'));
+  const push = () => { queueSaveDb(); window.watch && window.watch.setConfig({ enabled: c.enabled, autoStart: c.autoStart }); };
+  $('watchEnabled').addEventListener('change', e => { c.enabled = e.target.checked; push(); });
+  $('watchAutoStart').addEventListener('change', e => { c.autoStart = e.target.checked; push(); });
+  $('watchVolume').addEventListener('input', e => { c.volume = +e.target.value; $('watchVolumeVal').textContent = e.target.value + '%'; updateRangeFill(e.target); queueSaveDb(); });
+  window.watch.onMoving(onWatchMoving);
+  window.watch.onAutoStarted(() => fx(`<div class="lc-eyebrow">Tracker lancé automatiquement</div><div class="hint" style="margin:4px 0 0;">Ton avion bougeait : le suivi du vol a démarré tout seul.</div>`, 'fx-shot', 6000));
+  window.watch.onFocusTracker(() => switchView('briefing'));
+  if(window.tracker) window.tracker.onStatus(d => { if(d.connected && watchBanner){ watchBanner.remove(); watchBanner = null; } });
 }
 
 /* =========================================================
@@ -1154,8 +1681,45 @@ function bindAlertsOverlay(){
   $('alDuration').addEventListener('input', e => { alertsCfg().durationSec = +e.target.value; $('alDurationVal').textContent = e.target.value + ' s'; updateRangeFill(e.target); push(); });
   $('alScale').addEventListener('input', e => { alertsCfg().scale = +e.target.value; $('alScaleVal').textContent = e.target.value + '%'; updateRangeFill(e.target); push(); });
   [['alTypeLanding','landing'],['alTypeBet','bet'],['alTypeAchievement','achievement'],['alTypeChat','chat']].forEach(([id, k]) => $(id).addEventListener('change', e => { alertsCfg().types[k] = e.target.checked; push(); }));
+  bindAlertsDesign(push);
   push();
 }
+/* ---- Design des alertes (v1.6) ---- */
+function loadAlertsDesignForm(){
+  const st = alertsCfg().style;
+  $('alThemes').innerHTML = Object.entries(ALERT_THEMES).map(([k, t]) => `<button class="al-theme ${st.theme === k ? 'on' : ''}" data-theme="${k}" style="--tb:${t.bg};--tt:${t.text};--ta:${t.accent}"><i></i>${t.label}</button>`).join('');
+  $('alThemes').querySelectorAll('button').forEach(b => b.onclick = () => { const keep = { sound: st.sound, volume: st.volume, width: alertsCfg().style.width, font: alertsCfg().style.font, animation: alertsCfg().style.animation }; alertsCfg().style = Object.assign(defaultAlertStyle(b.dataset.theme), keep); loadAlertsDesignForm(); _pushAlerts(); });
+  $('alsBg').value = st.bg; $('alsText').value = st.text; $('alsSub').value = st.sub; $('alsAccent').value = st.accent;
+  $('alsAccentByType').checked = st.accentMode !== 'custom';
+  const rng = (id, v, suf) => { $(id).value = v; $(id + 'Val').textContent = v + suf; updateRangeFill($(id)); };
+  rng('alsOpacity', st.opacity, '%'); rng('alsWidth', st.width, ' px'); rng('alsRadius', st.radius, ' px'); rng('alsVolume', st.volume, '%');
+  $('alsFont').value = st.font; $('alsAnim').value = st.animation;
+  ['Border','Stripe','Shadow','Blur','Timer','Sound'].forEach(k => { $('als' + k).checked = !!st[k.toLowerCase()]; });
+}
+let _pushAlerts = () => {};
+function bindAlertsDesign(push){
+  if(!$('alDesign')) return;
+  _pushAlerts = push;
+  loadAlertsDesignForm();
+  const st = () => alertsCfg().style;
+  const custom = () => { st().theme = st().theme || 'flightbrief'; };
+  [['alsBg','bg'],['alsText','text'],['alsSub','sub']].forEach(([id, k]) => $(id).addEventListener('input', e => { st()[k] = e.target.value; if(k === 'bg') st().bg2 = e.target.value; custom(); push(); }));
+  $('alsAccent').addEventListener('input', e => { st().accent = e.target.value; st().accentMode = 'custom'; $('alsAccentByType').checked = false; push(); });
+  $('alsAccentByType').addEventListener('change', e => { st().accentMode = e.target.checked ? 'type' : 'custom'; push(); });
+  [['alsOpacity','opacity','%'],['alsWidth','width',' px'],['alsRadius','radius',' px'],['alsVolume','volume','%']].forEach(([id, k, suf]) => $(id).addEventListener('input', e => { st()[k] = +e.target.value; $(id + 'Val').textContent = e.target.value + suf; updateRangeFill(e.target); push(); }));
+  $('alsFont').addEventListener('change', e => { st().font = e.target.value; push(); });
+  $('alsAnim').addEventListener('change', e => { st().animation = e.target.value; push(); });
+  ['Border','Stripe','Shadow','Blur','Timer','Sound'].forEach(k => $('als' + k).addEventListener('change', e => { st()[k.toLowerCase()] = e.target.checked; push(); }));
+  $('alDesign').addEventListener('toggle', () => {
+    const f = $('alPreviewFrame');
+    if($('alDesign').open && alertsUrl && !f.src) f.src = alertsUrl + '?preview=1';
+  });
+}
+FBv15.alertsDesignReset = () => {
+  if(!confirm('Revenir au design FlightBrief par défaut pour les alertes ?')) return;
+  alertsCfg().style = defaultAlertStyle('flightbrief');
+  loadAlertsDesignForm(); _pushAlerts();
+};
 FBv15.copyAlertsLink = async () => {
   await window.api.copyToClipboard(alertsUrl);
   const m = $('alertsLinkStatus'); m.className = 'status-msg ok'; m.textContent = 'Lien copié ✓ — OBS → Source → Navigateur → URL, 1920 × 1080.';
@@ -1212,8 +1776,8 @@ FBv15.setPlaneIcon = function(k){
    ========================================================= */
 FBv15.onViewChange = function(name){
   if(name === 'briefing') startAtcPolling(); else stopAtcPolling();
-  if(name === 'profil') renderAchievements();
-  if(name === 'admin'){ renderBackups(); renderPlanePicker(); }
+  if(name === 'profil') evaluateAchievements(false);
+  if(name === 'admin'){ renderBackups(); renderPlanePicker(); if(window.shots) window.shots.stats().then(st => { if($('shotStats')) $('shotStats').textContent = `${st.count} capture${st.count > 1 ? 's' : ''} · ${st.sizeMb} Mo`; }); }
   if(name === 'twitch' && window.twitch) window.twitch.getState().then(s => { twState = s; renderTwitch(); });
 };
 FBv15.init = async function(){
@@ -1247,6 +1811,9 @@ FBv15.init = async function(){
     ['depIcao','arrIcao'].forEach(id => el(id).addEventListener('change', renderAtc));
   }
   try{ initMapUx(); }catch(e){ console.warn('[v1.5] carte', e); }
+  try{ initLiveOverlayLayout(); }catch(e){ console.warn('[v1.6] outil live', e); }
+  try{ if(window.shots){ bindShotsSettings(); pushShotsCfg(); window.shots.onTaken(onShotTaken); } }catch(e){ console.warn('[v1.6] captures', e); }
+  try{ if(window.watch) bindWatchSettings(); }catch(e){ console.warn('[v1.6] rappel tracker', e); }
   renderAtcMapChips();
   if(el('view-briefing').classList.contains('active')) startAtcPolling();
   checkRecovery();

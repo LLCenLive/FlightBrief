@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, shell, net, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, shell, net, safeStorage, desktopCapturer, screen, globalShortcut, dialog, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -9,6 +9,7 @@ const { FlightTracker, computeTouchdownZone, windComponents } = require('./track
 const { DataStore } = require('./backups');
 const { fetchAtc } = require('./atc');
 const { TwitchAuth, TwitchChat, FlightBot, mergeConfig: mergeTwitchConfig } = require('./twitch');
+const { Shots } = require('./shots');
 
 const OBS_PORT = 4813;
 const LIVE_OVERLAY_PORT = 4814; // port distinct -> URL OBS différente de celle du briefing
@@ -248,6 +249,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  try { store().flushSync(); } catch (e) { /* ignoré */ }
   tracker.disconnect();
   try { twitchChat.stop(true); } catch (e) { /* ignoré */ }
   stopMobileServer();
@@ -267,6 +269,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  try { store().flushSync(); } catch (e) { /* ignoré */ }
   tracker.disconnect();
   try { twitchChat.stop(true); } catch (e) { /* ignoré */ }
   stopMobileServer();
@@ -743,7 +746,7 @@ function alertsSince(sinceId) {
   return { config: alertsConfig, lastId: alertSeq, events: alertsQueue.filter(e => e.id > (sinceId || 0)) };
 }
 ipcMain.on('alerts:push', (evt, a) => { if (a && a.type) pushAlert(a); });
-ipcMain.on('alerts:config', (evt, c) => { alertsConfig = { ...alertsConfig, ...(c || {}), types: { ...alertsConfig.types, ...((c && c.types) || {}) } }; });
+ipcMain.on('alerts:config', (evt, c) => { alertsConfig = { ...alertsConfig, ...(c || {}), types: { ...alertsConfig.types, ...((c && c.types) || {}) }, style: { ...((c && c.style) || alertsConfig.style || {}) } }; });
 ipcMain.handle('alerts:getPort', () => LIVE_OVERLAY_PORT);
 
 /* =========================================================
@@ -804,7 +807,8 @@ const flightBot = new FlightBot(twitchChat, {
 function twitchPublicState() {
   return {
     status: twitchStatus, config: twitchConfig, auth: getTwitchAuth().publicInfo(),
-    bet: flightBot.betState(), leaderboard: flightBot.leaderboard(10), log: flightBot.log.slice(0, 25)
+    bet: flightBot.betState(), leaderboard: flightBot.leaderboard(10), log: flightBot.log.slice(0, 25),
+    betsResolved: (flightBot.stats.history || []).length
   };
 }
 const sendTwitchState = (() => {
@@ -887,3 +891,122 @@ tracker.on('flight-landed', d => {
   lastLanding = { fpm: d.landingRate, icao: d.arr && d.arr.icao, gForce: d.gForce, bounces: d.bounceCount || 0, at: Date.now() };
   if (twitchConfig.enabled) flightBot.resolveBets({ fpm: d.landingRate, icao: d.arr && d.arr.icao });
 });
+
+
+/* =========================================================
+   v1.6 — Captures d'écran des vols (voir shots.js)
+   ========================================================= */
+let shots = null;
+function getShots() {
+  if (!shots) {
+    shots = new Shots({ desktopCapturer, screen, globalShortcut }, app.getPath('userData'));
+    shots.onTaken = shot => { if (mainWindow) mainWindow.webContents.send('shots:taken', shot); };
+  }
+  return shots;
+}
+ipcMain.handle('shots:setConfig', (evt, c) => getShots().setConfig(c));
+ipcMain.handle('shots:capture', (evt, reason) => getShots().capture(reason || 'manuel'));
+ipcMain.handle('shots:list', (evt, range) => getShots().list(range));
+ipcMain.handle('shots:resolve', (evt, names) => getShots().resolve(names));
+ipcMain.handle('shots:delete', (evt, name) => getShots().remove(name));
+ipcMain.handle('shots:stats', () => getShots().stats());
+ipcMain.handle('shots:openFolder', () => { fs.mkdirSync(getShots().dir, { recursive: true }); shell.openPath(getShots().dir); return true; });
+ipcMain.handle('shots:openFile', (evt, name) => { if (name && !/[\\/]/.test(name)) shell.openPath(path.join(getShots().dir, name)); return true; });
+ipcMain.handle('shots:import', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, { title: 'Ajouter des images au vol', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }] });
+  if (r.canceled) return [];
+  return getShots().importFiles(r.filePaths);
+});
+app.on('will-quit', () => { try { if (shots) shots.dispose(); globalShortcut.unregisterAll(); } catch (e) { /* ignoré */ } });
+
+// Captures automatiques : décollage (+15 s), première croisière, atterrissage (+4 s).
+let autoShot = { flightKey: 0, takeoff: false, cruise: false };
+tracker.on('flight-start', () => { autoShot = { flightKey: Date.now(), takeoff: false, cruise: false }; });
+tracker.on('telemetry', d => {
+  const a = getShots().config.auto || {};
+  if (a.takeoff && !autoShot.takeoff && d.phase === 'airborne' && (d.aglFt == null || d.aglFt > 150)) {
+    autoShot.takeoff = true;
+    setTimeout(() => getShots().capture('décollage'), 15000);
+  }
+  if (a.cruise && !autoShot.cruise && currentDetailedPhase() === 'cruise') {
+    autoShot.cruise = true;
+    setTimeout(() => getShots().capture('croisière'), 20000);
+  }
+});
+tracker.on('flight-landed', () => { if ((getShots().config.auto || {}).landing) setTimeout(() => getShots().capture('atterrissage'), 4000); });
+
+/* =========================================================
+   v1.6 — Rappel « tracker non lancé »
+   ---------------------------------------------------------
+   Tant que le suivi n'est pas connecté, une connexion SimConnect LÉGÈRE et séparée
+   (« FlightBrief Watch », 3 variables toutes les 2 s) surveille le simulateur. Dès que
+   l'avion roule ou vole, l'interface joue une alerte sonore et une notification Windows
+   rappelle de lancer le tracker (ou le lance toute seule si l'option est cochée).
+   La surveillance s'arrête dès que le vrai tracker est connecté.
+   ========================================================= */
+let watchCfg = { enabled: true, autoStart: false };
+let watchHandle = null, watchTimer = null, watchConnecting = false, watchState = { moving: false, notifiedAt: 0 };
+async function watchTryConnect() {
+  if (!watchCfg.enabled || watchHandle || watchConnecting || tracker.isConnected()) return;
+  watchConnecting = true;
+  try {
+    const sc = require('node-simconnect');
+    const res = await Promise.race([sc.open('FlightBrief Watch', sc.Protocol.KittyHawk), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))]);
+    const h = res.handle;
+    watchHandle = h;
+    ['GROUND VELOCITY|knots', 'SIM ON GROUND|bool', 'PLANE ALT ABOVE GROUND|feet'].forEach((v, i) => { const [n, u] = v.split('|'); h.addToDataDefinition(9, n, u, sc.SimConnectDataType.FLOAT64, 0, i); });
+    h.requestDataOnSimObject(9, 9, 0, sc.SimConnectPeriod.SECOND, 0, 0, 1, 0);
+    h.on('simObjectData', p => {
+      if (p.requestID !== 9) return;
+      const gs = p.data.readFloat64(), onGround = p.data.readFloat64() > 0.5, agl = p.data.readFloat64();
+      watchOnSample({ gs, onGround, agl });
+    });
+    const drop = () => { if (watchHandle === h) watchHandle = null; watchState.moving = false; };
+    h.on('quit', drop); h.on('close', drop); h.on('error', () => {}); h.on('exception', () => {});
+  } catch (e) { watchHandle = null; }
+  finally { watchConnecting = false; }
+}
+function watchStop() {
+  if (watchHandle) { try { watchHandle.close(); } catch (e) { /* ignoré */ } }
+  watchHandle = null; watchState.moving = false;
+}
+function watchOnSample(s) {
+  if (tracker.isConnected()) { watchStop(); return; }
+  const moving = s.gs > 8 || (!s.onGround && s.agl > 50);
+  if (moving && !watchState.moving) {
+    watchState.moving = true;
+    if (watchCfg.autoStart) { watchStop(); tracker.connect().catch(() => {}); if (mainWindow) mainWindow.webContents.send('watch:autostarted'); return; }
+  }
+  if (!moving) watchState.moving = false;
+  // Rappel immédiat puis toutes les 60 s tant que l'avion bouge sans tracker.
+  if (watchState.moving && Date.now() - watchState.notifiedAt > 60000) {
+    watchState.notifiedAt = Date.now();
+    if (mainWindow) {
+      mainWindow.webContents.send('watch:moving', { gs: Math.round(s.gs), airborne: !s.onGround });
+      if (!mainWindow.isFocused()) mainWindow.flashFrame(true);
+    }
+    try {
+      if (Notification.isSupported()) {
+        const n = new Notification({ title: 'FlightBrief — le tracker ne tourne pas', body: s.onGround ? "Ton avion roule mais le vol n'est pas suivi. Clique pour lancer le tracker." : "Tu voles mais le vol n'est pas suivi ! Clique pour lancer le tracker.", silent: true });
+        n.on('click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); mainWindow.webContents.send('watch:focus-tracker'); } });
+        n.show();
+      }
+    } catch (e) { /* notifications indisponibles */ }
+  }
+}
+function watchLoop() {
+  clearInterval(watchTimer);
+  watchTimer = setInterval(() => {
+    if (!watchCfg.enabled || tracker.isConnected()) { watchStop(); return; }
+    watchTryConnect();
+  }, 20000);
+  setTimeout(watchTryConnect, 4000);
+}
+ipcMain.handle('watch:setConfig', (evt, c) => {
+  watchCfg = { ...watchCfg, ...(c || {}) };
+  if (!watchCfg.enabled) watchStop(); else watchLoop();
+  return watchCfg;
+});
+tracker.on('status', d => { if (d && d.connected) watchStop(); });
+app.whenReady().then(() => watchLoop());
+app.on('before-quit', () => { watchStop(); clearInterval(watchTimer); });

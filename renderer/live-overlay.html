@@ -48,6 +48,18 @@
   .lo-progress-fill{position:absolute; inset:0 auto 0 0; width:0%; background:var(--lo-accent); border-radius:4px; transition:width .6s ease;}
 
   .lo-sub{font-size:.68em; color:var(--lo-text-sec); font-weight:500; margin-left:4px;}
+  /* v1.6 : position à l'écran + mode libre */
+  html,body{width:100vw; height:100vh;}
+  body.anchor{box-sizing:border-box; height:100vh; padding:var(--lo-margin, 18px);}
+  body.a-top-left{justify-content:flex-start; align-items:flex-start;}
+  body.a-top-center{justify-content:center; align-items:flex-start;}
+  body.a-top-right{justify-content:flex-end; align-items:flex-start;}
+  body.a-bottom-left{justify-content:flex-start; align-items:flex-end;}
+  body.a-bottom-center{justify-content:center; align-items:flex-end;}
+  body.a-bottom-right{justify-content:flex-end; align-items:flex-end;}
+  body.free{padding:0;}
+  .lo-free{position:fixed; inset:0;}
+  .lo-free-block{position:absolute;}
   .lo-waiting{font-family:var(--lo-font); font-size:12px; color:var(--lo-text-sec); background:var(--lo-bg); border:1px solid rgba(255,255,255,.08); border-radius:var(--lo-radius); padding:10px 14px;}
 </style>
 </head>
@@ -63,6 +75,12 @@ const LIVE_OVERLAY_DEFAULT_LABELS = { callsign:'Indicatif', route:'Trajet', phas
 const LIVE_OVERLAY_ICONS = { callsign:'✈', route:'→', phase:'◎', altitude:'▲', heading:'◈', radio:'▮', distance:'↦', progress:'%', tod:'↘', eta:'◷' };
 // Ordre d'affichage fixe (l'utilisateur choisit seulement quels champs sont visibles et comment les nommer)
 const FIELD_ORDER = ['callsign','route','phase','altitude','heading','radio','distance','progress','tod','eta'];
+function normOrder(order){
+  const all = [...FIELD_ORDER, 'custom1', 'custom2'];
+  const out = (Array.isArray(order) ? order : []).filter((k, i, a) => all.includes(k) && a.indexOf(k) === i);
+  all.forEach(k => { if(!out.includes(k)) out.push(k); });
+  return out;
+}
 function fmtMinShort(min){
   min = Math.max(0, Math.round(min || 0));
   return min >= 60 ? `${Math.floor(min/60)} h ${String(min % 60).padStart(2,'0')}` : `${min} min`;
@@ -153,13 +171,32 @@ function render(state){
 
   applyStyle(config.style);
 
-  const fields = config.fields || {};
-  const visible = FIELD_ORDER.filter(k => fields[k]);
-  // v1.5 : les 2 textes libres de l'Outil Live s'affichent aussi dans OBS (avant : aperçu seulement).
-  const custom = [(config.custom || {}).text1, (config.custom || {}).text2].filter(x => x && String(x).trim());
-  el('loBar').innerHTML = visible.map(k => fieldMarkup(k, telemetry, config)).join('')
-    + custom.map(x => `<div class="lo-item lo-custom"><div class="lo-val">${escapeHtml(String(x).trim())}</div></div>`).join('');
-  el('loBar').classList.toggle('lo-empty', visible.length === 0 && custom.length === 0);
+  // v1.6 : blocs dans l'ordre choisi (glisser-déposer dans l'Outil Live), textes libres compris.
+  const fields = config.fields || {}, st = config.style || {};
+  const blocks = normOrder(config.order).map(k => {
+    if(k === 'custom1' || k === 'custom2'){
+      const x = String((config.custom || {})[k === 'custom1' ? 'text1' : 'text2'] || '').trim();
+      return x ? { key: k, html: `<div class="lo-item lo-custom"><div class="lo-val">${escapeHtml(x)}</div></div>` } : null;
+    }
+    return fields[k] ? { key: k, html: fieldMarkup(k, telemetry, config) } : null;
+  }).filter(Boolean);
+  const bar = el('loBar');
+  const free = st.layout === 'free';
+  document.body.className = free ? 'free' : 'anchor a-' + (st.anchor || 'top-left');
+  document.documentElement.style.setProperty('--lo-margin', (st.margin != null ? st.margin : 18) + 'px');
+  if(free){
+    // Mode libre : chaque bloc à sa position (% de l'écran), en style « carte ».
+    const pos = config.positions || {};
+    bar.className = 'lo-free';
+    const cls = ['lo-bar','lo-cards', st.shadow !== false ? 'lo-shadow' : '', st.blur !== false ? 'lo-blur' : '', st.uppercase ? 'lo-uppercase' : ''].join(' ');
+    let y = 2;
+    bar.innerHTML = blocks.map(b => { const p = pos[b.key] || { x: 1.5, y: (y += 7.5) - 7.5 }; return `<div class="lo-free-block ${cls}" style="left:${p.x}%; top:${p.y}%">${b.html}</div>`; }).join('');
+    return;
+  }
+  bar.className = 'lo-bar';
+  applyStyle(config.style);
+  bar.innerHTML = blocks.map(b => b.html).join('');
+  bar.classList.toggle('lo-empty', blocks.length === 0);
 }
 
 async function poll(){
