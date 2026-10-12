@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// v1.7 — langue choisie (lue avant le premier affichage pour éviter un flash en français)
+contextBridge.exposeInMainWorld('fbLang', ipcRenderer.sendSync('i18n:getLang'));
+
 contextBridge.exposeInMainWorld('api', {
+  setLang: (l) => ipcRenderer.invoke('i18n:setLang', l),
   loadDb: () => ipcRenderer.invoke('db:load'),
   saveDb: (data) => ipcRenderer.invoke('db:save', data),
   getObsPort: () => ipcRenderer.invoke('obs:getPort'),
@@ -47,8 +51,7 @@ contextBridge.exposeInMainWorld('atc', {
 contextBridge.exposeInMainWorld('alerts', {
   push: (a) => ipcRenderer.send('alerts:push', a),
   setConfig: (c) => ipcRenderer.send('alerts:config', c),
-  getPort: () => ipcRenderer.invoke('alerts:getPort'),
-  onPushed: (cb) => ipcRenderer.on('alerts:pushed', (_, a) => cb(a))
+  getPort: () => ipcRenderer.invoke('alerts:getPort')
 });
 contextBridge.exposeInMainWorld('twitch', {
   getState: () => ipcRenderer.invoke('twitch:getState'),
@@ -57,7 +60,6 @@ contextBridge.exposeInMainWorld('twitch', {
   cancelLogin: () => ipcRenderer.invoke('twitch:cancelLogin'),
   checkClientId: (id) => ipcRenderer.invoke('twitch:checkClientId', id),
   logout: () => ipcRenderer.invoke('twitch:logout'),
-  reconnect: () => ipcRenderer.invoke('twitch:reconnect'),
   bet: (action) => ipcRenderer.invoke('twitch:bet', action),
   test: (kind) => ipcRenderer.invoke('twitch:test', kind),
   landingInfo: (info) => ipcRenderer.send('twitch:landingInfo', info),
@@ -76,7 +78,37 @@ contextBridge.exposeInMainWorld('shots', {
   openFolder: () => ipcRenderer.invoke('shots:openFolder'),
   openFile: (name) => ipcRenderer.invoke('shots:openFile', name),
   importFiles: () => ipcRenderer.invoke('shots:import'),
+  dataUrl: (name) => ipcRenderer.invoke('shots:dataUrl', name),
   onTaken: (cb) => ipcRenderer.on('shots:taken', (_, s) => cb(s))
+});
+// v1.7 — « À bord » : passagers du chat, miles, passeport, cartes postales, titre du stream, carnet public
+contextBridge.exposeInMainWorld('cabin', {
+  getState: () => ipcRenderer.invoke('cabin:getState'),
+  setConfig: (c) => ipcRenderer.invoke('cabin:setConfig', c),
+  setPlan: (p) => ipcRenderer.send('cabin:setPlan', p),
+  boarding: (action) => ipcRenderer.invoke('cabin:boarding', action),
+  ranking: () => ipcRenderer.invoke('cabin:ranking'),
+  viewer: (user) => ipcRenderer.invoke('cabin:viewer', user),
+  removeViewer: (user) => ipcRenderer.invoke('cabin:removeViewer', user),
+  forgetCity: (user) => ipcRenderer.invoke('cabin:forgetCity', user),
+  flights: () => ipcRenderer.invoke('cabin:flights'),
+  flightInfo: (range) => ipcRenderer.invoke('cabin:flightInfo', range),
+  savePostcard: (p) => ipcRenderer.invoke('cabin:savePostcard', p),
+  postcardUrl: (name) => ipcRenderer.invoke('cabin:postcardUrl', name),
+  openPostcards: () => ipcRenderer.invoke('cabin:openPostcards'),
+  titleSuggest: () => ipcRenderer.invoke('cabin:titleSuggest'),
+  setTitle: (p) => ipcRenderer.invoke('cabin:setTitle', p),
+  channelAuthInfo: () => ipcRenderer.invoke('cabin:channelAuthInfo'),
+  channelLogin: () => ipcRenderer.invoke('cabin:channelLogin'),
+  channelCancel: () => ipcRenderer.invoke('cabin:channelCancel'),
+  channelLogout: () => ipcRenderer.invoke('cabin:channelLogout'),
+  chooseExportDir: () => ipcRenderer.invoke('cabin:chooseExportDir'),
+  exportPublic: (o) => ipcRenderer.invoke('cabin:exportPublic', o),
+  openDir: (d) => ipcRenderer.invoke('cabin:openDir', d),
+  onState: (cb) => ipcRenderer.on('cabin:state', (_, s) => cb(s)),
+  onLanded: (cb) => ipcRenderer.on('cabin:landed', (_, d) => cb(d)),
+  onProposeTitle: (cb) => ipcRenderer.on('cabin:proposeTitle', (_, d) => cb(d)),
+  onChannelLogin: (cb) => ipcRenderer.on('cabin:channelLoginResult', (_, d) => cb(d))
 });
 // v1.6 — rappel « tracker non lancé »
 contextBridge.exposeInMainWorld('watch', {
@@ -115,5 +147,18 @@ contextBridge.exposeInMainWorld('tracker', {
   onFlightStart: (cb) => ipcRenderer.on('tracker:flight-start', (_, d) => cb(d)),
   onFlightLanded: (cb) => ipcRenderer.on('tracker:flight-landed', (_, d) => cb(d)),
   onFlightEnd: (cb) => ipcRenderer.on('tracker:flight-end', (_, d) => cb(d)),
-  onProgress: (cb) => ipcRenderer.on('tracker:progress', (_, d) => cb(d))
+  onProgress: (cb) => ipcRenderer.on('tracker:progress', (_, d) => cb(d)),
+  onFastAgl: (cb) => ipcRenderer.on('tracker:fastAgl', (_, d) => cb(d))
 });
+
+// v1.7 — plugin Stream Deck
+contextBridge.exposeInMainWorld('deck', {
+  onAction: (cb) => ipcRenderer.on('deck:action', (_, a) => cb(a)),
+  pushUi: (s) => ipcRenderer.send('deck:ui', s),
+  install: () => ipcRenderer.invoke('deck:install'),
+  newToken: () => ipcRenderer.invoke('deck:newToken')
+});
+
+// v1.7 — « Où voler aujourd'hui ? »
+contextBridge.exposeInMainWorld('fly', { suggest: (o) => ipcRenderer.invoke('fly:suggest', o), countries: (icaos) => ipcRenderer.invoke('geo:countries', icaos) });
+

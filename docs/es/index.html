@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlightBrief — el copiloto de todos los simmers</title>
+<meta name="description" content="FlightBrief prepara tus vuelos, los sigue en directo en Microsoft Flight Simulator, anuncia tus callouts en voz alta como un verdadero copiloto, convierte tu tableta en un EFB con el ATC en línea y lo guarda todo en tu diario de vuelo. Para streamers: overlays de OBS, bot de Twitch, pasajeros del chat y Stream Deck. Gratis, open source, 100 % local, en español, inglés y francés.">
+<meta name="theme-color" content="#0c1226">
+<meta property="og:title" content="FlightBrief — el copiloto de todos los simmers">
+<meta property="og:description" content="Copiloto de voz, EFB en tableta con el ATC en línea, ideas de vuelo con events de VATSIM, logbook, mapa para rascar y Flight Wrapped — además de overlays de OBS, bot de Twitch y Stream Deck para streamers. Gratis y open source.">
+<meta property="og:image" content="../img/globe.jpg">
+<link rel="alternate" hreflang="fr" href="https://llcenlive.github.io/FlightBrief/">
+<link rel="alternate" hreflang="en" href="https://llcenlive.github.io/FlightBrief/en/">
+<link rel="alternate" hreflang="es" href="https://llcenlive.github.io/FlightBrief/es/">
+<link rel="alternate" hreflang="x-default" href="https://llcenlive.github.io/FlightBrief/en/">
+<link rel="icon" href="../icon.png">
+<link rel="apple-touch-icon" href="../icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../site.css">
+<script src="../i18n.js"></script>
+<script src="../translations.js"></script>
+<script>FBI18N.use("es"); FBI18N.start(document);</script>
+</head>
+<body>
+
+<!-- ================= NAVIGATION ================= -->
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top"><img src="../icon.png" alt=""> FlightBrief</a>
+    <div class="nav-links">
+      <a href="fonctionnalites.html">Funciones</a>
+      <a href="#comment">Cómo funciona</a>
+      <a href="#twitch">Stream</a>
+      <a href="#mobile">App móvil</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="lang-switch" data-no-i18n><a href="../" hreflang="fr" lang="fr">FR</a><a href="../en/" hreflang="en" lang="en">EN</a><a href="../es/" hreflang="es" lang="es" aria-current="page">ES</a></div>
+    <a class="btn btn-main" href="#telecharger">Descargar</a>
+  </div>
+</nav>
+
+<!-- ================= HERO ================= -->
+<header class="hero" id="top">
+  <div class="stars"></div>
+  <div class="contrail" aria-hidden="true"></div>
+  <div class="wrap hero-grid">
+    <div>
+      <a class="pill-new" id="pillNew" href="#nouveautes"><b>Nuevo</b> v1.7 · copiloto de voz, EFB en tableta, Stream Deck y 3 idiomas →</a>
+      <h1>Tu copiloto de vuelo, <span class="grad">hagas stream o no.</span></h1>
+      <p class="lead">FlightBrief prepara tu vuelo, lo sigue en directo en Microsoft Flight Simulator, anuncia tus callouts como un verdadero copiloto, convierte tu tableta en un EFB — y lo guarda todo en tu diario de vuelo. Y si haces stream, tu chat sube a bordo.</p>
+      <div class="hero-cta">
+        <a class="btn btn-main" id="heroDl" href="#telecharger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+          <span class="btn-stack">Descargar para Windows<span class="btn-sub" id="heroDlSub">Gratis · un solo archivo .exe</span></span>
+        </a>
+        <a class="btn btn-ghost" href="#comment">Descubrir ↓</a>
+      </div>
+      <div class="hero-note">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>100 % gratis</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Sin cuenta</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Tus datos se quedan contigo</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Español · English · Français</span>
+      </div>
+    </div>
+
+    <div class="scene" aria-hidden="true">
+      <div class="window">
+        <div class="win-bar"><i></i><i></i><i></i><span>FlightBrief</span></div>
+        <div class="win-body">
+          <div class="brief">
+            <div class="brief-top"><div><small>Briefing de vuelo</small><strong>AFR23F</strong></div><span class="tag-ifr">IFR</span></div>
+            <div class="route">
+              <div class="ap"><b>LFPG</b><small>Paris CDG</small></div>
+              <svg viewBox="0 0 200 40" preserveAspectRatio="none"><defs><linearGradient id="rg"><stop offset="0" stop-color="#7cc4ff" stop-opacity=".3"/><stop offset=".5" stop-color="#7cc4ff"/><stop offset="1" stop-color="#7cc4ff" stop-opacity=".3"/></linearGradient></defs><path d="M4 30 Q100 -6 196 30" fill="none" stroke="url(#rg)" stroke-width="2" stroke-dasharray="5 6"/><text x="93" y="16" font-size="15" fill="#ffb36b">✈</text></svg>
+              <div class="ap"><b>LFBO</b><small>Toulouse</small></div>
+            </div>
+            <div class="chips">
+              <div class="chip"><small>Aeronave</small><b>A320neo</b></div>
+              <div class="chip"><small>Nivel</small><b class="sky">FL350</b></div>
+              <div class="chip"><small>Duración</small><b class="sky">1h15</b></div>
+            </div>
+          </div>
+          <div class="win-row">
+            <div class="mini"><small>Horas de vuelo · 6 meses</small><div class="bars"><i style="height:38%"></i><i style="height:55%"></i><i style="height:44%"></i><i style="height:72%"></i><i style="height:61%"></i><i style="height:92%"></i></div></div>
+            <div class="mini"><small>Diario de vuelo</small><div class="big">128 <span>vuelos</span></div><small style="letter-spacing:0; text-transform:none; font-weight:500;">283 h · 53 aeropuertos</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="ph-map">
+            <svg viewBox="0 0 200 196">
+              <path d="M20 170 C40 150 60 120 70 100 S100 60 118 52" fill="none" stroke="#4fe3a6" stroke-width="3" stroke-linecap="round"/>
+              <path d="M118 52 L178 24" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.5" stroke-dasharray="3 5"/>
+              <circle cx="20" cy="170" r="4" fill="#f4f6fc"/><circle cx="178" cy="24" r="4" fill="#f4f6fc"/>
+              <g transform="translate(118 52) rotate(62)"><path d="M0 -10 L3 -2 L10 2 L10 4 L3 3 L3 8 L6 10 L6 11 L0 10 L-6 11 L-6 10 L-3 8 L-3 3 L-10 4 L-10 2 L-3 -2 Z" fill="#ffb36b"/></g>
+            </svg>
+            <span class="ph-live"><i></i>EN DIRECTO</span>
+          </div>
+          <div class="ph-body">
+            <div class="ph-route">LFPG → LFBO</div>
+            <div class="ph-sub">Crucero · AFR23F</div>
+            <div class="ph-prog"><i></i></div>
+            <div class="ph-grid">
+              <div><small>Altitud</small><b>35 000 ft</b></div>
+              <div><small>Vel. suelo</small><b>452 kt</b></div>
+              <div><small>Restante</small><b>118 NM</b></div>
+              <div><small>Llegada</small><b>14:58</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="float f1"><div class="ico">🧈</div><div><b>Nota A+ · −84 ft/min</b><small>1,09 G · LFBO 14R</small></div></div>
+      <div class="float f2"><div class="ico">🎯</div><div><b>Apuesta ganada por Viewer42</b><small>a 6 ft/min · 23 pronósticos</small></div></div>
+    </div>
+  </div>
+
+  <div class="horizon" aria-hidden="true">
+    <svg viewBox="0 0 1440 230" preserveAspectRatio="none">
+      <defs>
+        <radialGradient id="sun" cx="78%" cy="100%" r="30%"><stop offset="0" stop-color="#ffd8a8" stop-opacity=".95"/><stop offset=".4" stop-color="#ffb36b" stop-opacity=".45"/><stop offset="1" stop-color="#ff7f6e" stop-opacity="0"/></radialGradient>
+        <linearGradient id="c1" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2b2a5e" stop-opacity="0"/><stop offset="1" stop-color="#0c1226"/></linearGradient>
+      </defs>
+      <rect width="1440" height="230" fill="url(#sun)"/>
+      <path d="M0 150 C120 120 210 138 300 128 C390 118 450 92 560 104 C680 118 720 140 830 132 C940 124 1010 96 1120 108 C1230 120 1300 140 1440 124 L1440 230 L0 230 Z" fill="#3a3068" opacity=".55"/>
+      <path d="M0 178 C140 160 250 176 360 168 C470 160 560 140 680 150 C800 160 870 180 990 172 C1110 164 1200 146 1320 156 C1380 161 1420 166 1440 164 L1440 230 L0 230 Z" fill="#1c1d45" opacity=".85"/>
+      <rect y="150" width="1440" height="80" fill="url(#c1)"/>
+    </svg>
+  </div>
+</header>
+
+<!-- ================= VALEURS ================= -->
+<div class="values">
+  <div class="wrap values-grid">
+    <div class="value"><div class="vi" style="background:rgba(255,179,107,.14); color:var(--sun);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.65-9.5 9-9.5 9z"/></svg></div><div><b>Gratis, para siempre</b><span>Sin suscripción, sin anuncios, nada bloqueado.</span></div></div>
+    <div class="value"><div class="vi" style="background:rgba(79,227,166,.13); color:var(--mint);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><div><b>100 % en tu PC</b><span>Sin cuenta, sin nube: todo se queda en tu PC.</span></div></div>
+    <div class="value"><div class="vi" style="background:rgba(124,196,255,.14); color:var(--sky);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div><div><b>Conectado a MSFS</b><span>Seguimiento automático del rodaje al estacionamiento.</span></div></div>
+    <div class="value"><div class="vi" style="background:rgba(145,70,255,.18); color:#b995ff;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></div><div><b>Pensado para Twitch</b><span>Tres fuentes OBS y un bot que hace jugar a tu chat.</span></div></div>
+  </div>
+</div>
+
+<!-- ================= COMMENT ÇA MARCHE ================= -->
+<section id="comment">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Cómo funciona</span>
+      <h2 style="margin-top:12px;">Un vuelo, tres momentos.</h2>
+      <p class="lead">FlightBrief te acompaña antes, durante y después de cada vuelo — sin malabares entre diez ventanas.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><div class="glow" style="background:var(--sky);"></div><div class="num" style="background:var(--sky);">1</div><h3>Preparas</h3><p>Tu plan de vuelo se importa desde SimBrief en un clic y tu tarjeta de briefing aparece al instante en tu stream.</p><ul><li>«¿Adónde volar hoy?»: meteo, ATC en línea y events</li><li>Importación de SimBrief y cartas de aeropuerto en un clic</li><li>Meteo METAR / TAF y calculadoras</li></ul></div>
+      <div class="step reveal"><div class="glow" style="background:var(--sun);"></div><div class="num" style="background:var(--sun);">2</div><h3>Estás volando</h3><p>Inicia el seguimiento: altitud, velocidad, fases de vuelo y progreso en directo — en tu PC y en tu tableta.</p><ul><li>Copiloto de voz: callouts, recordatorios y anuncios de cabina</li><li>EFB en tableta con el ATC en línea</li><li>Inicio del descenso y hora de llegada en directo</li></ul></div>
+      <div class="step reveal"><div class="glow" style="background:var(--mint);"></div><div class="num" style="background:var(--mint);">3</div><h3>Lo guardas todo</h3><p>Al llegar, el vuelo se añade a tu diario con su trazado, tu tasa de toma y sus estadísticas.</p><ul><li>Aterrizaje calificado de A+ a F, aproximación reproducida en 3D</li><li>Mapa para rascar, retos de aeropuertos y Flight Wrapped</li><li>Carreras, tours y hangar con las estadísticas de cada avión</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FONCTIONNALITÉS ================= -->
+<section id="fonctionnalites" style="padding-top:20px;">
+  <div class="wrap">
+
+    <div class="feature reveal" id="envol">
+      <div class="f-text">
+        <span class="kicker">Nuevo · en vuelo</span>
+        <h2>Un verdadero copiloto en tu cabina.</h2>
+        <p>FlightBrief lee el estado de tu avión en el simulador: luces, tren, flaps, freno de estacionamiento, reglaje altimétrico. Una voz anuncia cada etapa del vuelo, vigila tu aproximación y te recuerda lo que olvidas — como un verdadero copiloto.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Despegue, ascenso y crucero: 80 nudos, ascenso positivo, reglaje estándar, nivel 100, nivel alcanzado, inicio del descenso</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Aproximación: 1000 ft estabilizado o no, 500, mínimos, luego 100, 50, 40, 30, 20 («Retard» en Airbus), 10</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Alertas tipo GPWS: tasa de descenso, inclinación, tren no extendido, 250 kt por debajo de FL100, combustible bajo</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Anuncios de cabina, tasa de toma y estado del vuelo a petición — todo se ajusta por categoría</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Tu tableta se convierte en un EFB: mapa con el ATC de VATSIM e IVAO, plan de vuelo y cartas de aeropuerto</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Plugin de Stream Deck: seguimiento, captura, copiloto, datos de vuelo en las teclas, diales del Stream Deck +</li>
+        </ul>
+      </div>
+      <div class="f-visual">
+        <div class="halo" style="background:var(--sky);"></div>
+        <div aria-hidden="true">
+          <div class="cklist">
+            <div class="ck-head"><b>Copiloto de voz</b><span>Finale · LFBO 14R</span></div>
+            <div class="ck-item done"><i>🎙️</i>«Mil. Estabilizado.»</div>
+            <div class="ck-item done"><i>🎙️</i>«Mínimos.»</div>
+            <div class="ck-item"><i>🎙️</i>«Cincuenta… Treinta… Veinte. Retard.»</div>
+          </div>
+          <div class="callout"><b>🎙️ «Mil.»</b><small>Copiloto de voz</small></div>
+          <div class="deck"><span class="k on">Crucero<b>FL360</b></span><span class="k am">Llegada<b>14:58</b></span><span class="k">Copiloto<b>ON</b></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature rev reveal" id="explorer">
+      <div class="f-text">
+        <span class="kicker">Nuevo · prepara y colecciona</span>
+        <h2>Siempre una buena razón para despegar.</h2>
+        <p>¿Sin ideas de vuelo? Di cuánto tiempo tienes: FlightBrief propone tres destinos adaptados a tu avión, con la meteo real, priorizando aeródromos donde nunca has aterrizado. Luego rasca países, acepta los retos de los aeropuertos más temidos y descubre tu año de piloto.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>«¿Adónde volar hoy?»: distancia, pista, meteo, apertura directa en SimBrief</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Mapa para rascar: cada país y aeropuerto visitado, con tu progreso</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Retos de aeropuertos: Courchevel, Lukla, San Bartolomé, Madeira… con tu mejor toma</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Flight Wrapped: tu año de un vistazo y una imagen para compartir</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>¿Ya tienes un historial? Impórtalo desde Little Navmap, Volanta o una hoja de cálculo</li>
+        </ul>
+      </div>
+      <div class="f-visual">
+        <div class="halo" style="background:var(--mint);"></div>
+        <div aria-hidden="true">
+          <div class="flyidea">
+            <div class="fi-head">🧭 ¿Adónde volar hoy? <span>1 h 30 · A320</span></div>
+            <div class="fi-row"><b>EDDB</b><span>Berlin · 462 NM</span><em class="vfr">VFR</em></div>
+            <div class="fi-row"><b>LFKB</b><span>Bastia · 484 NM</span><em class="vfr">VFR</em></div>
+            <div class="fi-row"><b>EIDW</b><span>Dublin · 425 NM</span><em class="mvfr">MVFR</em></div>
+          </div>
+          <div class="wrapped"><small>Flight Wrapped 2026</small><b>214 h</b><span>🇫🇷 🇪🇸 🇮🇹 🇩🇪 🇬🇧 🇵🇹 🇨🇭 · 23 países</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature reveal">
+      <div class="f-text">
+        <span class="kicker">Para tu stream</span>
+        <h2>Overlays a tu imagen, listos para OBS.</h2>
+        <p>Copia un enlace, pégalo en OBS: tu tarjeta de briefing, tu telemetría en directo y tus alertas aparecen en tu escena y se actualizan solas durante el vuelo.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#ffb36b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Colores, fuentes, disposición y temas a juego con tu canal</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#ffb36b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Tú eliges la información mostrada: fase, altitud, radio, inicio del descenso, hora de llegada…</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#ffb36b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Una fuente «Alertas»: tarjeta de aterrizaje, apuestas y logros en pantalla</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#ffb36b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Textos libres para tu Discord o un patrocinador</li>
+        </ul>
+      </div>
+      <div class="f-visual">
+        <div class="halo" style="background:var(--sun);"></div>
+        <div class="frame">
+          <div class="stream" aria-hidden="true">
+            <div class="clouds"></div><div class="wing"></div><span class="rec">● LIVE</span>
+            <div class="ov-card"><div class="t">AFR23F <i>IFR</i></div><div class="r">LFPG<span></span>LFBO</div><small>A320neo · FL350 · ILS 14R</small></div>
+            <div class="ov-bar">
+              <div><small>Fase</small><b class="g">Crucero</b></div>
+              <div><small>Altitud</small><b>35 000 ft</b></div>
+              <div><small>Rumbo</small><b>196°</b></div>
+              <div><small>Radio</small><b>128.305</b></div>
+              <div><small>Descenso</small><b>en 12 min</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature rev reveal" id="twitch">
+      <div class="f-text">
+        <span class="kicker">Para streamers · tu chat de Twitch</span>
+        <h2>Tu chat sube a bordo.</h2>
+        <p>El bot de FlightBrief responde a las preguntas de tus viewers sobre el vuelo en curso y lanza una apuesta sobre tu aterrizaje al inicio del descenso. Quien adivine la tasa de toma más exacta gana y su nombre aparece en pantalla.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#b995ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg><span><b>!eta</b>, <b>!route</b>, <b>!metar</b>, <b>!avion</b>, <b>!alt</b>, <b>!landing</b> : las respuestas vienen directamente de tu vuelo</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#b995ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg><span>Paris <b>!apuesta 180</b> abiertas y cerradas automáticamente, podio en pantalla y clasificación de los mejores apostantes</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#b995ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Ponle el nombre que quieras. Sin cuenta conectada, sigue leyendo el chat y responde en el overlay</li>
+                  <li><svg viewBox="0 0 24 24" fill="none" stroke="#b995ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>A bordo: los viewers embarcan, ganan millas, sellan su pasaporte y son sobrevolados</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#b995ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Predicciones de Twitch: el chat apuesta sus puntos de canal a tu tasa de toma</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#b995ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>¿No haces stream? Un interruptor y toda la parte de directo desaparece</li>
+        </ul>
+      </div>
+      <div class="f-visual">
+        <div class="halo" style="background:var(--violet);"></div>
+        <div aria-hidden="true">
+          <div class="chatbox">
+            <div class="cb-head">Chat del stream <span>142 espectadores</span></div>
+            <div class="cb-body">
+              <div class="cb-msg"><b class="c1">Kéro</b> : ¿cuándo llegamos? <code>!eta</code></div>
+              <div class="cb-msg"><span class="bdg">BOT</span><b class="bot">FlightBot</b> : [FlightBot] ETA LFBO: 21:47 (en 38 min) · 212 NM restantes · inicio del descenso en 12 min</div>
+              <div class="cb-msg"><span class="bdg">BOT</span><b class="bot">FlightBot</b> : 🛬 ¡Las apuestas de aterrizaje están abiertas! <code>!apuesta 180</code></div>
+              <div class="cb-msg"><b class="c2">Viewer42</b> : <code>!apuesta 150</code></div>
+              <div class="cb-msg"><b class="c3">PiloteDu59</b> : <code>!apuesta 120</code> va a hacer mantequilla 🧈</div>
+              <div class="cb-msg"><b class="c4">Ana</b> : <code>!apuesta 280</code> lol</div>
+            </div>
+          </div>
+          <div class="bet-pop">
+            <small>¡Apuesta ganada!</small>
+            <div class="act">−144 ft/min</div>
+            <div class="pods"><div>🥇<b>Viewer42</b><span>150 · ±6</span></div><div>🥈<b>PiloteDu59</b><span>120 · ±24</span></div><div>🥉<b>Kéro</b><span>180 · ±36</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature reveal">
+      <div class="f-text">
+        <span class="kicker">Nuevo · cada aterrizaje</span>
+        <h2>Tu toma, al detalle.</h2>
+        <p>FlightBrief lee la velocidad vertical exacta en el momento del impacto, medida por el simulador, y no un valor aproximado. Califica tu aterrizaje y te lo hace revivir en 3D.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Nota de A+ a F: tasa, factor G, rebotes, distancia al umbral, desviación del eje</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Viento en la toma y componente cruzada, calculados sobre la pista real</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Aproximación final reproducida en 3D, comparada con la senda de 3°</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>26 logros por desbloquear: mantequilla, vuelo nocturno, trotamundos, vuelta al mundo…</li>
+        </ul>
+      </div>
+      <div class="f-visual">
+        <div class="halo" style="background:var(--mint);"></div>
+        <div aria-hidden="true">
+          <div class="land">
+            <div class="land-top">
+              <div class="land-letter">A</div>
+              <div><small>Aterrizaje · LFBO · pista 14R</small><div class="fpm">−144 ft/min</div><div class="gr">Suave · 94/100</div></div>
+            </div>
+            <div class="land-stats">
+              <div><small>Factor G</small><b>1.22</b></div>
+              <div><small>Rebotes</small><b>0</b></div>
+              <div><small>Viento</small><b>200/14</b></div>
+              <div><small>Cruzado</small><b>12 kt</b></div>
+            </div>
+          </div>
+          <div class="appr">
+            <small>Aproximación final · desviación de la senda de 3°</small>
+            <svg viewBox="0 0 520 150">
+              <defs><linearGradient id="apg" x1="0" x2="1"><stop offset="0" stop-color="#4fe3a6"/><stop offset=".38" stop-color="#ffb36b"/><stop offset=".62" stop-color="#4fe3a6"/><stop offset="1" stop-color="#4fe3a6"/></linearGradient></defs>
+              <g stroke="rgba(255,255,255,.06)"><path d="M0 130H520M0 90H520M0 50H520"/></g>
+              <path d="M10 24 L470 128" stroke="#8e7dff" stroke-width="1.6" stroke-dasharray="6 5" fill="none"/>
+              <path d="M10 22 C90 40 150 46 210 64 S330 96 380 106 S450 124 470 128" stroke="url(#apg)" stroke-width="4" fill="none" stroke-linecap="round"/>
+              <g stroke="rgba(124,196,255,.18)"><path d="M60 34V130M110 44V130M160 52V130M210 64V130M260 78V130M310 88V130M360 100V130M410 114V130"/></g>
+              <rect x="440" y="126" width="80" height="6" rx="1.5" fill="#2a3138" stroke="rgba(124,196,255,.5)"/>
+              <circle cx="470" cy="128" r="5" fill="#ff7f6e" stroke="#fff" stroke-width="1.5"/>
+              <text x="14" y="16" fill="#7d88a8" font-size="11" font-family="JetBrains Mono, monospace">6 NM · 1900 ft</text>
+              <text x="455" y="146" fill="#7d88a8" font-size="11" font-family="JetBrains Mono, monospace">toma</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature rev reveal">
+      <div class="f-text">
+        <span class="kicker">Tu diario de vuelo</span>
+        <h2>Todas tus horas, en un globo.</h2>
+        <p>Cada vuelo se añade a tu logbook con su trazado real, sus fases y tu aterrizaje. Y tu perfil los reúne en un globo 3D que no te cansarás de girar.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Repetición de cada vuelo: mapa, perfil de altitud, punto de toma</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Estadísticas: horas, distancia, aeropuertos, aeronaves favoritas</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Pasa sobre un aeropuerto para ver todas sus rutas</li>
+        </ul>
+      </div>
+      <div class="f-visual">
+        <div class="halo" style="background:var(--sky);"></div>
+        <div class="frame"><img src="../img/globe.jpg" alt="El globo de FlightBrief: todos los vuelos de un piloto con base en París, por toda Europa" loading="lazy" width="1500" height="910"></div>
+      </div>
+    </div>
+
+    <div class="feature reveal">
+      <div class="f-text">
+        <span class="kicker">Carrera y hangar</span>
+        <h2>Sube de rango, completa tus tours, cuida tus aviones.</h2>
+        <p>Sigue tu progreso en tus aerolíneas virtuales y en IVAO o VATSIM. Los tours terminados conservan su balance y cada avión de tu hangar tiene sus propias estadísticas.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Rangos calculados automáticamente a partir de tus horas</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>El Briefing te dice si tu vuelo es una etapa de uno de tus tours</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#4fe3a6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Por avión: horas, distancia, tasa media de toma, mejor y peor aterrizaje</li>
+        </ul>
+      </div>
+      <div class="f-visual">
+        <div class="halo" style="background:var(--mint);"></div>
+        <div class="stack" aria-hidden="true">
+          <div class="panel">
+            <div class="ph"><b>Nordic Tour</b><small>IVAO Francia · 4/7 etapas</small></div>
+            <div class="timeline">
+              <div class="n d"><i></i>LFPG</div><div class="s d"></div><div class="n d"><i></i>EGLL</div><div class="s d"></div><div class="n d"><i></i>EIDW</div><div class="s d"></div><div class="n d"><i></i>BIKF</div><div class="s"></div><div class="n"><i></i>ENGM</div><div class="s"></div><div class="n"><i></i>ESSA</div>
+            </div>
+            <div class="done-row"><b>✓ Tour de Europa 2026</b><div class="kv"><div>Completado en<strong>14 j</strong></div><div>Vuelo<strong>6h39</strong></div><div>Distancia<strong>1995 NM</strong></div></div></div>
+          </div>
+          <div class="panel">
+            <div class="ac"><div class="badge">A20N</div><div><b>A320neo</b><small>Fenix · 68 vuelos</small></div></div>
+            <div class="ac-stats"><div><small>Horas</small><b>147h</b></div><div><small>Distancia</small><b>45k NM</b></div><div><small>Toma</small><b>−273</b></div><div><small>Mejor</small><b>−80</b></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature rev reveal" id="mobile">
+      <div class="f-text">
+        <span class="kicker">App móvil</span>
+        <h2>Tu vuelo en el bolsillo, tu tableta como EFB.</h2>
+        <p>Escanea un código QR e instala FlightBrief en tu iPhone o Android. Durante el vuelo, sigue tu avión en directo en el mapa; y después, consulta tu diario en cualquier sitio, incluso en un avión.</p>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#e98bc0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>«En vuelo»: posición, trayecto, altitud, velocidad, llegada estimada</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#e98bc0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Logbook, carreras, tours y hangar disponibles sin conexión</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="#e98bc0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>Sincronización con un toque por tu Wi-Fi: nada pasa por Internet</li>
+                  <li><svg viewBox="0 0 24 24" fill="none" stroke="#e98bc0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="m7.5 12 3 3 6-6"/></svg>En tableta: mapa con el ATC en línea, plan de vuelo de SimBrief y cartas de aeropuerto</li>
+        </ul>
+      </div>
+      <div class="f-visual">
+        <div class="halo" style="background:var(--rose);"></div>
+        <div class="phones" aria-hidden="true">
+          <div class="phone">
+            <div class="phone-screen">
+              <div class="phone-notch"></div>
+              <div class="ph-list">
+                <div class="hd"><b>Logbook</b><span>↻ Sincronizar</span></div>
+                <div class="off">Sin conexión — sincronizado hace 2 h</div>
+                <div class="fl"><b>LFBD → LHBP</b><small>25/09 · A320neo · 2h20</small></div>
+                <div class="fl"><b>EPWA → ESSA</b><small>22/09 · A20N · 1h26</small></div>
+                <div class="fl"><b>LEMD → LFMT</b><small>18/09 · Fenix · 1h15</small></div>
+                <div class="fl"><b>LFMN → LFPG</b><small>14/09 · A320neo · 1h32</small></div>
+              </div>
+            </div>
+          </div>
+          <div class="phone b">
+            <div class="phone-screen">
+              <div class="phone-notch"></div>
+              <div class="ph-map">
+                <svg viewBox="0 0 200 196">
+                  <path d="M22 176 C44 150 62 124 72 104 S102 64 120 56" fill="none" stroke="#4fe3a6" stroke-width="3" stroke-linecap="round"/>
+                  <path d="M120 56 L178 26" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.5" stroke-dasharray="3 5"/>
+                  <circle cx="22" cy="176" r="4" fill="#f4f6fc"/><circle cx="178" cy="26" r="4" fill="#f4f6fc"/>
+                  <g transform="translate(120 56) rotate(62)"><path d="M0 -10 L3 -2 L10 2 L10 4 L3 3 L3 8 L6 10 L6 11 L0 10 L-6 11 L-6 10 L-3 8 L-3 3 L-10 4 L-10 2 L-3 -2 Z" fill="#ffb36b"/></g>
+                </svg>
+                <span class="ph-live"><i></i>EN DIRECTO</span>
+              </div>
+              <div class="ph-body">
+                <div class="ph-route">LFPG → LFBO</div>
+                <div class="ph-sub">Descenso · AFR23F</div>
+                <div class="ph-prog"><i style="width:82%"></i></div>
+                <div class="ph-grid">
+                  <div><small>Altitud</small><b>12 400 ft</b></div>
+                  <div><small>Vario</small><b>−1 800</b></div>
+                  <div><small>Restante</small><b>46 NM</b></div>
+                  <div><small>Llegada</small><b>14:58</b></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= NOUVEAUTÉS ================= -->
+<section id="nouveautes" style="padding-top:40px;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Novedades</span>
+      <h2 style="margin-top:12px;" id="newsTitle">La versión 1.7, en resumen.</h2>
+      <p class="lead">Novedades nacidas de vuestras ideas en directo.</p>
+    </div>
+    <div class="news three" id="newsGrid">
+      <div class="news-item reveal"><div class="ni" style="background:rgba(124,196,255,.16);">🌐</div><div><b>3 idiomas</b><p>Español, inglés y francés: app, overlays, bot, app móvil y página de descarga.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(79,227,166,.14);">🎧</div><div><b>ATC & events</b><p>«¿Adónde volar hoy?» tiene en cuenta el ATC en línea y los events de VATSIM.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(142,125,255,.18);">🎙️</div><div><b>Copiloto de voz</b><p>Callouts, aproximación estabilizada, mínimos, radioaltímetro, alertas y anuncios de cabina.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(233,139,192,.16);">📱</div><div><b>EFB en tableta</b><p>Mapa con el ATC de VATSIM / IVAO, plan de vuelo y cartas de aeropuerto.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(255,179,107,.16);">🧭</div><div><b>¿Adónde volar hoy?</b><p>Tres ideas de vuelo para el tiempo que tienes, con la meteo real.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(255,209,102,.16);">🎁</div><div><b>Flight Wrapped</b><p>Tu año de piloto, el mapa para rascar y los retos de los aeropuertos más temidos.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(145,70,255,.18);">🎛️</div><div><b>Stream Deck</b><p>Teclas y diales: seguimiento, captura, copiloto, volúmenes. Se instala con un clic.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(79,227,166,.14);">📥</div><div><b>Importación de historial</b><p>Tus vuelos de Little Navmap, Volanta o una hoja de cálculo, en segundos.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(255,127,110,.16);">🎫</div><div><b>A bordo y predicciones</b><p>Para streamers: pasajeros del chat, pasaportes, sobrevuelos y predicciones de Twitch.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TÉLÉCHARGEMENT ================= -->
+<section id="telecharger" style="padding-top:40px;">
+  <div class="wrap">
+    <div class="dl reveal">
+      <span class="kicker" style="color:#ffd3a8;">¿Listo para despegar?</span>
+      <h2>Descarga FlightBrief.</h2>
+      <p class="lead">Un solo archivo, gratis, para Windows 10 y 11.</p>
+      <a class="btn btn-main" id="dlBtn" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span id="dlBtnText">Descargar para Windows</span>
+      </a>
+      <div class="dl-meta" id="dlMeta">Buscando la última versión…</div>
+      <div class="dl-steps">
+        <div class="dl-step"><span class="n">1</span><b>Descarga</b><p>El archivo <span id="dlName">FlightBrief-Setup.exe</span> — es el único que necesitas.</p></div>
+        <div class="dl-step"><span class="n">2</span><b>Haz doble clic</b><p>Si Windows muestra «Windows protegió su PC»: <i>Más información</i> → <i>Ejecutar de todas formas</i>.</p></div>
+        <div class="dl-step"><span class="n">3</span><b>Adelante</b><p>FlightBrief se instala y se abre solo. Las siguientes actualizaciones se instalan con un clic desde la app y tus vuelos se conservan.</p></div>
+      </div>
+      <div class="dl-foot">Notas de versión y versiones anteriores en <a id="releasesLink" href="#" target="_blank" rel="noopener">GitHub</a>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FAQ ================= -->
+<section id="faq" style="padding-top:40px;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Preguntas frecuentes</span>
+      <h2 style="margin-top:12px;">Todo lo que te preguntas.</h2>
+    </div>
+    <div class="faq reveal">
+      <details><summary>No hago stream: ¿FlightBrief es para mí?</summary><p>Sí. Copiloto de voz, EFB en tableta, ideas de vuelo, logbook, carrera, mapa para rascar y Flight Wrapped no tienen nada que ver con el directo. En el primer arranque, deja «Hago directos» desactivado: las pestañas Live, Twitch y A bordo desaparecen (puedes reactivarlas en el Perfil).</p></details>
+      <details><summary>¿El copiloto de voz funciona con todos los aviones?</summary><p>Lee las variables estándar del simulador (altitud, velocidad, tren, flaps, faros, altímetro…), que la mayoría de los aviones mantienen al día. Con algunos add-ons muy avanzados (Fenix, PMDG…), un recordatorio que depende de sus propios sistemas simplemente no suena; los avisos de altitud, velocidad y altura funcionan con todos.</p></details>
+      <details><summary>¿Puedo recuperar mi historial de otra herramienta?</summary><p>Sí: Logbook → «Importar un historial». Exporta tus vuelos en CSV desde Little Navmap, Volanta o una hoja de cálculo; FlightBrief reconoce las columnas solo y no crea duplicados.</p></details>
+      <details><summary>¿Funciona con mi Stream Deck?</summary><p>Sí: Stream Deck clásico, XL, Mini y Stream Deck + (diales y pantalla táctil). Perfil → Stream Deck → «Instalar el plugin»: se instala con un clic, ya emparejado con tu PC.</p></details>
+      <details><summary>¿De verdad es gratis?</summary><p>Sí, y lo seguirá siendo: sin versión de pago, sin suscripción, sin publicidad. FlightBrief es un proyecto personal compartido con la comunidad, bajo licencia libre MIT.</p></details>
+      <details><summary>¿Adónde van mis datos?</summary><p>A ningún sitio: todo se guarda en un archivo de tu PC, con una copia de seguridad automática diaria. No hay que crear ninguna cuenta y no se envía nada por Internet. Incluso la app móvil se sincroniza directamente con tu PC por tu Wi-Fi.</p></details>
+      <details><summary>¿El bot de Twitch necesita mi contraseña?</summary><p>No. Para que lea tu chat, basta con indicar el nombre de tu canal. Para que responda, registras una vez tu propia aplicación de Twitch (un asistente te guía, 2 minutos) y conectas una cuenta (la tuya o una creada para el bot) en la página oficial de Twitch, con un simple código. FlightBrief nunca ve tu contraseña y el acceso se guarda cifrado en tu PC.</p></details>
+      <details><summary>¿Cómo funcionan las apuestas de aterrizaje?</summary><p>Al inicio de tu descenso, el bot anuncia las apuestas. Tus viewers escriben <b>!apuesta</b> seguido de una tasa en ft/min (por ejemplo !apuesta 180). Las apuestas se cierran en final corta y, en la toma, gana el más cercano a la tasa real: su nombre aparece en pantalla y sube en la clasificación. Todo se configura en la pestaña Twitch.</p></details>
+      <details><summary>Windows muestra un aviso, ¿es normal?</summary><p>Sí. El instalador no está firmado (un certificado de firma cuesta varios cientos de euros al año), así que Windows SmartScreen pide confirmación la primera vez. Haz clic en «Más información» y luego en «Ejecutar de todas formas». El código es público en GitHub si quieres comprobar lo que hace.</p></details>
+      <details><summary>¿Qué simuladores son compatibles?</summary><p>El seguimiento en directo funciona con Microsoft Flight Simulator (2020 y 2024) mediante SimConnect. El briefing, el logbook, la carrera, el ATC de VATSIM / IVAO y los overlays funcionan sin simulador. La compatibilidad con X-Plane está en estudio.</p></details>
+      <details><summary>¿Cómo instalo la app en mi teléfono?</summary><p>En FlightBrief, pestaña Admin → Aplicación móvil: activa el acceso y escanea el código QR. Una página te guía paso a paso (solo una vez) y luego añades la app a tu pantalla de inicio. Funciona en iPhone y Android.</p></details>
+      <details><summary>¿La app móvil funciona sin mi PC?</summary><p>Sí para consultar: tu logbook, tus carreras, tus tours y tu hangar siguen disponibles en cualquier sitio, incluso en modo avión. Para actualizarlos o seguir un vuelo en directo, tu teléfono debe estar en el mismo Wi-Fi que tu PC, con FlightBrief abierto.</p></details>
+      <details><summary>¿Y en Mac o Linux?</summary><p>FlightBrief se distribuye para Windows, porque Microsoft Flight Simulator funciona en Windows. En Mac o Linux, puedes ejecutarlo desde el <a id="srcLink" href="#" target="_blank" rel="noopener" style="color:var(--sun);">código fuente</a> (sin el seguimiento de vuelo en directo).</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ================= À PROPOS ================= -->
+<section id="apropos" style="padding-top:40px;">
+  <div class="wrap">
+    <div class="about reveal">
+      <div>
+        <span class="kicker">Unas palabras del creador</span>
+        <h2>Hecho por un streamer, para todos los simmers.</h2>
+        <p>¡Hola, soy Lucas! No soy desarrollador de profesión: construí FlightBrief <strong>haciendo vibe coding con Claude</strong>, la IA de Anthropic, porque lo necesitaba para mis propios directos. Muchas funciones nacieron de ideas propuestas por el chat.</p>
+        <p>¿Una idea, un bug? Abre una <a id="issuesLink" href="#" target="_blank" rel="noopener" style="color:var(--sun);">issue en GitHub</a>, o ven a contármelo en directo.</p>
+        <a class="twitch" href="https://www.twitch.tv/LLCenLive" target="_blank" rel="noopener">
+          <span class="tw"><svg viewBox="0 0 24 24"><path d="M4.3 3 3 6.4V20h4.6v2.5h2.6L12.7 20h3.7l5-5V3H4.3zm15.4 11.1-2.9 2.9h-4.6l-2.5 2.5V17H6V4.7h13.7v9.4zM17 7.7v5.1h-1.7V7.7H17zm-4.6 0v5.1h-1.7V7.7h1.7z"/></svg></span>
+          <span><b>twitch.tv/LLCenLive</b><span>Ven a volar con nosotros en directo →</span></span>
+        </a>
+      </div>
+      <div class="promises">
+        <div class="promise"><b>Gratis</b><span>Hoy y para siempre.</span></div>
+        <div class="promise"><b>Cero recopilación</b><span>Ningún dato enviado por Internet.</span></div>
+        <div class="promise"><b>Cero anuncios</b><span>Sin rastreo, sin reventa.</span></div>
+        <div class="promise"><b>Open source</b><span>Código público, licencia MIT.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="../icon.png" alt="" style="width:26px;height:26px;border-radius:8px;"> FlightBrief</a>
+    <div class="fl">
+      <a href="#telecharger">Descargar</a>
+      <a id="repoLink" href="#" target="_blank" rel="noopener">Código fuente</a>
+      <a id="issuesLinkFooter" href="#" target="_blank" rel="noopener">Informar de un problema</a>
+      <a href="https://www.twitch.tv/LLCenLive" target="_blank" rel="noopener">Twitch</a>
+    </div>
+    <small>Licencia MIT · Sin afiliación con Microsoft ni Asobo Studio.</small>
+  </div>
+</footer>
+
+<script>
+const REPO_OWNER = 'LLCenLive';
+const REPO_NAME  = 'FlightBrief';
+const REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
+const $ = id => document.getElementById(id);
+$('repoLink').href = REPO_URL;
+$('srcLink').href = REPO_URL;
+['issuesLink','issuesLinkFooter'].forEach(id => $(id).href = `${REPO_URL}/issues`);
+$('releasesLink').href = `${REPO_URL}/releases`;
+
+// Navigation plus opaque après le haut de page
+const nav = $('nav');
+const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 40);
+window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
+// Apparition douce des sections
+if('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+  const io = new IntersectionObserver(entries => entries.forEach(e => { if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .12 });
+  document.querySelectorAll('.reveal').forEach(n => io.observe(n));
+} else {
+  document.querySelectorAll('.reveal').forEach(n => n.classList.add('in'));
+}
+
+// Un seul téléchargement : l'installeur .exe de la version publiée la plus récente qui en contient
+// un (on parcourt les Releases, pas seulement "latest", pour ne jamais renvoyer vers du code source).
+function fmtSize(b){ return b ? Math.round(b / 1048576) + (document.documentElement.lang === 'fr' ? ' Mo' : ' MB') : ''; }
+function fmtDate(iso){ return iso ? new Date(iso).toLocaleDateString(document.documentElement.lang, { day:'numeric', month:'long', year:'numeric' }) : ''; }
+// « Quoi de neuf » synchronisé avec la dernière Release GitHub : chaque ligne des notes de
+// version au format « 🛩️ Titre : description » devient une carte. Si les notes ne suivent pas
+// ce format (ou si l'API GitHub ne répond pas), les cartes écrites en dur ci-dessus restent.
+const NEWS_TINTS = ['rgba(233,139,192,.16)','rgba(124,196,255,.16)','rgba(79,227,166,.14)','rgba(255,179,107,.16)','rgba(142,125,255,.18)','rgba(255,127,110,.16)'];
+function escHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function parseReleaseNotes(body){
+  const EMOJI = /^((?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\uFE0F|\u20E3|\p{Emoji_Modifier})*(?:\u200D\p{Extended_Pictographic}\uFE0F?)*)\s*/u;
+  return String(body || '').split(/\r?\n/)
+    .map(l => l.trim().replace(/^[-*+]\s+/, '').replace(/\*\*/g, ''))
+    .map(l => {
+      const m = l.match(EMOJI);
+      if(!m) return null;
+      const rest = l.slice(m[0].length);
+      const i = rest.search(/\s[:–—-]\s/);
+      if(i < 1) return null;
+      const text = rest.slice(i).replace(/^\s[:–—-]\s/, '').trim();
+      return { icon: m[1], title: rest.slice(0, i).trim(), text: text.charAt(0).toUpperCase() + text.slice(1) };
+    })
+    .filter(x => x && x.title && x.text);
+}
+function renderNews(release){
+  if(!release || document.documentElement.lang !== 'fr') return; // notes de version rédigées en français
+  const items = parseReleaseNotes(release.body);
+  if(items.length < 2) return;
+  const v = release.tag_name.replace(/^v/, '');
+  $('newsGrid').innerHTML = items.map((it, i) => `<div class="news-item reveal in"><div class="ni" style="background:${NEWS_TINTS[i % NEWS_TINTS.length]};">${escHtml(it.icon)}</div><div><b>${escHtml(it.title)}</b><p>${escHtml(it.text)}</p></div></div>`).join('');
+  $('newsTitle').textContent = `La version ${v}, en bref.`;
+  $('pillNew').innerHTML = `<b>Nouveau</b> v${escHtml(v)} · ${escHtml(items.slice(0, 3).map(x => x.title.toLowerCase()).join(', '))} →`;
+}
+(async function loadRelease(){
+  try{
+    const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=15`);
+    if(!res.ok) throw new Error('api');
+    const releases = (await res.json()).filter(r => !r.draft && !r.prerelease);
+    try{ renderNews(releases[0]); }catch(err){ /* on garde les nouveautés écrites en dur */ }
+    let release = null, asset = null;
+    for(const r of releases){
+      const exes = (r.assets || []).filter(a => /\.exe$/i.test(a.name));
+      const pick = exes.find(a => /setup/i.test(a.name)) || exes[0];
+      if(pick){ release = r; asset = pick; break; }
+    }
+    if(!asset) throw new Error('noexe');
+    const url = asset.browser_download_url;
+    $('dlBtn').href = url; $('heroDl').href = url;
+    $('dlBtnText').textContent = `Télécharger FlightBrief ${release.tag_name}`;
+    $('heroDlSub').textContent = `Gratuit · ${release.tag_name} · ${fmtSize(asset.size)}`;
+    $('dlMeta').textContent = [`Version ${release.tag_name.replace(/^v/, '')}`, fmtSize(asset.size), fmtDate(release.published_at)].filter(Boolean).join(' · ');
+    $('dlName').textContent = asset.name;
+  }catch(e){
+    $('dlBtn').href = `${REPO_URL}/releases`;
+    $('heroDl').href = '#telecharger';
+    $('dlBtnText').textContent = 'Voir les versions sur GitHub';
+    $('dlMeta').textContent = "Le téléchargement direct n'est pas disponible pour le moment : l'installeur se trouve sur la page des versions GitHub.";
+  }
+})();
+</script>
+</body>
+</html>

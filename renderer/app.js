@@ -96,6 +96,7 @@ function normLiveOverlayOrder(order){
 const defaultUserProfile = {
   firstName:'', network:'', vatsimId:'', ivaoId:'', twitchHandle:'', homeBase:'',
   onboarded:false, tourDone:false
+  // twitchFeatures : absent = activé (utilisateurs d'avant la v1.7) ; l'accueil le demande aux nouveaux.
 };
 
 let db = { logbook: [], careers: [], hangar: [], mobile: { enabled:false }, theme: {...defaultTheme}, simbriefUsername: '', ofp: null, trackFollow: true, updateDismissed: '', lastSeenVersion: '', liveOverlay: {...defaultLiveOverlay, fields:{...defaultLiveOverlay.fields}, labels:{...defaultLiveOverlay.labels}, custom:{...defaultLiveOverlay.custom}, style:{...defaultLiveOverlay.style}, order:[...defaultLiveOverlay.order], positions:{}}, userProfile: {...defaultUserProfile} };
@@ -470,7 +471,7 @@ async function openOfp(refresh){
   }
 }
 function renderOfp(ofp){
-  const fmt = iso => iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' }) : '—';
+  const fmt = iso => iso ? new Date(iso).toLocaleString(FBI18N.locale(), { dateStyle:'short', timeStyle:'short' }) : '—';
   el('ofpTitle').textContent = `OFP — ${ofp.dep || '????'} → ${ofp.arr || '????'}${ofp.callsign ? ' · ' + ofp.callsign : ''}`;
   const bDep = (el('depIcao').value || '').trim().toUpperCase(), bArr = (el('arrIcao').value || '').trim().toUpperCase();
   const mismatch = bDep && bArr && (bDep !== ofp.dep || bArr !== ofp.arr);
@@ -571,7 +572,7 @@ function changelogEntriesBetween(fromExcl, toIncl){
 }
 function renderChangelogEntries(entries){
   const tagLabel = { new:'Nouveau', improved:'Amélioré', fix:'Correctif' };
-  const fmtDate = d => d ? new Date(d).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) : '';
+  const fmtDate = d => d ? new Date(d).toLocaleDateString(FBI18N.locale(), { day:'numeric', month:'long', year:'numeric' }) : '';
   return entries.map(e => `<div class="cl-version">
     <div class="cl-head"><span class="v">v${escapeHtml(e.version)}</span><span class="t">${escapeHtml(e.title || '')}</span><span class="d">${escapeHtml(fmtDate(e.date))}</span></div>
     ${e.notes != null
@@ -765,7 +766,7 @@ function liveOverlayFieldValue(key, t){
     }
     return escapeHtml(label);
   }
-  if(key === 'altitude') return t.altFt != null ? Math.round(t.altFt).toLocaleString('fr-FR') + ' ft' : '—';
+  if(key === 'altitude') return t.altFt != null ? Math.round(t.altFt).toLocaleString(FBI18N.locale()) + ' ft' : '—';
   if(key === 'heading') return t.headingDeg != null ? String(Math.round(t.headingDeg)).padStart(3,'0') + '°' : '—';
   if(key === 'radio') return t.comFreqMhz != null ? t.comFreqMhz.toFixed(3) : '—';
   if(key === 'distance') return t.distanceNm != null ? Math.round(t.distanceNm) + ' NM' : '—';
@@ -774,7 +775,7 @@ function liveOverlayFieldValue(key, t){
     if(t.todState === 'passed') return 'En descente';
     return t.todMin != null ? (t.todMin <= 0 ? 'Maintenant' : 'dans ' + fmtMinShort(t.todMin)) : '—';
   }
-  if(key === 'eta') return t.etaIso ? new Date(t.etaIso).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) + (t.etaMin != null ? ` <span class="lo-sub">${fmtMinShort(t.etaMin)}</span>` : '') : '—';
+  if(key === 'eta') return t.etaIso ? new Date(t.etaIso).toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit' }) + (t.etaMin != null ? ` <span class="lo-sub">${fmtMinShort(t.etaMin)}</span>` : '') : '—';
   return '—';
 }
 function fmtMinShort(min){
@@ -1183,7 +1184,7 @@ function renderLogbook(){
       <td>${escapeHtml(f.callsign||'—')}</td>
       <td>${escapeHtml(f.dep||'----')} → ${escapeHtml(f.arr||'----')}</td>
       <td>${escapeHtml(f.aircraft||'—')}</td>
-      <td><span class="pill ${f.rules.toLowerCase()}">${f.rules}</span></td>
+      <td>${f.rules ? `<span class="pill ${escapeHtml(f.rules.toLowerCase())}">${escapeHtml(f.rules)}</span>` : '—'}</td>
       <td>${f.durationMin != null ? minToHhmm(f.durationMin) : '—'}</td>
       <td>${(() => { const sc = FBShared.flightLandingScore(f); return sc ? `<span class="score-pill" style="--sc:${sc.color}" title="${escapeHtml(FBShared.fmtFpm(FBShared.flightLandingRate(f)))} — note ${sc.score}/100">${sc.letter}</span>` : '<span class="muted">—</span>'; })()}</td>
       <td>${(() => { const d = FBShared.flightDistance(f, cachedAirportLookup); return d.nm != null ? FBShared.fmtNm(d.nm) + (d.estimated ? '<sup title="Distance directe départ → arrivée">*</sup>' : '') : '—'; })()}</td>
@@ -1670,7 +1671,7 @@ async function renderTourModal(){
         ? f.trackData.path.map(p => [p.lat, p.lon]) : (a && b ? FBShared.greatCirclePoints(a, b, 40) : null);
       if(!path) return;
       const color = leg.done ? '#39e88f' : '#7c8894';
-      if(leg.done) tourModalLayers.push(L.polyline(path, { color, weight: 7, opacity: .15, className: 'route-glow' }).addTo(tourModalMap));
+      if(leg.done) tourModalLayers.push(L.polyline(path, { color, weight: 7, opacity: .15 }).addTo(tourModalMap));
       tourModalLayers.push(L.polyline(path, { color, weight: 2.4, opacity: .95, dashArray: leg.done ? null : '5 6' }).addTo(tourModalMap));
       path.forEach(p => bounds.push(p));
     });
@@ -1905,7 +1906,7 @@ function renderHangar(){
       <div class="hc-stats">
         <div><span class="k">Heures</span><span class="v">${F.fmtHm(s.totalMin)}</span></div>
         <div><span class="k">Vols</span><span class="v">${s.flights}</span></div>
-        <div><span class="k">Distance</span><span class="v">${s.distanceNm ? Math.round(s.distanceNm).toLocaleString('fr-FR') : '—'}<small> NM</small></span></div>
+        <div><span class="k">Distance</span><span class="v">${s.distanceNm ? Math.round(s.distanceNm).toLocaleString(FBI18N.locale()) : '—'}<small> NM</small></span></div>
         <div><span class="k">Toucher moy.</span><span class="v">${s.avgLandingFpm != null ? `<i class="grade-dot" style="background:${grade.color}"></i>${Math.round(Math.abs(s.avgLandingFpm))}` : '—'}${s.avgLandingFpm != null ? '<small> fpm</small>' : ''}</span></div>
       </div>
       <div class="hc-foot">${s.lastDate ? 'Dernier vol le ' + F.fmtDateFr(s.lastDate) : 'Aucun vol pour le moment'}</div>
@@ -1962,9 +1963,9 @@ function renderHangarDetail(detail, a, group, s){
       <div class="tstat"><div class="cap">Meilleur toucher</div><div class="val">${s.bestLanding ? F.fmtFpm(s.bestLanding.fpm) : '—'}</div></div>
       <div class="tstat"><div class="cap">Toucher le plus dur</div><div class="val">${s.worstLanding ? F.fmtFpm(s.worstLanding.fpm) : '—'}</div></div>
       <div class="tstat"><div class="cap">Rebonds</div><div class="val">${s.landingCount ? `${s.bounceTotal} <small>(${s.flightsWithBounce}/${s.trackedCount} vols)</small>` : '—'}</div></div>
-      <div class="tstat"><div class="cap">Altitude max atteinte</div><div class="val">${s.maxAltFt != null ? s.maxAltFt.toLocaleString('fr-FR') + ' ft' : '—'}</div></div>
+      <div class="tstat"><div class="cap">Altitude max atteinte</div><div class="val">${s.maxAltFt != null ? s.maxAltFt.toLocaleString(FBI18N.locale()) + ' ft' : '—'}</div></div>
       <div class="tstat"><div class="cap">Vitesse max (IAS)</div><div class="val">${s.maxIasKt != null ? s.maxIasKt + ' kt' : '—'}</div></div>
-      <div class="tstat"><div class="cap">Conso. moyenne</div><div class="val">${s.fuelPerHourLbs != null ? Math.round(s.fuelPerHourLbs).toLocaleString('fr-FR') + ' lbs/h' : '—'}</div></div>
+      <div class="tstat"><div class="cap">Conso. moyenne</div><div class="val">${s.fuelPerHourLbs != null ? Math.round(s.fuelPerHourLbs).toLocaleString(FBI18N.locale()) + ' lbs/h' : '—'}</div></div>
       <div class="tstat"><div class="cap">Premier vol</div><div class="val">${F.fmtDateFr(s.firstDate)}</div></div>
       <div class="tstat"><div class="cap">Dernier vol</div><div class="val">${F.fmtDateFr(s.lastDate)}</div></div>
       <div class="tstat"><div class="cap">VFR / IFR</div><div class="val">${rulesTotal ? `${s.vfr} / ${s.ifr}` : '—'}</div></div>
@@ -2087,28 +2088,40 @@ function styleMapShell(map){
   map.zoomControl.setPosition('bottomright');
   map.attributionControl.setPrefix(false);
 }
-function darkTileLayer(){
+function darkTileLayer(extra){
   return L.tileLayer(`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_BASEMAPS_API_KEY}`, {
-    subdomains: 'abcd', maxZoom: 19,
+    ...(extra || {}), subdomains: 'abcd', maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
   });
 }
 
 function initTrackMap(){
   if(trackMap || !window.L) return;
-  trackMap = L.map('trackMap', { attributionControl:true, zoomControl:true, zoomSnap:0.5, zoomDelta:0.5, wheelPxPerZoomLevel:90 }).setView([46.6, 2.4], 5);
-  darkTileLayer().addTo(trackMap);
+  // Fluidité du zoom (v1.6.2) :
+  // - preferCanvas : secteurs ATC, cercles d'approche, route et tracé sont dessinés sur un canvas
+  //   au lieu de centaines de tracés SVG (le SVG recalculait chaque contour de FIR à chaque cran) ;
+  // - pendant le suivi de l'avion, la molette zoome sur le centre (l'avion) au lieu de lutter
+  //   avec le recentrage automatique.
+  trackMap = L.map('trackMap', { attributionControl:true, zoomControl:true, preferCanvas:true, zoomSnap:0.5, zoomDelta:0.5, wheelPxPerZoomLevel:100, wheelDebounceTime:30, scrollWheelZoom: db.trackFollow ? 'center' : true }).setView([46.6, 2.4], 5);
+  // Tuiles : pas de chargement des niveaux intermédiaires pendant l'animation, et une marge de
+  // tuiles gardées en mémoire autour de la vue (moins de trous gris en dézoomant).
+  darkTileLayer({ updateWhenZooming:false, keepBuffer:4 }).addTo(trackMap);
   styleMapShell(trackMap);
-  trackPathGlow = L.polyline([], { color:'#54d6e8', weight:8, opacity:.18, className:'route-glow' }).addTo(trackMap);
+  trackPathGlow = L.polyline([], { color:'#54d6e8', weight:8, opacity:.18 }).addTo(trackMap);
   trackPathLine = L.polyline([], { color:'#54d6e8', weight:2.5, opacity:.95 }).addTo(trackMap);
   trackPlaneMarker = L.marker([46.6,2.4], { icon: planeDivIcon('var(--accent-vfr)') });
   // Déplacer la carte à la main coupe le suivi automatique (sinon elle se recentrerait
   // sur l'avion à la seconde suivante) ; le bouton « Suivre l'avion » le réactive.
   trackMap.on('dragstart', () => { if(db.trackFollow) setTrackFollow(false); });
+  // Pendant une animation de zoom, on ne relance pas de panTo (sinon l'animation est coupée net).
+  trackMap.on('zoomstart', () => { _trackMapZooming = true; });
+  trackMap.on('zoomend', () => { _trackMapZooming = false; });
   setTrackFollow(db.trackFollow, true);
 }
+let _trackMapZooming = false;
 function setTrackFollow(on, silent){
   db.trackFollow = !!on;
+  if(trackMap && trackMap.scrollWheelZoom) trackMap.options.scrollWheelZoom = db.trackFollow ? 'center' : true;
   const btn = el('trackFollowBtn');
   if(btn){
     btn.classList.toggle('on', db.trackFollow);
@@ -2228,7 +2241,7 @@ function initTrackerListeners(){
 
   window.tracker.onTelemetry(data => {
     el('trkPhase').textContent = ({ idle:'—', ground:'Au sol / roulage', airborne:'En vol', landed:'Atterri / roulage' })[data.phase] || data.phase;
-    el('trkAlt').textContent = Math.round(data.altFt).toLocaleString('fr-FR') + ' ft';
+    el('trkAlt').textContent = Math.round(data.altFt).toLocaleString(FBI18N.locale()) + ' ft';
     el('trkIas').textContent = Math.round(data.iasKt) + ' kt';
     el('trkGs').textContent = Math.round(data.gsKt) + ' kt';
     el('trkVs').textContent = Math.round(data.vsFpm) + ' ft/min';
@@ -2240,11 +2253,15 @@ function initTrackerListeners(){
       if(!trackMap.hasLayer(trackPlaneMarker)) trackPlaneMarker.addTo(trackMap);
       updatePlaneMarker(trackPlaneMarker, latlng, data.headingDeg);
       if(data.phase === 'airborne'){
-        _liveTrackPoints.push(latlng);
-        trackPathLine.setLatLngs(_liveTrackPoints);
-        trackPathGlow.setLatLngs(_liveTrackPoints);
+        // Un point tous les ~150 m suffit au tracé : la ligne reste légère même sur un long-courrier.
+        const prev = _liveTrackPoints[_liveTrackPoints.length - 1];
+        if(!prev || Math.abs(prev[0] - latlng[0]) + Math.abs(prev[1] - latlng[1]) > 0.0015){
+          _liveTrackPoints.push(latlng);
+          trackPathLine.addLatLng(latlng);
+          trackPathGlow.addLatLng(latlng);
+        }
       }
-      if(db.trackFollow) trackMap.panTo(latlng, { animate:true, duration:0.5 });
+      if(db.trackFollow && !_trackMapZooming) trackMap.panTo(latlng, { animate:true, duration:0.5 });
     }
 
     // Overlay live personnalisable : champs instantanés (indicatif/route pris sur le
@@ -2338,7 +2355,7 @@ function renderTrkResultPanel(data){
   el('trkResRoute').textContent = `${dep} → ${arr}`;
   el('trkResDuration').textContent = minToHhmm(data.durationMin);
   el('trkResDistance').textContent = data.distanceNm + ' NM';
-  el('trkResMaxAlt').textContent = data.maxAltFt.toLocaleString('fr-FR') + ' ft';
+  el('trkResMaxAlt').textContent = data.maxAltFt.toLocaleString(FBI18N.locale()) + ' ft';
   el('trkResMaxIas').textContent = data.maxIasKt + ' kt';
   el('trkResLanding').textContent = data.landingRateFpm != null ? data.landingRateFpm + ' ft/min' : '—';
   el('trkResBounce').textContent = data.bounceCount ? `${data.bounceCount} rebond${data.bounceCount > 1 ? 's' : ''}` : 'Aucun';
@@ -2452,6 +2469,7 @@ async function applyTrackedFlightToLogbook(switchToLogbook){
   const data = _lastTrackedFlight;
   populateLogbookFieldsFromTrackedFlight(data);
   if(window.FBv15) await FBv15.attachFlightShots(data);
+  if(window.FBCabin) await FBCabin.attachToTrack(data);
   await saveLogbookEntry();
   dismissTrackedFlight();
   if(switchToLogbook !== false) switchView('logbook');
@@ -2506,7 +2524,7 @@ function openRouteModal(flightId){
     modalPhaseLayers = [];
 
     const addGlowLine = (pts, color, weight) => {
-      modalPhaseLayers.push(L.polyline(pts, { color, weight: weight + 5, opacity:.16, className:'route-glow' }).addTo(modalMap));
+      modalPhaseLayers.push(L.polyline(pts, { color, weight: weight + 5, opacity:.16 }).addTo(modalMap));
       modalPhaseLayers.push(L.polyline(pts, { color, weight, opacity:.95 }).addTo(modalMap));
     };
 
@@ -2588,13 +2606,13 @@ function renderProfileChart(path, targetId){
 
   const svg = `<svg class="profile-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
     ${bands}
-    <text class="axis-label" x="${padL}" y="${padT+8}">${Math.round(maxAlt).toLocaleString('fr-FR')} ft</text>
+    <text class="axis-label" x="${padL}" y="${padT+8}">${Math.round(maxAlt).toLocaleString(FBI18N.locale())} ft</text>
     <text class="axis-label" x="${padL}" y="${h-4}">0 ft</text>
     <polyline class="alt-line" points="${altPts}"></polyline>
     <polyline class="ias-line" points="${iasPts}"></polyline>
   </svg>
   <div class="profile-legend">
-    <span><span class="swatch alt"></span>Altitude (max ${Math.round(maxAlt).toLocaleString('fr-FR')} ft)</span>
+    <span><span class="swatch alt"></span>Altitude (max ${Math.round(maxAlt).toLocaleString(FBI18N.locale())} ft)</span>
     <span><span class="swatch ias"></span>Vitesse IAS (max ${Math.round(maxIas)} kt)</span>
   </div>`;
   target.innerHTML = svg;
@@ -3221,7 +3239,8 @@ function readUserProfileForm(prefix){
     vatsimId: el(prefix + 'VatsimId').value.trim(),
     ivaoId: el(prefix + 'IvaoId').value.trim(),
     twitchHandle: el(prefix + 'TwitchHandle').value.trim(),
-    homeBase: el(prefix + 'HomeBase').value.trim().toUpperCase()
+    homeBase: el(prefix + 'HomeBase').value.trim().toUpperCase(),
+    twitchFeatures: el(prefix + 'TwitchFeatures').checked
   };
 }
 function fillUserProfileForm(prefix, p){
@@ -3231,13 +3250,27 @@ function fillUserProfileForm(prefix, p){
   el(prefix + 'IvaoId').value = p.ivaoId || '';
   el(prefix + 'TwitchHandle').value = p.twitchHandle || '';
   el(prefix + 'HomeBase').value = p.homeBase || '';
+  el(prefix + 'TwitchFeatures').checked = p.twitchFeatures !== false;
 }
+
+/* v1.7 — fonctions streaming (Outil Live, Twitch, À bord) : masquées et coupées pour qui ne fait pas de live. */
+function streamFeaturesOn(){ return !db.userProfile || db.userProfile.twitchFeatures !== false; }
+function applyStreamFeatures(on){
+  if(on == null) on = streamFeaturesOn();
+  document.body.classList.toggle('no-stream', !on);
+  const active = document.querySelector('.tabs button.active');
+  if(!on && active && active.closest('.stream-only')) switchView('briefing');
+  if(window.FBv15 && FBv15.pushTwitch) FBv15.pushTwitch(); // bot et « À bord » suivent
+}
+['pf', 'ob'].forEach(pre => el(pre + 'TwitchFeatures').addEventListener('change', e => { if(pre === 'ob') document.body.classList.toggle('no-stream', !e.target.checked); }));
 
 // Affichée automatiquement au tout premier lancement (voir init()) : demande un
 // minimum d'infos pour personnaliser l'appli, tout est facultatif et modifiable
 // ensuite depuis l'onglet Profil.
 function maybeShowOnboarding(){
   if(db.userProfile && db.userProfile.onboarded) return;
+  el('obTwitchFeatures').checked = false; // nouvel utilisateur : fonctions de live à activer s'il streame
+  document.body.classList.add('no-stream');
   el('onboardingModalOverlay').classList.remove('hidden');
 }
 async function completeOnboarding(startTourAfter){
@@ -3246,6 +3279,7 @@ async function completeOnboarding(startTourAfter){
   await saveDbNow();
   el('onboardingModalOverlay').classList.add('hidden');
   fillUserProfileForm('pf', db.userProfile);
+  applyStreamFeatures();
   if(startTourAfter) startTour();
 }
 
@@ -3253,6 +3287,7 @@ async function saveUserProfile(){
   db.userProfile = {...db.userProfile, ...readUserProfileForm('pf'), onboarded:true};
   if(window.FBv15 && FBv15.refreshNavProfile) FBv15.refreshNavProfile();
   await saveDbNow();
+  applyStreamFeatures();
   const statusEl = el('pfStatus');
   statusEl.textContent = 'Profil enregistré ✓';
   statusEl.className = 'status-msg ok';
@@ -3388,7 +3423,7 @@ function renderProfileStats(){
     missing.forEach(k => _profileCoordsRequested.add(k)); // une seule tentative par OACI (pas de boucle si l'IPC échoue)
     resolveAirportCoords(missing).then(() => { renderProfileStats._pending = false; if(el('view-profil').classList.contains('active')) renderProfileStats(); });
   }
-  el('pfStatDistance').textContent = totalDistance ? Math.round(totalDistance).toLocaleString('fr-FR') + ' NM' : '0 NM';
+  el('pfStatDistance').textContent = totalDistance ? Math.round(totalDistance).toLocaleString(FBI18N.locale()) + ' NM' : '0 NM';
 
   let longest = null;
   flights.forEach(f => { if(!longest || (f.durationMin || 0) > (longest.durationMin || 0)) longest = f; });
@@ -3487,11 +3522,49 @@ function globePointerToNDC(evt, container){
 
 let _flightsGlobeAutoRotate = true; // coupée dès que l'utilisateur clique/interagit avec le globe
 
+/* Zoom molette progressif pour OrbitControls (v1.6.2). La version r128 applique chaque cran de
+   molette d'un coup (sans amortissement), d'où des sauts saccadés. Ici la molette fixe une
+   distance cible, rejointe en douceur image par image. `floor` = distance du « sol » (rayon du
+   globe) : le zoom agit sur l'altitude, donc reste aussi précis de près que de loin. */
+function attachSmoothZoom(controls, camera, dom, opts){
+  const o = Object.assign({ floor: 0, speed: 0.0014 }, opts || {});
+  const off = new THREE.Vector3();
+  const st = { target: null };
+  controls.enableZoom = false;
+  dom.addEventListener('wheel', e => {
+    e.preventDefault();
+    let dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1);
+    dy = Math.max(-240, Math.min(240, dy));
+    const cur = st.target != null ? st.target : camera.position.distanceTo(controls.target);
+    const alt = Math.max(1e-3, cur - o.floor) * Math.exp(dy * o.speed);
+    st.target = Math.max(controls.minDistance, Math.min(controls.maxDistance, o.floor + alt));
+    if(o.onStart) o.onStart();
+  }, { passive: false });
+  // À appeler à chaque image : renvoie true tant que le zoom est en cours.
+  st.step = () => {
+    if(st.target == null) return false;
+    off.copy(camera.position).sub(controls.target);
+    const d = off.length(), nd = d + (st.target - d) * 0.22;
+    const done = Math.abs(st.target - nd) < Math.max(0.005, (st.target - o.floor) * 0.002);
+    off.setLength(done ? st.target : nd);
+    camera.position.copy(controls.target).add(off);
+    if(done) st.target = null;
+    return true;
+  };
+  st.cancel = () => { st.target = null; };
+  return st;
+}
+
+// Le globe n'est redessiné que lorsqu'il change (rotation, zoom, survol, données) : à l'arrêt,
+// il ne consomme plus de GPU pendant que le simulateur tourne.
+let _flightsGlobeDirty = 2, _flightsGlobeZoom = null, _flightsGlobeW = 600, _flightsGlobeH = 480;
+function markFlightsGlobeDirty(){ _flightsGlobeDirty = 2; }
 function initFlightsGlobe(){
   if(flightsGlobeScene || !window.THREE) return;
   const container = el('flightsGlobe');
   if(!container) return;
   const w = container.clientWidth || 600, h = container.clientHeight || 480;
+  _flightsGlobeW = w; _flightsGlobeH = h;
 
   flightsGlobeScene = new THREE.Scene();
   flightsGlobeCamera = new THREE.PerspectiveCamera(GLOBE_FOV, w / h, 0.1, 2000);
@@ -3518,6 +3591,9 @@ function initFlightsGlobe(){
   flightsGlobeControls.rotateSpeed = 0.5;
   flightsGlobeControls.enablePan = false;
   flightsGlobeControls.addEventListener('start', () => { _flightsGlobeAutoRotate = false; _flightsGlobeFly = null; });
+  _flightsGlobeZoom = attachSmoothZoom(flightsGlobeControls, flightsGlobeCamera, flightsGlobeRenderer.domElement, {
+    floor: GLOBE_RADIUS, speed: 0.0014, onStart: () => { _flightsGlobeAutoRotate = false; _flightsGlobeFly = null; }
+  });
 
   flightsGlobeGroup = new THREE.Group();
   flightsGlobeSphere = new THREE.Mesh(
@@ -3568,15 +3644,28 @@ async function loadFlightsGlobeCoastlines(){
     // mais ne rivalisent plus avec les points et les trajets, qui sont l'information utile.
     const material = new THREE.LineBasicMaterial({ color: 0xcfe9f2, transparent: true, opacity: .55 });
     const glowMaterial = new THREE.LineBasicMaterial({ color: 0x54d6e8, transparent: true, opacity: .16 });
+    // Toutes les côtes dans 2 géométries (segments) au lieu de ~250 lignes séparées :
+    // 2 appels de dessin par image au lieu de ~250.
+    const segs = r => {
+      const arr = [];
+      lines.forEach(line => {
+        if(!Array.isArray(line) || line.length < 2) return;
+        let prev = null;
+        line.forEach(([lon, lat]) => {
+          const v = latLonToVector3(lat, lon, r);
+          if(prev) arr.push(prev.x, prev.y, prev.z, v.x, v.y, v.z);
+          prev = v;
+        });
+      });
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+      return g;
+    };
     const coastGroup = new THREE.Group();
-    lines.forEach(line => {
-      if(!Array.isArray(line) || line.length < 2) return;
-      const points = line.map(([lon, lat]) => latLonToVector3(lat, lon, coastR));
-      coastGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material));
-      const glowPoints = line.map(([lon, lat]) => latLonToVector3(lat, lon, coastR - 0.35));
-      coastGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(glowPoints), glowMaterial));
-    });
+    coastGroup.add(new THREE.LineSegments(segs(coastR), material));
+    coastGroup.add(new THREE.LineSegments(segs(coastR - 0.35), glowMaterial));
     flightsGlobeGroup.add(coastGroup);
+    markFlightsGlobeDirty();
   }catch(e){ /* fichier de côtes indisponible -> globe seul, sans bloquer le reste */ }
 }
 
@@ -3604,17 +3693,20 @@ function resizeFlightsGlobe(){
   const container = el('flightsGlobe');
   if(!container || !flightsGlobeRenderer || !flightsGlobeCamera) return;
   const w = container.clientWidth || 600, h = container.clientHeight || 480;
+  _flightsGlobeW = w; _flightsGlobeH = h;
   flightsGlobeCamera.aspect = w / h;
   flightsGlobeCamera.updateProjectionMatrix();
   flightsGlobeRenderer.setSize(w, h);
   _flightsGlobeViewKey = '';
   updateFlightsGlobeDotScales(true);
+  markFlightsGlobeDirty();
 }
 
 // Boucle de rendu : ne tourne QUE pendant que l'onglet Profil est affiché (voir switchView).
 let _flightsGlobeAnimHandle = null;
 function resumeFlightsGlobe(){
   if(_flightsGlobeAnimHandle || !flightsGlobeRenderer) return;
+  markFlightsGlobeDirty();
   animateFlightsGlobe();
 }
 function pauseFlightsGlobe(){
@@ -3623,17 +3715,20 @@ function pauseFlightsGlobe(){
 
 function animateFlightsGlobe(){
   _flightsGlobeAnimHandle = requestAnimationFrame(animateFlightsGlobe);
-  stepFlightsGlobeFly();
+  let changed = _flightsGlobeDirty > 0;
+  if(_flightsGlobeDirty > 0) _flightsGlobeDirty--;
+  if(_flightsGlobeFly){ stepFlightsGlobeFly(); changed = true; }
+  if(_flightsGlobeZoom && _flightsGlobeZoom.step()) changed = true;
   if(flightsGlobeControls){
     // Plus on est près du sol, plus la rotation est lente : avant, un glisser de souris
     // à fort zoom faisait défiler un continent entier d'un coup.
     const alt = flightsGlobeCamera.position.length() - GLOBE_RADIUS;
     const k = Math.max(0.06, Math.min(1.2, alt / (GLOBE_DEFAULT_DISTANCE - GLOBE_RADIUS)));
     flightsGlobeControls.rotateSpeed = 0.5 * k;
-    flightsGlobeControls.zoomSpeed = 0.5 + 0.5 * Math.min(1, k);
-    flightsGlobeControls.update();
+    if(flightsGlobeControls.update()) changed = true;
   }
-  if(flightsGlobeGroup && _flightsGlobeAutoRotate) flightsGlobeGroup.rotation.y += 0.0006;
+  if(flightsGlobeGroup && _flightsGlobeAutoRotate){ flightsGlobeGroup.rotation.y += 0.0006; changed = true; }
+  if(!changed) return; // rien n'a bougé : pas de rendu
   updateFlightsGlobeDotScales(false);
   updateFlightsGlobeLabels();
   if(flightsGlobeRenderer && flightsGlobeScene && flightsGlobeCamera) flightsGlobeRenderer.render(flightsGlobeScene, flightsGlobeCamera);
@@ -3717,9 +3812,7 @@ function globeHubTexture(){
 }
 // Taille des sprites en pixels écran -> échelle Three.js (sprites sans atténuation de taille).
 function globePxToSpriteScale(px){
-  const container = el('flightsGlobe');
-  const h = (container && container.clientHeight) || 480;
-  return px * 2 * Math.tan((GLOBE_FOV / 2) * Math.PI / 180) / h;
+  return px * 2 * Math.tan((GLOBE_FOV / 2) * Math.PI / 180) / (_flightsGlobeH || 480);
 }
 let _flightsGlobeLastScaleKey = '';
 function updateFlightsGlobeDotScales(force){
@@ -3728,7 +3821,7 @@ function updateFlightsGlobeDotScales(force){
   // Légère croissance au zoom (x1 à x1.35) pour garder le "relief" sans jamais retomber
   // dans le chevauchement : bien moins que la croissance x5 d'avant (taille en unités monde).
   const zoomBoost = Math.pow(Math.max(1, (GLOBE_DEFAULT_DISTANCE - GLOBE_RADIUS) / Math.max(4, dist - GLOBE_RADIUS)), 0.16);
-  const key = zoomBoost.toFixed(3) + '|' + ((el('flightsGlobe') || {}).clientHeight || 0);
+  const key = zoomBoost.toFixed(3) + '|' + _flightsGlobeH;
   if(!force && key === _flightsGlobeLastScaleKey) return;
   _flightsGlobeLastScaleKey = key;
   const boost = Math.min(1.35, zoomBoost);
@@ -3750,6 +3843,7 @@ function clearFlightsGlobeContent(){
   _flightsGlobeLabels = [];
   _flightsGlobeHighlight = null;
   _flightsGlobeViewKey = '';
+  markFlightsGlobeDirty();
 }
 
 async function renderFlightsGlobeArcs(){
@@ -3829,6 +3923,7 @@ async function renderFlightsGlobeArcs(){
     _flightsGlobeDots.push(sprite);
   });
   updateFlightsGlobeDotScales(true);
+  markFlightsGlobeDirty();
 
   // 3) Étiquettes OACI (HTML par-dessus le canvas, positionnées à chaque changement de vue).
   const labelsEl = el('fgLabels');
@@ -3869,9 +3964,7 @@ const _globeTmpVec = typeof THREE !== 'undefined' ? new THREE.Vector3() : null;
 const _globeTmpVec2 = typeof THREE !== 'undefined' ? new THREE.Vector3() : null;
 function updateFlightsGlobeLabels(){
   if(!_flightsGlobeLabels.length || !flightsGlobeCamera || !flightsGlobeGroup) return;
-  const container = el('flightsGlobe');
-  if(!container) return;
-  const W = container.clientWidth, H = container.clientHeight;
+  const W = _flightsGlobeW, H = _flightsGlobeH; // tailles en cache : aucune lecture de mise en page par image
   const cam = flightsGlobeCamera.position;
   const viewKey = `${cam.x.toFixed(2)},${cam.y.toFixed(2)},${cam.z.toFixed(2)},${flightsGlobeGroup.rotation.y.toFixed(4)},${W},${H},${_flightsGlobeHighlight || ''}`;
   if(viewKey === _flightsGlobeViewKey) return;
@@ -3893,7 +3986,7 @@ function updateFlightsGlobeLabels(){
 
   _flightsGlobeLabels.forEach(l => {
     const world = _globeTmpVec.copy(l.local).applyMatrix4(flightsGlobeContentGroup.matrixWorld);
-    const facing = world.clone().normalize().dot(camDir);
+    const facing = world.dot(camDir) / (world.length() || 1);
     const forced = hlAirports && hlAirports.has(l.airport.icao); // toujours afficher ceux mis en évidence
     let visible = facing > 0.25 && (forced || shown < maxLabels);
     let x = 0, y = 0;
@@ -3939,6 +4032,7 @@ function setFlightsGlobeHighlight(key){
   if(key === _flightsGlobeHighlight) return;
   _flightsGlobeHighlight = key;
   _flightsGlobeViewKey = '';
+  markFlightsGlobeDirty();
   const apIcao = key && key.startsWith('ap:') ? key.slice(3) : null;
   const rtKey = key && key.startsWith('rt:') ? key.slice(3) : null;
   const related = apIcao ? flightsGlobeConnectedAirports(apIcao) : (rtKey ? new Set(rtKey.split('|')) : null);
@@ -4033,7 +4127,7 @@ function showFlightsGlobeRouteTooltip(r, evt, container){
   const nm = FBShared.haversineNm(r.aInfo.lat, r.aInfo.lon, r.bInfo.lat, r.bInfo.lon);
   tip.innerHTML = `
     <div class="tt-title ${r.vfr > r.ifr ? 'vfr' : 'ifr'}">${escapeHtml(r.a)} ↔ ${escapeHtml(r.b)}</div>
-    <div class="tt-line">${r.flights.length} vol${r.flights.length > 1 ? 's' : ''} · ${Math.round(nm).toLocaleString('fr-FR')} NM</div>
+    <div class="tt-line">${r.flights.length} vol${r.flights.length > 1 ? 's' : ''} · ${Math.round(nm).toLocaleString(FBI18N.locale())} NM</div>
     ${recent.map(f => `<div class="tt-line tt-small">${escapeHtml(FBShared.fmtDateFr(f.date))} · ${escapeHtml(f.callsign || '—')} · ${escapeHtml(f.aircraft || '—')}</div>`).join('')}
     ${r.flights.length > recent.length ? `<div class="tt-line tt-small">+ ${r.flights.length - recent.length} autre(s)</div>` : ''}
   `;
@@ -4060,6 +4154,7 @@ function hideFlightsGlobeTooltip(){
 /* ---------------- Déplacements de caméra animés ---------------- */
 function flyFlightsGlobeTo(dirWorld, distance){
   if(!flightsGlobeCamera) return;
+  if(_flightsGlobeZoom) _flightsGlobeZoom.cancel();
   _flightsGlobeAutoRotate = false;
   _flightsGlobeFly = {
     fromDir: flightsGlobeCamera.position.clone().normalize(),
@@ -4280,6 +4375,8 @@ const TOUR_STEPS = [
   { target: '[data-view="profil"]', title: 'Profil', text: "Ton identité pilote, toutes tes statistiques de vol, et un globe 3D de tous tes trajets déjà effectués. Tu peux relancer cette visite ici à tout moment." }
 ];
 let _tourIndex = 0;
+// Étapes de la visite, sans les onglets masqués (fonctions streaming désactivées).
+const tourSteps = () => TOUR_STEPS.filter(s => { const t = document.querySelector(s.target); return !t || !t.closest('.stream-only') || streamFeaturesOn(); });
 
 function startTour(){
   _tourIndex = 0;
@@ -4294,12 +4391,12 @@ function _tourResizeHandler(){
 }
 
 function renderTourStep(){
-  const step = TOUR_STEPS[_tourIndex];
-  el('tourStepLabel').textContent = `Étape ${_tourIndex + 1}/${TOUR_STEPS.length}`;
+  const steps = tourSteps(), step = steps[_tourIndex];
+  el('tourStepLabel').textContent = `Étape ${_tourIndex + 1}/${steps.length}`;
   el('tourTitle').textContent = step.title;
   el('tourText').textContent = step.text;
   el('tourPrevBtn').style.visibility = _tourIndex === 0 ? 'hidden' : 'visible';
-  el('tourNextBtn').textContent = _tourIndex === TOUR_STEPS.length - 1 ? 'Terminer' : 'Suivant';
+  el('tourNextBtn').textContent = _tourIndex === steps.length - 1 ? 'Terminer' : 'Suivant';
 
   const spotlight = el('tourSpotlight');
   const tooltip = el('tourTooltip');
@@ -4330,7 +4427,7 @@ function renderTourStep(){
 }
 
 function tourNext(){
-  if(_tourIndex >= TOUR_STEPS.length - 1){ endTour(); return; }
+  if(_tourIndex >= tourSteps().length - 1){ endTour(); return; }
   _tourIndex++;
   renderTourStep();
 }
@@ -4408,6 +4505,8 @@ async function endTour(){
   initMobilePanel();
   window.__fbAppReady = true;
   if(window.FBv15) await FBv15.init();
+  if(window.FBv17) await FBv17.init().catch(e => console.warn('[v1.7]', e));
+  applyStreamFeatures();
   maybeShowOnboarding();
   await maybeShowChangelogAfterUpdate();
   initUpdateChecks();

@@ -18,6 +18,12 @@ FlightBrief est une application Windows (avec un compagnon mobile consultable ho
 - **Accueil & visite guidée** : au premier lancement, une courte modale demande quelques infos de profil (facultatives), puis propose une visite guidée de l'application — rejouable à tout moment depuis l'onglet Profil.
 - **Admin** : couleurs, polices (15+ préchargées), rayon des angles, halo lumineux, bordure/ombre/fond transparent, alignement, disposition des cases, texte de marque, visibilité des sections — avec thèmes prédéfinis, dont un calé sur une identité visuelle bleu/nuit.
 - **Fenêtre sans cadre** : barre de titre intégrée à l'interface (drag, réduire/agrandir/fermer), navigation figée au défilement, cohérente avec le thème.
+- **Langues (v1.7)** : français, anglais et espagnol — interface, overlays OBS, appli mobile, carnet public, messages et commandes du bot, page de téléchargement. Choix dans l'onglet **Profil**.
+- **En vol (v1.7)** : copilote vocal à activer, par catégorie (décollage, montée, approche stabilisée, minimums, radiosonde, alertes façon GPWS, annonces cabine, point de situation), EFB sur téléphone/tablette (carte avec l'ATC VATSIM/IVAO, OFP, cartes d'aéroport).
+- **Préparer & collectionner (v1.7)** : « Où voler aujourd'hui ? » (destinations selon le temps dispo, l'avion, la météo réelle, l'ATC en ligne, les events VATSIM et les terrains préférés), liens vers les cartes d'aéroport, gratte-pays, défis aéroports, Flight Wrapped, import d'historique CSV (Little Navmap, Volanta, tableurs).
+- **Stream Deck (v1.7)** : plugin (touches + molettes du Stream Deck +) installé d'un clic depuis Profil → Stream Deck, appairé par un code local.
+- **Pas de live ?** Profil → « Je fais des lives » : désactivé, les onglets Outil Live, Twitch et À bord disparaissent.
+- **Prédictions Twitch (v1.7)** : en plus de `!pari`, le chat mise ses points de chaîne sur une tranche de taux de toucher (chaîne Affiliée ou Partenaire, compte de la chaîne connecté dans l'onglet À bord).
 - **Stockage local** : toutes les données (logbook, carrières, thème, overlay live, profil) sont enregistrées dans un fichier JSON sur ta machine (dossier de données utilisateur de l'application), pas dans le cloud.
 
 ## Installation (utilisateurs)
@@ -66,6 +72,13 @@ atc.js                 contrôleurs en ligne VATSIM (data.vatsim.net + secteurs 
 preload.js              pont sécurisé entre le processus principal et l'interface (stockage, fenêtre, tracker)
 server.js               deux petits serveurs HTTP locaux : briefing (/obs, /api/state) et overlay live (/live, /api/live-state)
 tracker.js               connexion SimConnect + machine à états de suivi de vol + segmentation des phases (fin de vol et en direct) + recherche d'aéroport le plus proche
+cabin.js                « À bord » (v1.7) : passagers du chat, miles, statuts, passeport, correspondances, survols, vue du hublot, quiz
+cabin-geo.js            villes du monde hors ligne (!maville, ville et pays survolés)
+public-logbook.js       export du carnet de vol public (site statique pour GitHub Pages)
+predictions.js          prédictions Twitch (points de chaîne) calées sur les paris d'atterrissage
+suggest.js              « Où voler aujourd'hui ? » (destinations selon temps, avion, pistes, ATC, events, favoris)
+zip.js                  archive zip minimale (fichier .streamDeckPlugin)
+streamdeck/             plugin Stream Deck (com.flightbrief.deck.sdPlugin) ; icônes : node scripts/build-streamdeck-icons.js
 renderer/
   index.html             interface principale (titlebar, Briefing, Logbook, Carrière, Outil Live, Outils, Admin, Profil)
   app.js                 logique de l'interface principale
@@ -76,10 +89,22 @@ renderer/
   live-overlay.html       page servie à OBS pour l'overlay de télémétrie live, mise à jour en direct par polling
   data/airports.json      aéroports (grands + moyens, ICAO/nom/lat/lon) pour le rapprochement auto au décollage/atterrissage
   data/runways.json       pistes par aéroport, pour le calcul de la zone de toucher des roues
+  data/cities.json        villes (GeoNames, CC BY 4.0) : communes de plus de 1 000 hab. des pays francophones, villes de plus de 15 000 hab. ailleurs
+  cabin-ui.js             onglet « À bord », titre du stream, carte postale (canvas)
+  copilot.js              copilote vocal : moteur d'annonces (testé), sans synthèse vocale
+  v17.js                  copilote vocal (voix, réglages), « Où voler aujourd'hui ? », gratte-pays, défis, Flight Wrapped, import, Stream Deck
+  logimport.js            lecture des CSV d'historique (colonnes, dates, durées)
+  i18n.js                 traduction à la volée de tout texte affiché (pages et messages du bot)
+  i18n/translations.js    dictionnaire FR | EN | ES (une ligne par texte, séparée par des tabulations)
+  cabin-overlay.html      page servie à OBS pour le manifeste des passagers (/cabin)
+  public-logbook/         modèle du carnet de vol public (HTML/CSS/JS, aucune ressource externe)
+  vendor/three, vendor/leaflet   Three.js 0.128 et Leaflet 1.9.4 embarqués (plus de CDN au démarrage)
 build/
   icon.png / icon.ico / icon.icns   icônes de l'application
 docs/
   index.html             page de téléchargement statique (GitHub Pages) — voir CONTRIBUTING.md
+  fonctionnalites.html   liste complète des fonctionnalités (simmers et streamers)
+  site.css               styles communs ; en/ et es/ générés par node scripts/build-docs.js
 ```
 
 ## Où sont stockées mes données ?
@@ -114,3 +139,22 @@ FlightBrief n'embarque **aucun Client ID** : chaque streamer déclare sa propre 
 3. Copier l'« ID client » dans l'appli → « Valider » : FlightBrief vérifie l'ID auprès de Twitch avant de l'enregistrer.
 
 L'ID est enregistré localement avec le jeton du compte connecté (chiffré). Changer d'application déconnecte le compte lié à l'ancienne. Sans application déclarée, le bot reste utilisable en lecture seule (réponses affichées sur l'overlay Alertes).
+
+## Crédits des données
+
+Aéroports et pistes : [OurAirports](https://ourairports.com/data/) (domaine public). Côtes : [Natural Earth](https://www.naturalearthdata.com/) (domaine public). Villes : [GeoNames](https://www.geonames.org/) (CC BY 4.0).
+
+## Traductions (anglais, espagnol)
+
+Le code reste écrit en français ; les textes affichés sont traduits à la volée par `renderer/i18n.js`, à partir de `renderer/i18n/translations.js` (3 colonnes : FR, EN, ES ; `{0}`, `{1}`… pour les parties variables).
+
+```bash
+# Textes de l'appli encore sans traduction (après avoir ajouté ou modifié des textes)
+node scripts/i18n-extract.js
+
+# Régénère la page de téléchargement en anglais et en espagnol (docs/en, docs/es)
+node scripts/build-docs.js
+
+# Tests (moteur « À bord », prédictions Twitch, sauvegardes)
+npm test
+```

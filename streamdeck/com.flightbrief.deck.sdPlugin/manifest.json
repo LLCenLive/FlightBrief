@@ -1,0 +1,185 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Name": "FlightBrief",
+  "Version": "1.0.0.0",
+  "Author": "LLCenLive",
+  "UUID": "com.flightbrief.deck",
+  "Description": "Control FlightBrief from your Stream Deck: flight tracker, screenshot, voice copilot, live flight info on keys, and dials for volumes on Stream Deck +.",
+  "URL": "https://llcenlive.github.io/FlightBrief/",
+  "Category": "FlightBrief",
+  "CategoryIcon": "images/category",
+  "Icon": "images/plugin",
+  "CodePath": "index.html",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.4"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    },
+    {
+      "Platform": "mac",
+      "MinimumVersion": "12"
+    }
+  ],
+  "Actions": [
+    {
+      "UUID": "com.flightbrief.deck.tracker",
+      "Name": "Flight tracker",
+      "Tooltip": "Start or stop flight tracking. The key shows the phase and altitude.",
+      "Icon": "images/actions/tracker",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "images/keys/tracker"
+        }
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "com.flightbrief.deck.flightinfo",
+      "Name": "Flight info",
+      "Tooltip": "Altitude, ground speed, vertical speed, arrival time, top of descent. Press to switch.",
+      "Icon": "images/actions/info",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "images/keys/info"
+        }
+      ],
+      "SupportedInMultiActions": false
+    },
+    {
+      "UUID": "com.flightbrief.deck.screenshot",
+      "Name": "Screenshot",
+      "Tooltip": "Takes a screenshot, attached to the flight's PIREP.",
+      "Icon": "images/actions/screenshot",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "images/keys/screenshot"
+        }
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "com.flightbrief.deck.copilot",
+      "Name": "Voice copilot",
+      "Tooltip": "Turns the voice copilot on or off.",
+      "Icon": "images/actions/copilot",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "images/keys/copilot"
+        }
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "com.flightbrief.deck.boarding",
+      "Name": "Boarding (stream)",
+      "Tooltip": "Opens or closes boarding for your chat (On board).",
+      "Icon": "images/actions/boarding",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "images/keys/boarding"
+        }
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "com.flightbrief.deck.bets",
+      "Name": "Landing bets (stream)",
+      "Tooltip": "Opens or locks the landing bets (and the Twitch prediction).",
+      "Icon": "images/actions/bets",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "images/keys/bets"
+        }
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "com.flightbrief.deck.copilotdial",
+      "Name": "Voice copilot (dial)",
+      "Tooltip": "Turn: volume. Press: on / off.",
+      "Icon": "images/actions/copilot",
+      "Controllers": [
+        "Encoder"
+      ],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Volume",
+          "Push": "On / off",
+          "Touch": "On / off"
+        }
+      },
+      "States": [
+        {
+          "Image": "images/keys/copilot"
+        }
+      ]
+    },
+    {
+      "UUID": "com.flightbrief.deck.alertsdial",
+      "Name": "Alerts volume (dial)",
+      "Tooltip": "Turn: OBS alerts volume. Press: mute / unmute.",
+      "Icon": "images/actions/volume",
+      "Controllers": [
+        "Encoder"
+      ],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Volume",
+          "Push": "Mute",
+          "Touch": "Mute"
+        }
+      },
+      "States": [
+        {
+          "Image": "images/keys/volume"
+        }
+      ]
+    },
+    {
+      "UUID": "com.flightbrief.deck.infodial",
+      "Name": "Flight info (dial)",
+      "Tooltip": "Turn to browse altitude, speed, vario, arrival time and top of descent on the touch strip. Press: the copilot reads out the flight status.",
+      "Icon": "images/actions/info",
+      "Controllers": [
+        "Encoder"
+      ],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Change info",
+          "Push": "Copilot status",
+          "Touch": "Change info"
+        }
+      },
+      "States": [
+        {
+          "Image": "images/keys/info"
+        }
+      ]
+    }
+  ]
+}

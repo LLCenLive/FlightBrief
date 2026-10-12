@@ -40,7 +40,7 @@ function lookup(icao){
 function fmtTime(iso){
   if(!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+  return d.toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit' });
 }
 // cat : catégorie d'avion (échelle de toucher propre à light/medium/heavy/jumbo).
 function gradeHtml(fpm, cat){
@@ -108,7 +108,7 @@ function relTime(iso){
   if(min < 1) return "à l'instant";
   if(min < 60) return `il y a ${min} min`;
   if(min < 12 * 60) return `il y a ${Math.round(min / 60)} h`;
-  return `le ${d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' })} à ${fmtTime(iso)}`;
+  return `le ${d.toLocaleDateString(FBI18N.locale(), { day:'2-digit', month:'2-digit' })} à ${fmtTime(iso)}`;
 }
 function setSync(kind){
   const pill = $('syncPill'), txt = $('syncText');
@@ -183,7 +183,6 @@ async function syncNow(manual){
   }
 }
 // Compatibilité avec l'ancien nom (bouton de la barre du haut).
-function refreshData(manual){ return syncNow(manual); }
 document.addEventListener('visibilitychange', () => { if(!document.hidden) syncNow(false); });
 
 /* ---------------- Écran d'accueil sans données (lien invalide / jamais synchronisé) ---------------- */
@@ -316,7 +315,7 @@ function renderLive(){
   document.body.classList.toggle('is-live', !!t);
   if(!slot) return;
   if(!t){ slot.innerHTML = ''; return; }
-  const alt = t.altFt != null ? Math.round(t.altFt).toLocaleString('fr-FR') + ' ft' : '—';
+  const alt = t.altFt != null ? Math.round(t.altFt).toLocaleString(FBI18N.locale()) + ' ft' : '—';
   slot.innerHTML = `<div class="live-banner" onclick="go('live')">
     <div class="lb-top"><span class="pulse"></span>Vol en cours${t.callsign ? ' — ' + esc(t.callsign) : ''}</div>
     <div class="lb-route">${esc(t.dep || '----')} → ${esc(t.arr || '----')}</div>
@@ -425,11 +424,11 @@ function openFlight(id){
       ${tile('Distance', dist.nm != null ? F.fmtNm(dist.nm) + (dist.estimated ? ' <small class="muted">(ortho.)</small>' : '') : '—')}
       ${tile('Appareil', esc(f.aircraft || '—'))}
       ${tile('Avion du hangar', ac ? esc(ac.name) : '—')}
-      ${td ? tile('Altitude max', td.maxAltFt != null ? td.maxAltFt.toLocaleString('fr-FR') + ' ft' : '—') : ''}
+      ${td ? tile('Altitude max', td.maxAltFt != null ? td.maxAltFt.toLocaleString(FBI18N.locale()) + ' ft' : '—') : ''}
       ${td ? tile('Vitesse max', td.maxIasKt != null ? td.maxIasKt + ' kt' : '—') : ''}
       ${tile('Toucher', gradeHtml(lr, ac ? ac.category : null))}
       ${td ? tile('Rebonds', td.bounceCount ? td.bounceCount : 'Aucun') : ''}
-      ${td && td.fuelUsedLbs != null ? tile('Carburant', td.fuelUsedLbs.toLocaleString('fr-FR') + ' lbs') : ''}
+      ${td && td.fuelUsedLbs != null ? tile('Carburant', td.fuelUsedLbs.toLocaleString(FBI18N.locale()) + ' lbs') : ''}
       ${td && td.turnStats && td.turnStats.maxBankDeg ? tile('Virage max', td.turnStats.maxBankDeg + '°') : ''}
       ${career ? tile('Carrière', esc(career.name)) : ''}
     </div>
@@ -441,7 +440,7 @@ function openFlight(id){
     </div>` : ''}
     ${td && td.phases && td.phases.length ? `<h2 class="section">Phases du vol</h2>
       <table class="tbl"><thead><tr><th>Phase</th><th>Durée</th><th>Alt.</th><th>IAS moy.</th></tr></thead><tbody>
-      ${td.phases.map(p => `<tr><td style="font-family:var(--font-body)">${esc(PHASE_LABELS[p.phase] || p.phase)}</td><td>${p.durationSec >= 60 ? Math.round(p.durationSec / 60) + ' min' : p.durationSec + ' s'}</td><td>${p.maxAltFt != null ? Math.round(p.maxAltFt).toLocaleString('fr-FR') : '—'}</td><td>${p.avgIasKt != null ? p.avgIasKt + ' kt' : '—'}</td></tr>`).join('')}
+      ${td.phases.map(p => `<tr><td style="font-family:var(--font-body)">${esc(PHASE_LABELS[p.phase] || p.phase)}</td><td>${p.durationSec >= 60 ? Math.round(p.durationSec / 60) + ' min' : p.durationSec + ' s'}</td><td>${p.maxAltFt != null ? Math.round(p.maxAltFt).toLocaleString(FBI18N.locale()) : '—'}</td><td>${p.avgIasKt != null ? p.avgIasKt + ' kt' : '—'}</td></tr>`).join('')}
       </tbody></table>` : ''}
     ${f.remarks ? `<h2 class="section">Remarques</h2><div class="remarks">${esc(f.remarks)}</div>` : ''}
   `);
@@ -516,7 +515,7 @@ function renderCareer(){
               <span>Le <b>${F.fmtDateFr(s.completedAt)}</b></span>
               <span><b>${s.legCount}</b> étapes</span>
               <span><b>${s.linkedCount ? F.fmtHm(s.totalMin) : '—'}</b></span>
-              <span><b>${s.distanceNm ? Math.round(s.distanceNm).toLocaleString('fr-FR') : '—'}</b> NM</span>
+              <span><b>${s.distanceNm ? Math.round(s.distanceNm).toLocaleString(FBI18N.locale()) : '—'}</b> NM</span>
             </div>
           </button>`).join('')}</div>
       </details>` : ''}` : ''}
@@ -602,7 +601,7 @@ function renderHangar(){
         <div class="kv4">
           <div><div class="k">Heures</div><div class="v">${F.fmtHm(s.totalMin)}</div></div>
           <div><div class="k">Vols</div><div class="v">${s.flights}</div></div>
-          <div><div class="k">NM</div><div class="v">${s.distanceNm ? Math.round(s.distanceNm).toLocaleString('fr-FR') : '—'}</div></div>
+          <div><div class="k">NM</div><div class="v">${s.distanceNm ? Math.round(s.distanceNm).toLocaleString(FBI18N.locale()) : '—'}</div></div>
           <div><div class="k">Toucher</div><div class="v">${s.avgLandingFpm != null ? '−' + Math.round(Math.abs(s.avgLandingFpm)) : '—'}</div></div>
         </div>
       </button>`).join('')}</div>`).join('') : '<div class="empty">Ton hangar est vide. Ajoute tes avions depuis l\'onglet Hangar de FlightBrief sur ton PC.</div>'}
@@ -633,8 +632,8 @@ function openAircraft(id){
       ${tile('Meilleur toucher', s.bestLanding ? gradeHtml(s.bestLanding.fpm, cat) : '—')}
       ${tile('Plus dur', s.worstLanding ? gradeHtml(s.worstLanding.fpm, cat) : '—')}
       ${tile('Rebonds', s.landingCount ? s.bounceTotal : '—')}
-      ${tile('Altitude max', s.maxAltFt != null ? s.maxAltFt.toLocaleString('fr-FR') + ' ft' : '—')}
-      ${tile('Conso. moyenne', s.fuelPerHourLbs != null ? Math.round(s.fuelPerHourLbs).toLocaleString('fr-FR') + ' lbs/h' : '—')}
+      ${tile('Altitude max', s.maxAltFt != null ? s.maxAltFt.toLocaleString(FBI18N.locale()) + ' ft' : '—')}
+      ${tile('Conso. moyenne', s.fuelPerHourLbs != null ? Math.round(s.fuelPerHourLbs).toLocaleString(FBI18N.locale()) + ' lbs/h' : '—')}
       ${tile('Premier vol', F.fmtDateFr(s.firstDate))}
       ${tile('Dernier vol', F.fmtDateFr(s.lastDate))}
     </div>
@@ -699,7 +698,7 @@ function renderProfile(){
     <div class="stats">
       ${stat('Vols', flights.length, 'var(--ifr)')}
       ${stat('Heures', (totalMin / 60).toFixed(1) + '<small> h</small>')}
-      ${stat('Distance', Math.round(dist).toLocaleString('fr-FR') + '<small> NM</small>', 'var(--vfr)')}
+      ${stat('Distance', Math.round(dist).toLocaleString(FBI18N.locale()) + '<small> NM</small>', 'var(--vfr)')}
       ${stat('Aéroports', airports.size, 'var(--ifr)')}
       ${stat('Durée moy.', flights.length ? F.fmtHm(totalMin / flights.length) : '—')}
       ${stat('Toucher moy.', avgLr != null ? '−' + Math.round(Math.abs(avgLr)) + '<small> fpm</small>' : '—', 'var(--vfr)')}
@@ -778,10 +777,11 @@ let _liveTimer = null, _liveData = null, _liveFollow = true, _liveMap = null, _l
 function startLiveView(){
   if(!$('liveRoot')) buildLiveShell();
   if(_liveTimer) return;
+  if(_liveMap && !_atcTimer){ pollAtc(); _atcTimer = setInterval(pollAtc, 60000); }
   pollLive();
   _liveTimer = setInterval(() => { if(!document.hidden) pollLive(); }, 2000);
 }
-function stopLiveView(){ clearInterval(_liveTimer); _liveTimer = null; }
+function stopLiveView(){ clearInterval(_liveTimer); _liveTimer = null; clearInterval(_atcTimer); _atcTimer = null; }
 async function pollLive(){
   if(!TOKEN) return;
   try{
@@ -805,9 +805,67 @@ function buildLiveShell(){
     <div class="live-map-wrap">
       <div class="map tall live-map" id="liveMap"></div>
       <button class="live-follow on" id="liveFollowBtn" onclick="toggleLiveFollow()">◎ Suivre l'avion</button>
+      <div class="efb-atc-chips" id="efbAtcChips"></div>
     </div>
     <div id="liveBody"></div>
+    <div id="efbBody">
+      <section id="efbCharts"></section>
+      <details class="efb-ofp" id="efbOfp"><summary>📄 Plan de vol (OFP SimBrief)</summary><div id="efbOfpBody"><div class="note">Chargement…</div></div></details>
+    </div>
   </div>`;
+  $('efbOfp').addEventListener('toggle', () => { if($('efbOfp').open) loadOfp(); });
+}
+
+/* ---------------- v1.7 — EFB : cartes d'aéroport, plan de vol, ATC sur la carte ---------------- */
+let _atcTimer = null, _atcLayer = null, _atcNets = { vatsim: true, ivao: false };
+try{ Object.assign(_atcNets, JSON.parse(localStorage.getItem('fb-efb-atc') || '{}')); }catch(e){ /* défaut */ }
+function renderEfb(d){
+  const ch = $('efbCharts');
+  if(ch){
+    const aps = [d && d.dep && d.dep.icao, d && d.arr && d.arr.icao].filter(Boolean);
+    ch.innerHTML = aps.length ? `<h2 class="section">Cartes d'aéroport</h2>` + aps.map(ic => `<div class="efb-charts"><b>${esc(ic)}</b>${FBShared.chartLinks(ic).map(c => `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a>`).join('')}</div>`).join('') : '';
+  }
+}
+async function loadOfp(){
+  const b = $('efbOfpBody');
+  try{
+    const r = await fetch('/api/ofp?t=' + encodeURIComponent(TOKEN), { cache: 'no-store' });
+    const o = (await r.json()).ofp;
+    if(!o){ b.innerHTML = '<div class="note">Aucun OFP : importe ton plan de vol SimBrief dans le Briefing sur ton PC.</div>'; return; }
+    b.innerHTML = `<div class="efb-ofp-head"><b>${esc(o.dep)} → ${esc(o.arr)}</b> · ${esc([o.callsign, o.aircraft, o.cruiseAltFt ? 'FL' + Math.round(o.cruiseAltFt / 100) : ''].filter(Boolean).join(' · '))}</div>
+      <div class="efb-route">${esc(o.route)}</div><iframe class="efb-ofp-frame" sandbox title="OFP"></iframe>`;
+    b.querySelector('iframe').srcdoc = '<style>body{margin:0;background:#fff;color:#000;font:12px monospace}</style>' + o.planHtml;
+  }catch(e){ b.innerHTML = '<div class="note">PC injoignable : connecte-toi au même Wi-Fi que ton PC, avec FlightBrief ouvert.</div>'; }
+}
+function toggleAtcNet(n){
+  _atcNets[n] = !_atcNets[n];
+  try{ localStorage.setItem('fb-efb-atc', JSON.stringify(_atcNets)); }catch(e){ /* sans mémoire */ }
+  renderAtcChips(); pollAtc();
+}
+function renderAtcChips(){
+  const box = $('efbAtcChips');
+  if(box) box.innerHTML = ['vatsim', 'ivao'].map(n => `<button class="${_atcNets[n] ? 'on' : ''} n-${n}" onclick="toggleAtcNet('${n}')">${n.toUpperCase()}</button>`).join('');
+}
+async function pollAtc(){
+  if(!_liveMap) return;
+  if(!_atcLayer) _atcLayer = L.layerGroup().addTo(_liveMap);
+  if(!_atcNets.vatsim && !_atcNets.ivao){ _atcLayer.clearLayers(); return; }
+  try{
+    const r = await fetch(`/api/atc?vatsim=${_atcNets.vatsim ? 1 : 0}&ivao=${_atcNets.ivao ? 1 : 0}&t=${encodeURIComponent(TOKEN)}`, { cache: 'no-store' });
+    if(!r.ok) return;
+    const st = (await r.json()).stations || [];
+    const COL = { vatsim: '#39e88f', ivao: '#4d7cff' };
+    _atcLayer.clearLayers();
+    st.forEach(s => {
+      const col = COL[s.network] || '#e7edf2', tip = `${s.callsign} · ${s.frequency}${s.name ? ' · ' + s.name : ''}`;
+      if(s.poly) L.polygon(s.poly, { color: col, weight: 1, opacity: .7, fillColor: col, fillOpacity: .06 }).bindTooltip(esc(tip)).addTo(_atcLayer);
+      else if((s.facility === 'APP' || s.facility === 'DEP') && s.ap) L.circle([s.ap.lat, s.ap.lon], { radius: 35 * 1852, color: col, weight: 1, dashArray: '4 6', fillOpacity: .03 }).bindTooltip(esc(tip)).addTo(_atcLayer);
+    });
+    const byAp = new Map();
+    st.filter(s => s.ap).forEach(s => { const k = s.network + s.ap.icao; if(!byAp.has(k)) byAp.set(k, { s, list: [] }); byAp.get(k).list.push(s); });
+    byAp.forEach(({ s, list }) => L.circleMarker([s.ap.lat, s.ap.lon], { radius: 5, color: COL[s.network], weight: 2, fillColor: COL[s.network], fillOpacity: .8 })
+      .bindPopup(`<b>${esc(s.ap.icao)}</b><br>${list.map(x => `${esc(x.callsign)} <b>${esc(x.frequency)}</b>`).join('<br>')}`).addTo(_atcLayer));
+  }catch(e){ /* PC injoignable : on garde l'affichage précédent */ }
 }
 function toggleLiveFollow(){
   _liveFollow = !_liveFollow;
@@ -840,6 +898,8 @@ function ensureLiveMap(){
   };
   _liveMap.setView([46.6, 2.4], 5);
   setTimeout(() => _liveMap.invalidateSize(), 60);
+  renderAtcChips(); pollAtc();
+  _atcTimer = setInterval(pollAtc, 60000);
   return _liveMap;
 }
 function renderLiveView(){
@@ -848,6 +908,8 @@ function renderLiveView(){
   const d = _liveData;
   if(d) document.body.classList.toggle('is-live', !!d.tracking);
   const mapWrap = document.querySelector('.live-map-wrap');
+  $('efbBody').classList.toggle('hidden', !d);
+  if(d) renderEfb(d);
   if(!d){
     mapWrap.classList.add('hidden');
     head.innerHTML = liveEmpty('📡', 'Suivi en direct indisponible', "Le suivi en direct lit ton simulateur sur ton PC : ce téléphone doit être sur le <b>même Wi-Fi</b>, avec FlightBrief ouvert.");
@@ -855,7 +917,10 @@ function renderLiveView(){
     return;
   }
   if(!d.connected && !d.ended){
-    mapWrap.classList.add('hidden');
+    // Avant le vol, l'EFB reste utile : carte (avec l'ATC en ligne) centrée sur le départ.
+    mapWrap.classList.remove('hidden');
+    const m = ensureLiveMap(), ap = d.dep || d.arr;
+    if(m && ap && ap.lat != null && !mapWrap.dataset.centered){ mapWrap.dataset.centered = '1'; m.setView([ap.lat, ap.lon], 7); }
     head.innerHTML = liveEmpty('🛫', 'Aucun vol en cours', "Sur ton PC, onglet <b>Briefing</b> : clique sur « Lancer le vol &amp; le tracker ». Ton vol apparaîtra ici en direct, sur la carte.");
     body.innerHTML = '';
     return;
@@ -872,7 +937,7 @@ function renderLiveView(){
     remainingNm = F.haversineNm(pos.lat, pos.lon, d.arr.lat, d.arr.lon);
     if(pos.gsKt > 40 && !pos.onGround) etaMin = remainingNm / pos.gsKt * 60;
   }
-  const eta = etaMin != null ? new Date(Date.now() + etaMin * 60000).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : '—';
+  const eta = etaMin != null ? new Date(Date.now() + etaMin * 60000).toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit' }) : '—';
 
   head.innerHTML = `<div class="live-head">
     <div class="lh-top">
@@ -899,7 +964,7 @@ function renderLiveView(){
   } else if(pos){
     const vs = pos.vsFpm || 0;
     body.innerHTML = `<div class="live-grid">
-      <div class="lg big"><div class="k">Altitude</div><div class="v">${Math.round(pos.altFt).toLocaleString('fr-FR')}<small> ft</small></div></div>
+      <div class="lg big"><div class="k">Altitude</div><div class="v">${Math.round(pos.altFt).toLocaleString(FBI18N.locale())}<small> ft</small></div></div>
       <div class="lg big"><div class="k">Vitesse sol</div><div class="v">${pos.gsKt}<small> kt</small></div></div>
       <div class="lg"><div class="k">IAS</div><div class="v">${pos.iasKt}<small> kt</small></div></div>
       <div class="lg"><div class="k">Vario</div><div class="v ${vs > 150 ? 'up' : vs < -150 ? 'down' : ''}">${vs > 0 ? '+' : ''}${vs}<small> fpm</small></div></div>

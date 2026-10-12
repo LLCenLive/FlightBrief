@@ -1,0 +1,41 @@
+{
+  "Name": "FlightBrief",
+  "Category": "FlightBrief",
+  "Description": "Controla FlightBrief desde tu Stream Deck: seguimiento, captura, copiloto de voz, datos de vuelo en directo en las teclas y diales para los volúmenes en Stream Deck +.",
+  "com.flightbrief.deck.tracker": {
+    "Name": "Seguimiento de vuelo",
+    "Tooltip": "Inicia o detiene el seguimiento del vuelo. La tecla muestra la fase y la altitud."
+  },
+  "com.flightbrief.deck.flightinfo": {
+    "Name": "Datos de vuelo",
+    "Tooltip": "Altitud, velocidad respecto al suelo, variómetro, hora de llegada, inicio del descenso. Pulsa para cambiar."
+  },
+  "com.flightbrief.deck.screenshot": {
+    "Name": "Captura de pantalla",
+    "Tooltip": "Hace una captura, vinculada al PIREP del vuelo."
+  },
+  "com.flightbrief.deck.copilot": {
+    "Name": "Copiloto de voz",
+    "Tooltip": "Activa o desactiva el copiloto de voz."
+  },
+  "com.flightbrief.deck.boarding": {
+    "Name": "Embarque (stream)",
+    "Tooltip": "Abre o cierra el embarque del chat (A bordo)."
+  },
+  "com.flightbrief.deck.bets": {
+    "Name": "Apuestas de aterrizaje (stream)",
+    "Tooltip": "Abre o cierra las apuestas de aterrizaje (y la predicción de Twitch)."
+  },
+  "com.flightbrief.deck.copilotdial": {
+    "Name": "Copiloto de voz (dial)",
+    "Tooltip": "Girar: volumen. Pulsar: activar / desactivar."
+  },
+  "com.flightbrief.deck.alertsdial": {
+    "Name": "Volumen de alertas (dial)",
+    "Tooltip": "Girar: volumen de las alertas OBS. Pulsar: silenciar / reactivar."
+  },
+  "com.flightbrief.deck.infodial": {
+    "Name": "Datos de vuelo (dial)",
+    "Tooltip": "Gira para ver altitud, velocidad, variómetro, hora de llegada e inicio del descenso en la pantalla táctil. Pulsar: el copiloto anuncia el estado del vuelo."
+  }
+}

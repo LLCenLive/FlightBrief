@@ -11,6 +11,19 @@ function jsonResponse(res, getState) {
   res.end(JSON.stringify((getState && getState()) || {}));
 }
 
+// v1.7 — traduction des pages servies (overlays OBS, mobile) : traducteur + dictionnaire +
+// langue courante de l'appli, en un seul script. Les pages l'incluent avec <script src="/i18n.js">.
+let currentLang = 'fr';
+function setLang(l) { currentLang = l; }
+function i18nBundle(lang) {
+  const read = rel => fs.readFileSync(path.join(__dirname, 'renderer', rel), 'utf-8');
+  return `${read('i18n.js')}\n${read('i18n/translations.js')}\nFBI18N.use(${JSON.stringify(lang || currentLang)});FBI18N.start(document);\n`;
+}
+function i18nResponse(res) {
+  res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(i18nBundle());
+}
+
 function htmlResponse(res, filename) {
   const html = fs.readFileSync(path.join(__dirname, 'renderer', filename), 'utf-8');
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -25,6 +38,7 @@ function startServer(port, getLiveState) {
 
     if (url === '/' || url === '/obs') return htmlResponse(res, 'obs.html');
     if (url === '/api/state') return jsonResponse(res, getLiveState);
+    if (url === '/i18n.js') return i18nResponse(res);
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');
@@ -41,18 +55,47 @@ function startServer(port, getLiveState) {
 // distinct (port différent) de celui du briefing ci-dessus, pour que les deux
 // sources OBS aient des URLs (hôte:port) réellement différentes, pas seulement
 // des chemins différents sur le même serveur.
-function startLiveOverlayServer(port, getLiveOverlayState, getAlerts) {
+function startLiveOverlayServer(port, getLiveOverlayState, getAlerts, extra) {
+  extra = extra || {};
   const server = http.createServer((req, res) => {
     const url = (req.url || '/').split('?')[0];
 
     if (url === '/' || url === '/live') return htmlResponse(res, 'live-overlay.html');
     if (url === '/api/live-state') return jsonResponse(res, getLiveOverlayState);
+    if (url === '/i18n.js') return i18nResponse(res);
     // v1.5 — 3e source OBS : alertes (carte d'atterrissage, paris Twitch, succès, réponses du bot).
     if (url === '/alerts') return htmlResponse(res, 'alerts-overlay.html');
     if (url === '/api/alerts') {
       let since = 0;
       try { since = parseInt(new URL(req.url, 'http://localhost').searchParams.get('since') || '0', 10) || 0; } catch (e) { since = 0; }
       return jsonResponse(res, () => (getAlerts ? getAlerts(since) : { events: [] }));
+    }
+    // v1.7 — plugin Stream Deck : état et actions, réservés au plugin appairé (code dans l'en-tête).
+    // Un site web ouvert dans le navigateur ne connaît pas ce code : il ne peut rien déclencher.
+    if (url.startsWith('/api/deck/')) {
+      const h = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'X-FlightBrief-Deck', 'Access-Control-Allow-Methods': 'GET, POST', 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
+      if (req.method === 'OPTIONS') { res.writeHead(204, h); return res.end(); }
+      const tok = extra.deck && extra.deck.token();
+      if (!tok || req.headers['x-flightbrief-deck'] !== tok) { res.writeHead(401, h); return res.end('{"ok":false,"error":"pairing"}'); }
+      let body = null;
+      if (url === '/api/deck/state') body = extra.deck.state();
+      else if (url === '/api/deck/action' && req.method === 'POST') {
+        let a = ''; try { a = new URL(req.url, 'http://localhost').searchParams.get('a') || ''; } catch (e) { a = ''; }
+        body = extra.deck.action(a);
+      }
+      if (!body) { res.writeHead(404, h); return res.end('{"ok":false}'); }
+      res.writeHead(200, h); return res.end(JSON.stringify(body));
+    }
+    // v1.7 — 4e source OBS : « À bord » (manifeste des passagers du chat) + cartes postales.
+    if (url === '/cabin') return htmlResponse(res, 'cabin-overlay.html');
+    if (url === '/api/cabin') return jsonResponse(res, extra.getCabin);
+    const pc = url.match(/^\/postcards\/([A-Za-z0-9_-]{1,64}\.jpg)$/);
+    if (pc && extra.postcardDir) {
+      return fs.readFile(path.join(extra.postcardDir, pc[1]), (err, buf) => {
+        if (err) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=3600' });
+        res.end(buf);
+      });
     }
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -98,7 +141,7 @@ const MOBILE_APP_STATIC = {
   '/vendor/leaflet/images/marker-shadow.png': ['vendor/leaflet/images/marker-shadow.png', 'image/png']
 };
 // Fichiers mis en cache par le service worker (l'appli complète, pour le hors ligne).
-const MOBILE_SHELL = ['/', '/mobile.css', '/mobile.js', '/fb-shared.js', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
+const MOBILE_SHELL = ['/', '/mobile.css', '/mobile.js', '/fb-shared.js', '/i18n.js', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
   '/vendor/leaflet/leaflet.js', '/vendor/leaflet/leaflet.css', '/vendor/leaflet/images/layers.png', '/vendor/leaflet/images/marker-icon.png'];
 
 function sendFile(res, rel, type, extraHeaders) {
@@ -120,10 +163,10 @@ function parseReq(req) {
 // récupère la nouvelle version à la synchro suivante.
 function shellVersion(appVersion) {
   let stamp = 0;
-  Object.values(MOBILE_APP_STATIC).forEach(([rel]) => {
+  Object.values(MOBILE_APP_STATIC).map(([rel]) => rel).concat(['i18n.js', 'i18n/translations.js']).forEach(rel => {
     try { stamp = Math.max(stamp, fs.statSync(path.join(__dirname, 'renderer', rel)).mtimeMs); } catch (e) { /* absent */ }
   });
-  return `fb-${appVersion || '0'}-${Math.round(stamp).toString(36)}`;
+  return `fb-${appVersion || '0'}-${currentLang}-${Math.round(stamp).toString(36)}`;
 }
 
 function startMobileAppServer(port, opts) {
@@ -138,6 +181,7 @@ function startMobileAppServer(port, opts) {
     };
 
     if (MOBILE_APP_STATIC[url]) { const [rel, type] = MOBILE_APP_STATIC[url]; return sendFile(res, rel, type); }
+    if (url === '/i18n.js') return i18nResponse(res);
 
     if (url === '/sw.js') {
       fs.readFile(path.join(__dirname, 'renderer', 'mobile', 'sw.js'), 'utf-8', (err, src) => {
@@ -178,6 +222,16 @@ function startMobileAppServer(port, opts) {
       catch (e) { return sendJson(res, 500, { error: String(e && e.message || e) }); }
     }
 
+    // v1.7 — EFB : contrôleurs en ligne autour de l'avion, et plan de vol SimBrief.
+    if (url === '/api/atc') {
+      if (!tokenOk()) return sendJson(res, 401, { error: 'unauthorized' });
+      return Promise.resolve(opts.getAtc ? opts.getAtc(u.searchParams) : { stations: [] })
+        .then(j => sendJson(res, 200, j)).catch(e => sendJson(res, 502, { error: String(e && e.message || e) }));
+    }
+    if (url === '/api/ofp') {
+      if (!tokenOk()) return sendJson(res, 401, { error: 'unauthorized' });
+      return sendJson(res, 200, { ofp: opts.getOfp ? opts.getOfp() : null });
+    }
     if (url === '/api/data') {
       if (!tokenOk()) return sendJson(res, 401, { error: 'unauthorized' });
       try { return sendJson(res, 200, opts.getPayload()); }
@@ -198,6 +252,7 @@ function startMobileSetupServer(port, opts) {
     const url = u.pathname;
     if (url === '/' || url === '/setup' || url === '/index.html') return sendFile(res, 'mobile/setup.html', 'text/html; charset=utf-8');
     if (url === '/icon-192.png') return sendFile(res, 'mobile/icon-192.png', 'image/png');
+    if (url === '/i18n.js') return i18nResponse(res);
     if (url === '/apple-touch-icon.png') return sendFile(res, 'mobile/apple-touch-icon.png', 'image/png');
     // Certificat racine local, en DER : Safari (iPhone) propose directement de l'installer
     // comme profil, Android l'ouvre dans l'installateur de certificats.
@@ -219,4 +274,4 @@ function startMobileSetupServer(port, opts) {
   return server;
 }
 
-module.exports = { startServer, startLiveOverlayServer, startMobileAppServer, startMobileSetupServer };
+module.exports = { startServer, startLiveOverlayServer, startMobileAppServer, startMobileSetupServer, setLang, i18nBundle };

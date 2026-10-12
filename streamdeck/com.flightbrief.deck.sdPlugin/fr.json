@@ -1,0 +1,41 @@
+{
+  "Name": "FlightBrief",
+  "Category": "FlightBrief",
+  "Description": "Pilote FlightBrief depuis ton Stream Deck : tracker, capture, copilote vocal, infos de vol en direct sur les touches, et molettes pour les volumes sur Stream Deck +.",
+  "com.flightbrief.deck.tracker": {
+    "Name": "Tracker de vol",
+    "Tooltip": "Lance ou arrête le suivi du vol. La touche affiche la phase et l'altitude."
+  },
+  "com.flightbrief.deck.flightinfo": {
+    "Name": "Infos de vol",
+    "Tooltip": "Altitude, vitesse sol, vario, heure d'arrivée, début de descente. Appuie pour changer."
+  },
+  "com.flightbrief.deck.screenshot": {
+    "Name": "Capture d'écran",
+    "Tooltip": "Prend une capture, rattachée au PIREP du vol."
+  },
+  "com.flightbrief.deck.copilot": {
+    "Name": "Copilote vocal",
+    "Tooltip": "Active ou coupe le copilote vocal."
+  },
+  "com.flightbrief.deck.boarding": {
+    "Name": "Embarquement (stream)",
+    "Tooltip": "Ouvre ou ferme l'embarquement du chat (À bord)."
+  },
+  "com.flightbrief.deck.bets": {
+    "Name": "Paris d'atterrissage (stream)",
+    "Tooltip": "Ouvre ou ferme les paris d'atterrissage (et la prédiction Twitch)."
+  },
+  "com.flightbrief.deck.copilotdial": {
+    "Name": "Copilote vocal (molette)",
+    "Tooltip": "Tourner : volume. Appuyer : activer / couper."
+  },
+  "com.flightbrief.deck.alertsdial": {
+    "Name": "Volume des alertes (molette)",
+    "Tooltip": "Tourner : volume des alertes OBS. Appuyer : couper / remettre le son."
+  },
+  "com.flightbrief.deck.infodial": {
+    "Name": "Infos de vol (molette)",
+    "Tooltip": "Tourner pour faire défiler altitude, vitesse, vario, heure d'arrivée et début de descente sur l'écran tactile. Appuyer : le copilote annonce l'état du vol."
+  }
+}

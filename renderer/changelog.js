@@ -9,6 +9,50 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '1.7.0',
+    date: '2026-10-12',
+    title: 'À bord : le chat voyage avec toi',
+    items: [
+      ['new', "Nouvel onglet « À bord » : les viewers montent à bord de tes vols avec !embarquer et gagnent des miles tant qu'ils sont actifs dans le chat. Statuts Membre, Argent, Or, Platine et Légende, et classement des fidèles."],
+      ['new', "Passeport : chaque atterrissage tamponne le passeport des passagers (aéroport, ville, pays). !passeport pour le consulter, !miles pour son statut."],
+      ['new', "Correspondances : enchaîne les vols sans en rater un pour cumuler un bonus de miles. !voyage montre le trajet en cours (Paris → Toulouse → Madrid…)."],
+      ['new', "Survol de chez les viewers : chacun donne sa ville (!maville Lyon). L'appli annonce au décollage les survols prévus, prévient quelques minutes avant, puis « On survole chez Kéro ! » sur l'overlay et dans le chat."],
+      ['new', "Animations de croisière : vue du hublot (ville et pays survolés), annonce de chaque nouveau pays, quiz du hublot (!rep) et pronostic de l'heure d'arrivée (!arrivee 21:47)."],
+      ['new', "Carte postale à chaque arrivée : ta capture d'atterrissage, la carte du trajet, la ville d'arrivée et la liste des passagers. Elle s'affiche sur l'overlay Alertes et dans le détail du vol."],
+      ['new', "Titre du stream proposé au lancement du vol, à partir de ton briefing. Tu le modifies, et rien n'est envoyé à Twitch sans ta validation."],
+      ['new', "Carnet de vol public : un mini-site statique (vols, carte, passagers, passeports, cartes postales) à publier sur GitHub Pages. Aucune connexion vers ton PC, pas de ville de viewer publiée, et !passeport cacher pour se retirer."],
+      ['new', "4e source OBS « À bord » : le manifeste des passagers en direct, avec le prochain survol et le quiz en cours."],
+      ['new', "FlightBrief parle anglais et espagnol : interface, overlays OBS, appli mobile, carnet public et messages du bot. Choix de la langue dans l'onglet Profil."],
+      ['new', "Prédictions Twitch : en plus de !pari, ton chat mise ses points de chaîne sur une tranche de taux de toucher, ouverte et fermée avec les paris (chaîne Affiliée ou Partenaire)."],
+      ['improved', "Commandes du chat aussi en anglais et en espagnol (!board, !bet, !mycity, !embarcar, !apuesta…)."],
+      ['new', "Pas de live ? Profil → « Je fais des lives » : désactivé, les onglets Outil Live, Twitch et À bord disparaissent et le bot est coupé. Demandé au premier lancement."],
+      ['new', "Copilote vocal (Briefing) : décollage, montée, croisière, approche stabilisée, minimums, radiosonde 50-40-30-20-10 (« Retard » sur Airbus), alertes façon GPWS, annonces cabine et point de situation. Catégories, voix et débit au choix."],
+      ['new', "EFB sur téléphone ou tablette : carte avec l'ATC VATSIM / IVAO, plan de vol SimBrief et cartes d'aéroport, mise en page tablette."],
+      ['new', "« Où voler aujourd'hui ? » (Outils) : 3 destinations selon ton temps, ton avion, la météo réelle, l'ATC en ligne et les events VATSIM — terrains jamais visités ou tes préférés —, avec ouverture dans SimBrief."],
+      ['new', "Cartes d'aéroport en un clic (ChartFox, Navigraph, SkyVector…) sous le départ et l'arrivée du Briefing."],
+      ['new', "Profil : Flight Wrapped (ton année + image à partager), gratte-pays et défis des aéroports les plus redoutés."],
+      ['new', "Import d'historique (Logbook) : Little Navmap, Volanta ou tableur, colonnes détectées toutes seules, sans doublons."],
+      ['new', "Plugin Stream Deck (Profil → Stream Deck) : tracker, capture, copilote, infos de vol sur les touches, molettes du Stream Deck +. Installé d'un clic."],
+      ['fix', "Miles et paris : sauvegarde sûre (copie de secours), plus aucune perte si l'ordinateur s'éteint pendant l'écriture."],
+      ['fix', "Le message d'arrivée annonçait 100 miles de trop pour le meilleur passager."],
+      ['fix', "L'export du carnet public ne supprime plus que ses propres cartes postales."]
+    ]
+  },
+  {
+    version: '1.6.2',
+    date: '2026-10-11',
+    title: 'Patch : volumes, fluidité & allègement',
+    items: [
+      ['fix', "Les curseurs de volume fonctionnent enfin à chaque réglage (alerte du tracker, son de capture, alertes OBS) : avant, seul le premier changement était pris en compte."],
+      ['improved', "Nouveau son pour le rappel « tracker non lancé » : un carillon doux façon appel cabine, à la place des bips stridents."],
+      ['improved', "Zoom fluide sur le globe du Profil et sur l'approche 3D : la molette glisse en douceur au lieu d'avancer par à-coups."],
+      ['improved', "Carte du Briefing bien plus fluide au zoom : secteurs ATC, cercles d'approche et route dessinés en accéléré, badges ATC affichés seulement autour de la vue (de simples points quand on dézoome), plus d'à-coups quand le suivi recentre la carte."],
+      ['improved', "Moins de charge pour ton PC pendant que tu voles : le globe et l'approche 3D ne se redessinent plus quand rien ne bouge."],
+      ['improved', "Lancement plus rapide et 100 % hors ligne : les moteurs carte et 3D sont désormais inclus dans l'appli (plus de téléchargement au démarrage)."],
+      ['improved', "Ménage dans le code : styles et fonctions inutilisés retirés."]
+    ]
+  },
+  {
     version: '1.6.1',
     date: '2026-10-10',
     title: 'Patch : alertes sur mesure, captures & profil',
