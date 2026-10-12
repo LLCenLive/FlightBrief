@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Site statique en lecture seule : aucun script, style, police ou image venant d'ailleurs. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noai, noimageai">
+<title>Carnet de vol</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand">
+      <div class="eyebrow">Carnet de vol</div>
+      <h1 id="pilot">—</h1>
+      <a class="twitch hidden" id="twitchLink" rel="noopener noreferrer" target="_blank"></a>
+    </div>
+    <div class="stats" id="stats"></div>
+  </div>
+</header>
+
+<section class="map-band">
+  <div class="wrap">
+    <div class="map-card">
+      <canvas id="map" aria-label="Carte des vols"></canvas>
+      <div class="map-legend"><span><i class="lg-ifr"></i>IFR</span><span><i class="lg-vfr"></i>VFR</span><span id="mapHint">Clique un vol pour le voir sur la carte</span></div>
+    </div>
+  </div>
+</section>
+
+<nav class="tabs wrap" id="tabs">
+  <a href="#/vols" data-tab="vols">Vols</a>
+  <a href="#/passagers" data-tab="passagers">Passagers</a>
+  <a href="#/cartes" data-tab="cartes">Cartes postales</a>
+</nav>
+
+<main class="wrap" id="main"></main>
+
+<div class="lightbox hidden" id="lightbox"><img id="lightboxImg" alt=""><button id="lightboxClose" aria-label="Fermer">×</button></div>
+
+<footer class="wrap foot" id="foot"></footer>
+<script src="i18n.js"></script>
+<script src="coast.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

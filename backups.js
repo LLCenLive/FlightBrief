@@ -166,4 +166,19 @@ class DataStore {
   }
 }
 
-module.exports = { DataStore };
+/* Petits fichiers JSON annexes (cabin.json, twitch-bets.json) : écriture atomique + copie .bak.
+   Un fichier illisible n'est jamais écrasé en silence : il est mis de côté, et on repart du .bak. */
+function writeJsonSafe(file, data) {
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data), 'utf-8');
+  try { if (fs.existsSync(file)) fs.copyFileSync(file, file + '.bak'); } catch (e) { /* ignoré */ }
+  fs.renameSync(tmp, file);
+}
+function readJsonSafe(file) {
+  if (!fs.existsSync(file)) return null;
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')); } catch (e) { /* abîmé : voir plus bas */ }
+  try { fs.copyFileSync(file, `${file}.corrompu-${Date.now()}`); } catch (e) { /* ignoré */ }
+  try { return JSON.parse(fs.readFileSync(file + '.bak', 'utf-8')); } catch (e) { return null; }
+}
+
+module.exports = { DataStore, writeJsonSafe, readJsonSafe };

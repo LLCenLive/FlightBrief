@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<script src="/i18n.js"></script>
+<title>FlightBrief — À bord</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Sora:wght@500;600;700&family=Rajdhani:wght@600;700&family=Oswald:wght@500;600&family=Chakra+Petch:wght@500;600;700&family=Barlow+Condensed:wght@600;700&family=Inter:wght@500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Source OBS « À bord » : le manifeste des passagers du chat, mis à jour toutes les 2 s.
+     Reprend le design des alertes (couleurs, police, arrondis). Transparente sans vol en cours. */
+  :root{ --bg:rgba(14,18,24,.92); --text:#e7edf2; --sub:#8a96a2; --accent:#39e88f; --line:rgba(231,237,242,.1); --radius:16px; --font:'Space Grotesk',sans-serif; --mono:'IBM Plex Mono',monospace; --w:340px; }
+  *{box-sizing:border-box;}
+  html,body{margin:0; background:transparent; overflow:hidden;}
+  body{font-family:var(--font); color:var(--text); padding:24px;}
+  .panel{width:var(--w); background:var(--bg); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; transition:opacity .4s, transform .4s;}
+  .panel.off{opacity:0; transform:translateY(-10px);}
+  .head{padding:14px 16px 12px; border-bottom:1px solid var(--line); position:relative;}
+  .head::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent);}
+  .eyebrow{font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--sub); font-weight:600; display:flex; justify-content:space-between;}
+  .eyebrow b{color:var(--accent); letter-spacing:.06em;}
+  .route{font-family:var(--mono); font-size:20px; font-weight:600; margin-top:3px;}
+  .state{font-size:12.5px; color:var(--sub); margin-top:2px;}
+  .state .dot{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--accent); margin-right:6px; vertical-align:1px; animation:blink 1.6s infinite;}
+  @keyframes blink{50%{opacity:.25;}}
+  .list{max-height:calc(var(--rows) * 34px); overflow:hidden; position:relative;}
+  .list-in{display:flex; flex-direction:column;}
+  .list-in.scroll{animation:roll linear infinite;}
+  @keyframes roll{from{transform:translateY(0);} to{transform:translateY(-50%);}}
+  .pax{display:flex; align-items:center; gap:9px; height:34px; padding:0 16px; font-size:14px; border-bottom:1px solid var(--line);}
+  .pax .ic{width:20px; text-align:center;}
+  .pax .n{flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .pax.away .n{opacity:.5;}
+  .pax .m{font-family:var(--mono); font-size:12px; color:var(--sub);}
+  .pax .leg{font-size:10.5px; font-weight:700; color:var(--accent); border:1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius:5px; padding:0 4px;}
+  .pax.new{animation:inn .6s cubic-bezier(.2,1.4,.3,1) both;}
+  @keyframes inn{from{opacity:0; transform:translateX(-14px);} to{opacity:1; transform:none;}}
+  .empty{padding:12px 16px; font-size:13px; color:var(--sub);}
+  .empty code, .foot code{font-family:var(--mono); color:var(--accent);}
+  .foot{padding:10px 16px 12px; font-size:12.5px; color:var(--sub); display:flex; flex-direction:column; gap:4px;}
+  .foot b{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="panel off" id="panel">
+  <div class="head">
+    <div class="eyebrow"><span>À bord</span><b id="count">0</b></div>
+    <div class="route" id="route">—</div>
+    <div class="state" id="state"></div>
+  </div>
+  <div class="list" id="list"><div class="list-in" id="listIn"></div></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const Q = new URLSearchParams(location.search);
+const PREVIEW = Q.has('preview');
+const ROWS = Math.max(3, Math.min(20, +Q.get('lignes') || 10));
+document.documentElement.style.setProperty('--rows', ROWS);
+if(Q.get('largeur')) document.documentElement.style.setProperty('--w', Math.max(240, Math.min(700, +Q.get('largeur'))) + 'px');
+function hexA(hex, a){ const h = String(hex || '#0a0d11').replace('#',''); const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h.padEnd(6, '0');
+  return `rgba(${parseInt(n.slice(0,2),16)||0},${parseInt(n.slice(2,4),16)||0},${parseInt(n.slice(4,6),16)||0},${(Math.max(0, Math.min(100, a)) / 100).toFixed(2)})`; }
+let known = new Set(), sig = '';
+function apply(s){
+  const st = s.style || {}, r = document.documentElement.style;
+  if(st.bg) r.setProperty('--bg', hexA(st.bg, st.opacity != null ? st.opacity : 92));
+  if(st.text) r.setProperty('--text', st.text);
+  if(st.sub) r.setProperty('--sub', st.sub);
+  if(st.font) r.setProperty('--font', st.font);
+  if(st.radius != null) r.setProperty('--radius', Math.min(24, st.radius) + 'px');
+  const cabinColor = st.cards && st.cards.cabin && st.cards.cabin.color;
+  r.setProperty('--accent', cabinColor || (st.accentMode === 'custom' && st.accent) || '#39e88f');
+  const f = s.flight;
+  $('panel').classList.toggle('off', !f || !s.enabled);
+  if(!f) return;
+  $('route').textContent = `${f.dep || '????'} → ${f.arr || '????'}`;
+  $('count').textContent = `${s.passengers.length} passager${s.passengers.length > 1 ? 's' : ''}`;
+  $('state').innerHTML = f.landed ? 'Arrivés à destination 🛬' : f.boarding ? `<span class="dot"></span>Embarquement ouvert${f.callsign ? ' · ' + esc(f.callsign) : ''}` : `En vol${f.country ? ' · ' + esc(f.country.flag) + ' ' + esc(f.country.name) : ''}`;
+  const list = s.passengers.slice().sort((a, b) => b.miles - a.miles);
+  const nsig = JSON.stringify(list.map(p => [p.user, p.miles, p.present]));
+  if(nsig !== sig){
+    sig = nsig;
+    const row = p => `<div class="pax${known.has(p.user) ? '' : ' new'}${p.present ? '' : ' away'}"><span class="ic">${esc(p.tierIcon)}</span><span class="n">${esc(p.name)}</span>${p.leg > 1 ? `<span class="leg">×${p.leg}</span>` : ''}<span class="m">${p.miles} mi</span></div>`;
+    const html = list.map(row).join('');
+    const scroll = list.length > ROWS;
+    $('listIn').classList.toggle('scroll', scroll);
+    $('listIn').style.animationDuration = (list.length * 2.2) + 's';
+    $('listIn').innerHTML = list.length ? (scroll ? html + html : html) : '<div class="empty">Personne à bord : tape <code>!embarquer</code> !</div>';
+    list.forEach(p => known.add(p.user));
+  }
+  const foot = [];
+  if(s.quiz) foot.push(`🧭 <b>Quiz du hublot</b> en cours · réponds avec <code>!rep</code>`);
+  else if(s.nextFlyover) foot.push(`🏠 Prochain survol : <b>chez ${esc(s.nextFlyover.name)}</b> (${esc(s.nextFlyover.city)}) · ${s.nextFlyover.km} km`);
+  if(f.arrival && f.arrival.state === 'open') foot.push(`⏱️ Devine l'heure d'arrivée : <code>!arrivee 21:47</code>`);
+  if(f.boarding && !f.landed) foot.push(`Monte à bord : <code>!embarquer</code> · <code>!maville</code> pour qu'on te survole`);
+  $('foot').innerHTML = foot.map(l => `<div>${l}</div>`).join('');
+  $('foot').style.display = foot.length ? '' : 'none';
+}
+const DEMO = { enabled: true, style: {}, flight: { dep: 'LFPG', arr: 'LFBO', callsign: 'AFR23', boarding: false, country: { flag: '🇫🇷', name: 'France' }, arrival: { state: 'open' } },
+  passengers: [['Kéro','💠',412,3],['Lulu','🥇',388,1],['Viewer42','🥈',301,2],['PiloteDu59','🎫',120,1],['Max','🎫',64,1]].map(([name, tierIcon, miles, leg], i) => ({ user: 'u' + i, name, tierIcon, miles, leg, present: i !== 4 })),
+  nextFlyover: { name: 'Kéro', city: 'Pézenas', km: 46 }, quiz: null };
+async function poll(){
+  try{
+    const r = await fetch('/api/cabin', { cache: 'no-store' });
+    const s = await r.json();
+    apply(PREVIEW && !s.flight ? { ...DEMO, style: s.style || {} } : s);
+  }catch(e){ if(PREVIEW) apply(DEMO); }
+}
+poll(); setInterval(poll, 2000);
+</script>
+</body>
+</html>

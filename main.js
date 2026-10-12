@@ -3,13 +3,20 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
-const { startServer, startLiveOverlayServer, startMobileAppServer, startMobileSetupServer } = require('./server');
+const { startServer, startLiveOverlayServer, startMobileAppServer, startMobileSetupServer, setLang: setServerLang } = require('./server');
 const { LocalTls, startMdnsResponder, localIPv4s, HOSTNAME: MOBILE_HOSTNAME } = require('./mobile-tls');
 const { FlightTracker, computeTouchdownZone, windComponents } = require('./tracker');
-const { DataStore } = require('./backups');
+const { DataStore, writeJsonSafe, readJsonSafe } = require('./backups');
+const I18N = require('./renderer/i18n.js');
+require('./renderer/i18n/translations.js');
+const T = s => I18N.tr(s);
 const { fetchAtc } = require('./atc');
 const { TwitchAuth, TwitchChat, FlightBot, mergeConfig: mergeTwitchConfig } = require('./twitch');
 const { Shots } = require('./shots');
+const { Cabin, mergeCfg: mergeCabinCfg } = require('./cabin');
+const { exportPublicLogbook } = require('./public-logbook');
+const { Prediction, SCOPE: PREDICTION_SCOPE } = require('./predictions');
+const { suggest, pickDiverse, bestRunwayFt } = require('./suggest');
 
 const OBS_PORT = 4813;
 const LIVE_OVERLAY_PORT = 4814; // port distinct -> URL OBS différente de celle du briefing
@@ -223,7 +230,10 @@ function startObsServerSafely() {
 }
 function startLiveOverlayServerSafely() {
   try {
-    liveOverlayServer = startLiveOverlayServer(LIVE_OVERLAY_PORT, () => liveOverlayState, alertsSince);
+    liveOverlayServer = startLiveOverlayServer(LIVE_OVERLAY_PORT, () => liveOverlayState, alertsSince, {
+      getCabin: () => ({ ...cabin.publicState(), style: alertsConfig.style || {} }), postcardDir: postcardDir(),
+      deck: { token: deckToken, state: deckState, action: deckAction }
+    });
     liveOverlayServer.on('error', (err) => {
       logFatalError('live-overlay-server', err);
       if (mainWindow) {
@@ -238,8 +248,19 @@ function startLiveOverlayServerSafely() {
   }
 }
 
+/* ---- v1.7 — langue de l'appli (FR / EN / ES) : interface, overlays, mobile et messages du bot ---- */
+const prefsFile = () => path.join(app.getPath('userData'), 'prefs.json');
+function applyLang(l) { I18N.use(l); setServerLang(I18N.lang); }
+ipcMain.on('i18n:getLang', evt => { evt.returnValue = I18N.lang; });
+ipcMain.handle('i18n:setLang', (evt, l) => {
+  applyLang(I18N.pick(l));
+  try { writeJsonSafe(prefsFile(), { ...(readJsonSafe(prefsFile()) || {}), lang: I18N.lang }); } catch (e) { /* best effort */ }
+  return I18N.lang;
+});
+
 app.whenReady().then(() => {
   if (!gotLock) return;
+  applyLang((readJsonSafe(prefsFile()) || {}).lang || I18N.pick(app.getLocale()));
   startObsServerSafely();
   startLiveOverlayServerSafely();
   createWindow();
@@ -318,7 +339,13 @@ ipcMain.handle('app:reload', () => { if (mainWindow) mainWindow.reload(); return
 ipcMain.handle('obs:getPort', () => OBS_PORT);
 ipcMain.handle('obs:getLiveOverlayPort', () => LIVE_OVERLAY_PORT);
 ipcMain.handle('clipboard:write', (evt, text) => { clipboard.writeText(text); return true; });
-ipcMain.handle('shell:openExternal', (evt, url) => { shell.openExternal(url); return true; });
+ipcMain.handle('shell:openExternal', (evt, url) => {
+  const u = String(url || '');
+  // Liens web, ou fichiers de l'appli (cartes postales) : rien d'autre ne s'ouvre d'ici.
+  const ok = /^https?:\/\//i.test(u) || (/^file:/i.test(u) && (() => { try { return require('url').fileURLToPath(u).startsWith(app.getPath('userData')); } catch (e) { return false; } })());
+  if (ok) shell.openExternal(u);
+  return ok;
+});
 ipcMain.handle('app:getDataPath', () => dataFilePath());
 
 /* ---------------- Vérification des mises à jour ----------------
@@ -521,7 +548,7 @@ function startMobileServerSafely() {
     refreshMobileCert();
     mobileServer = startMobileAppServer(MOBILE_HTTPS_PORT, {
       appVersion: app.getVersion(),
-      getToken: getMobileToken, getPayload: buildMobilePayload, getLive: buildLivePayload,
+      getToken: getMobileToken, getPayload: buildMobilePayload, getLive: buildLivePayload, getAtc: buildAtcForEfb, getOfp: efbOfp,
       getTls: () => refreshMobileCert()
     });
     mobileServer.on('error', onMobileServerError('https', MOBILE_HTTPS_PORT));
@@ -660,8 +687,14 @@ function buildLivePayload() {
   };
 }
 
+// Dernière télémétrie reçue (état affiché sur le Stream Deck).
+let lastTelemetry = null;
+tracker.on('telemetry', d => { lastTelemetry = d; });
+tracker.on('status', d => { if (!(d && d.connected)) lastTelemetry = null; });
+
 tracker.on('status', data => mainWindow && mainWindow.webContents.send('tracker:status', data));
 tracker.on('telemetry', data => mainWindow && mainWindow.webContents.send('tracker:telemetry', data));
+tracker.on('fast-agl', data => mainWindow && mainWindow.webContents.send('tracker:fastAgl', data));
 tracker.on('flight-start', data => mainWindow && mainWindow.webContents.send('tracker:flight-start', data));
 tracker.on('flight-landed', data => mainWindow && mainWindow.webContents.send('tracker:flight-landed', data));
 tracker.on('flight-end', data => mainWindow && mainWindow.webContents.send('tracker:flight-end', data));
@@ -720,6 +753,152 @@ ipcMain.handle('update:install', () => {
 /* =========================================================
    v1.5 — Contrôleurs en ligne VATSIM + IVAO (carte et panneau ATC du Briefing)
    ========================================================= */
+// v1.7 — EFB : contrôleurs en ligne autour de l'avion (ou du départ), contours allégés pour le téléphone.
+async function buildAtcForEfb(q) {
+  const nets = { vatsim: q.get('vatsim') !== '0', ivao: q.get('ivao') !== '0' };
+  const r = await fetchAtc((url, o) => net.fetch(url, o), { networks: nets, cacheDir: path.join(app.getPath('userData'), 'atc-data'), lookupAirport });
+  const t = liveOverlayState.telemetry || {};
+  const c = liveTrack.pos || lookupAirport((t.arr || t.dep || '').toUpperCase()) || null;
+  const near = (lat, lon) => !c || (Math.abs(lat - c.lat) < 12 && Math.abs(((lon - c.lon + 540) % 360) - 180) < 18);
+  const thin = ring => ring.filter((p, i) => i % Math.max(1, Math.ceil(ring.length / 80)) === 0).map(p => [+p[0].toFixed(3), +p[1].toFixed(3)]);
+  const stations = [];
+  ['vatsim', 'ivao'].forEach(n => (((r[n] && r[n].ok) ? r[n].stations : null) || []).forEach(s => {
+    const at = s.ap || (s.pos ? { lat: s.pos[0], lon: s.pos[1] } : null) || (s.poly && s.poly[0] && s.poly[0][0] ? { lat: s.poly[0][0][0], lon: s.poly[0][0][1] } : null);
+    if (!at || !near(at.lat, at.lon)) return;
+    stations.push({ network: s.network || n, callsign: s.callsign, facility: s.facility, frequency: s.frequency, name: s.name || s.sector || null,
+      ap: s.ap ? { icao: s.ap.icao, lat: s.ap.lat, lon: s.ap.lon } : null, pos: s.pos || null, poly: s.poly ? s.poly.map(thin) : null });
+  }));
+  return { at: new Date().toISOString(), stations };
+}
+function efbOfp() {
+  const o = (readDb() || {}).ofp;
+  return o ? { dep: o.dep, arr: o.arr, callsign: o.callsign, aircraft: o.aircraft, route: o.route, airac: o.airac, cruiseAltFt: o.cruiseAltFt, generatedAt: o.generatedAt, navlog: o.navlog || [], planHtml: o.planHtml || '' } : null;
+}
+
+/* ---- v1.7 — plugin Stream Deck : code d'appairage, état affiché sur les touches, actions ---- */
+let _deckToken = null, deckUi = {};
+function deckToken() {
+  if (_deckToken) return _deckToken;
+  const p = readJsonSafe(prefsFile()) || {};
+  if (!p.deckToken) { p.deckToken = crypto.randomBytes(12).toString('hex'); try { writeJsonSafe(prefsFile(), p); } catch (e) { /* best effort */ } }
+  return (_deckToken = p.deckToken);
+}
+function deckState() {
+  const t = lastTelemetry || {}, ot = liveOverlayState.telemetry || {};
+  return {
+    ok: true, lang: I18N.lang, connected: !!liveTrack.connected, flying: t.phase === 'airborne', phase: currentDetailedPhase(),
+    altFt: t.altFt != null ? t.altFt : null, gsKt: t.gsKt != null ? t.gsKt : null, vsFpm: t.vsFpm != null ? t.vsFpm : null, hdg: t.headingDeg != null ? t.headingDeg : null,
+    etaIso: ot.etaIso || null, todMin: ot.todMin != null ? ot.todMin : null, arr: (ot.arr || '').toUpperCase() || null,
+    bets: flightBot.betState().state, boarding: !!(cabin.flight && cabin.flight.boarding), ...deckUi
+  };
+}
+const DECK_ACTIONS = new Set(['tracker', 'shot', 'copilot', 'copilot-vol+', 'copilot-vol-', 'alerts-vol+', 'alerts-vol-', 'alerts-mute', 'boarding', 'bets', 'copilot-brief']);
+function deckAction(a) {
+  if (!DECK_ACTIONS.has(a)) return { ok: false, error: 'action' };
+  if (mainWindow) mainWindow.webContents.send('deck:action', a); // mêmes fonctions que les boutons de l'appli
+  return deckState();
+}
+ipcMain.on('deck:ui', (evt, s) => { if (s && typeof s === 'object') deckUi = { copilot: !!s.copilot, copilotVol: +s.copilotVol || 0, alertsVol: +s.alertsVol || 0, alertsSound: !!s.alertsSound, stream: !!s.stream }; });
+// Installation en un clic : fichier .streamDeckPlugin (zip du dossier du plugin) avec le code
+// d'appairage, puis ouverture -> le logiciel Stream Deck propose de l'installer.
+ipcMain.handle('deck:install', async () => {
+  try {
+    const PLUGIN = 'com.flightbrief.deck.sdPlugin', src = path.join(__dirname, 'streamdeck', PLUGIN), files = [];
+    const walk = rel => fs.readdirSync(path.join(src, rel), { withFileTypes: true }).forEach(e => {
+      const r = rel ? rel + '/' + e.name : e.name;
+      if (e.isDirectory()) walk(r); else if (r !== 'config.js') files.push({ name: PLUGIN + '/' + r, data: fs.readFileSync(path.join(src, r)) });
+    });
+    walk('');
+    files.push({ name: PLUGIN + '/config.js', data: Buffer.from(`window.FB_DECK = ${JSON.stringify({ port: LIVE_OVERLAY_PORT, token: deckToken(), lang: I18N.lang })};\n`) });
+    const outDir = path.join(app.getPath('userData'), 'streamdeck');
+    fs.mkdirSync(outDir, { recursive: true });
+    const out = path.join(outDir, 'FlightBrief.streamDeckPlugin');
+    fs.writeFileSync(out, require('./zip').zip(files));
+    const err = await shell.openPath(out); // ouvert par le logiciel Stream Deck s'il est installé
+    if (err) shell.showItemInFolder(out);
+    return { ok: true, file: out, opened: !err };
+  } catch (e) { return { ok: false, error: e.message || String(e) }; }
+});
+ipcMain.handle('deck:newToken', () => { _deckToken = null; const p = readJsonSafe(prefsFile()) || {}; delete p.deckToken; try { writeJsonSafe(prefsFile(), p); } catch (e) { /* best effort */ } return deckToken(); });
+
+/* ---- v1.7 — gratte-pays : pays de chaque aéroport (ville la plus proche, hors ligne) ---- */
+const cabinGeo = require('./cabin-geo');
+let _countryTotals = null;
+const countryOfAirport = a => { const c = a && cabinGeo.nearest(a.lat, a.lon, 200); return c ? c.cc : null; };
+ipcMain.handle('geo:countries', (evt, icaos) => {
+  cabinGeo.load(path.join(__dirname, 'renderer'));
+  // Total par pays : aéroports avec une piste revêtue d'au moins 2 500 ft (calculé une fois).
+  if (!_countryTotals) {
+    _countryTotals = {};
+    try { _runwayIndex = _runwayIndex || JSON.parse(fs.readFileSync(findDataFile('runways.json'), 'utf-8')); } catch (e) { _runwayIndex = {}; }
+    for (const a of loadAirportIndex().values()) {
+      if (bestRunwayFt(_runwayIndex[a.icao], true) < 2500) continue;
+      const cc = countryOfAirport(a);
+      if (cc) _countryTotals[cc] = (_countryTotals[cc] || 0) + 1;
+    }
+  }
+  const byIcao = {}, names = {};
+  (Array.isArray(icaos) ? icaos : []).slice(0, 5000).forEach(ic => {
+    const cc = countryOfAirport(lookupAirport(String(ic).toUpperCase()));
+    if (cc) { byIcao[ic] = cc; names[cc] = names[cc] || cabinGeo.countryName(cc); }
+  });
+  return { byIcao, names, totals: _countryTotals };
+});
+
+/* ---- v1.7 — events VATSIM (API publique, gardés 15 min) : ICAO -> event ---- */
+let _vatsimEvents = null;
+async function vatsimEvents() {
+  if (_vatsimEvents && Date.now() - _vatsimEvents.at < 15 * 60000) return _vatsimEvents.map;
+  try {
+    const res = await net.fetch('https://my.vatsim.net/api/v2/events/latest');
+    const j = res.ok ? await res.json() : { data: [] }, map = new Map();
+    (j.data || []).filter(e => e.type !== 'Controller Examination').forEach(e => (e.airports || []).forEach(a => {
+      const ic = String(a.icao || '').toUpperCase();
+      if (/^[A-Z]{4}$/.test(ic) && !map.has(ic)) map.set(ic, { name: String(e.name || '').slice(0, 80), start: Date.parse(e.start_time), end: Date.parse(e.end_time), link: /^https:\/\//.test(e.link || '') ? e.link : null });
+    }));
+    _vatsimEvents = { at: Date.now(), map };
+    return map;
+  } catch (e) { return _vatsimEvents ? _vatsimEvents.map : new Map(); }
+}
+
+/* ---- v1.7 — « Où voler aujourd'hui ? » : destinations selon le temps dispo, l'avion et la météo réelle ---- */
+let _runwayIndex = null;
+ipcMain.handle('fly:suggest', async (evt, o) => {
+  o = o || {};
+  const from = lookupAirport(String(o.from || '').toUpperCase());
+  if (!from) return { ok: false, error: 'Aéroport de départ inconnu : indique un code OACI (ou ton aéroport de base dans le Profil).' };
+  try { _runwayIndex = _runwayIndex || JSON.parse(fs.readFileSync(findDataFile('runways.json'), 'utf-8')); } catch (e) { _runwayIndex = {}; }
+  // ATC en ligne (VATSIM + IVAO) et events VATSIM : en parallèle, sans bloquer si un service ne répond pas.
+  const timeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
+  const [atcData, events] = await Promise.all([
+    o.atc === false ? null : timeout(fetchAtc((url, op) => net.fetch(url, op), { networks: { vatsim: true, ivao: true }, cacheDir: path.join(app.getPath('userData'), 'atc-data'), lookupAirport }).catch(() => null), 8000),
+    o.events === false ? null : timeout(vatsimEvents(), 8000)
+  ]);
+  const atc = new Map();
+  ['vatsim', 'ivao'].forEach(netw => ((atcData && atcData[netw] && atcData[netw].ok && atcData[netw].stations) || []).forEach(st => {
+    if (!st.ap || !['DEL', 'GND', 'TWR', 'APP', 'DEP'].includes(st.facility)) return;
+    const e = atc.get(st.ap.icao) || { nets: [], facs: [] };
+    if (!e.nets.includes(netw)) e.nets.push(netw);
+    if (!e.facs.includes(st.facility)) e.facs.push(st.facility);
+    atc.set(st.ap.icao, e);
+  }));
+  const r = suggest(loadAirportIndex().values(), _runwayIndex, {
+    from, minutes: Math.max(20, Math.min(900, +o.minutes || 60)), profile: o.profile, speedKt: +o.speedKt || null,
+    visited: new Set((o.visited || []).map(String)), count: 12, mode: ['new', 'fav', 'any'].includes(o.mode) ? o.mode : 'new',
+    favCounts: o.favCounts && typeof o.favCounts === 'object' ? o.favCounts : {}, atc, preferAtc: !!o.preferAtc, events: events || new Map()
+  });
+  // Météo réelle des candidats : on garde de préférence les terrains qui publient un METAR.
+  let wx = {};
+  try {
+    const ids = [from.icao, ...r.list.map(c => c.icao)].join(',');
+    const res = await net.fetch(`https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(ids)}&format=json`);
+    (res.ok ? await res.json() : []).forEach(m => { wx[m.icaoId] = { raw: m.rawOb, cat: m.fltCat || null, wdir: m.wdir, wspd: m.wspd, wgst: m.wgst || null }; });
+  } catch (e) { wx = {}; }
+  const withWx = r.list.filter(c => wx[c.icao] || c.event); // un event passe même sans METAR
+  const list = pickDiverse(withWx.length >= 3 ? withWx : r.list, 3).map(c => ({ ...c, wx: wx[c.icao] || null }));
+  return { ok: true, from: { icao: from.icao, name: from.name, wx: wx[from.icao] || null }, targetNm: r.targetNm, list, atcCount: atc.size, eventsCount: events ? events.size : null };
+});
+
 ipcMain.handle('atc:get', (evt, opts) => fetchAtc((url, o) => net.fetch(url, o), {
   networks: (opts && opts.networks) || { vatsim: true, ivao: false }, force: !!(opts && opts.force),
   cacheDir: path.join(app.getPath('userData'), 'atc-data'), lookupAirport
@@ -739,7 +918,6 @@ function pushAlert(a) {
   const ev = { id: ++alertSeq, ts: Date.now(), ...a };
   alertsQueue.push(ev);
   alertsQueue = alertsQueue.filter(x => Date.now() - x.ts < 5 * 60000).slice(-40);
-  if (mainWindow) mainWindow.webContents.send('alerts:pushed', ev);
   return ev;
 }
 function alertsSince(sinceId) {
@@ -762,6 +940,7 @@ function getTwitchAuth() {
   return twitchAuth;
 }
 const twitchChat = new TwitchChat();
+twitchChat.translate = T; // messages du bot dans la langue de l'appli
 let twitchStatus = { state: 'disconnected' };
 let twitchConfig = mergeTwitchConfig(null);
 let lastLanding = null; // { fpm, icao, gForce, grade, bounces, at }
@@ -807,7 +986,7 @@ const flightBot = new FlightBot(twitchChat, {
 function twitchPublicState() {
   return {
     status: twitchStatus, config: twitchConfig, auth: getTwitchAuth().publicInfo(),
-    bet: flightBot.betState(), leaderboard: flightBot.leaderboard(10), log: flightBot.log.slice(0, 25),
+    bet: flightBot.betState(), prediction: prediction.publicState(), leaderboard: flightBot.leaderboard(10), log: flightBot.log.slice(0, 25),
     betsResolved: (flightBot.stats.history || []).length
   };
 }
@@ -823,6 +1002,17 @@ twitchChat.on('auth-failed', async () => {
   if (ok) applyTwitchConnection(); else { getTwitchAuth().logout(); applyTwitchConnection(); }
 });
 flightBot.on('state', sendTwitchState);
+// v1.7 — Prédiction Twitch (points de chaîne) calquée sur les paris d'atterrissage du bot.
+const prediction = new Prediction({
+  fetch: (u, o) => net.fetch(u, o), getAuth: () => getBroadcasterAuth(), tr: T,
+  log: text => { flightBot._pushLog({ kind: 'bet', text }); sendTwitchState(); }
+});
+flightBot.on('bet', (what, d) => {
+  if (what === 'cancel') return prediction.cancel().then(sendTwitchState);
+  if (!twitchConfig.bets.prediction) return;
+  const p = what === 'open' ? prediction.open() : what === 'lock' ? prediction.lock() : what === 'resolve' ? prediction.resolve(d.fpm) : null;
+  if (p) p.then(sendTwitchState);
+});
 flightBot.on('alert', a => pushAlert(a));
 function applyTwitchConnection() {
   flightBot.setConfig(twitchConfig);
@@ -862,7 +1052,6 @@ ipcMain.handle('twitch:startLogin', async () => {
 ipcMain.handle('twitch:checkClientId', (evt, id) => getTwitchAuth().checkClientId(id));
 ipcMain.handle('twitch:cancelLogin', () => { getTwitchAuth().cancelPoll(); _twitchDevice = null; return true; });
 ipcMain.handle('twitch:logout', () => { getTwitchAuth().logout(); applyTwitchConnection(); sendTwitchState(); return twitchPublicState(); });
-ipcMain.handle('twitch:reconnect', () => { applyTwitchConnection(); return true; });
 ipcMain.handle('twitch:bet', (evt, action) => {
   if (action === 'open') flightBot.openBets('manuel');
   else if (action === 'lock') flightBot.lockBets('manuel');
@@ -894,6 +1083,173 @@ tracker.on('flight-landed', d => {
 
 
 /* =========================================================
+   v1.7 — « À bord » : passagers du chat, miles, passeport, survols, croisière (cabin.js)
+   ========================================================= */
+const postcardDir = () => path.join(app.getPath('userData'), 'postcards');
+const botPrefix = t => (twitchConfig.prefixMessages && (twitchConfig.botName || '').trim() ? `[${twitchConfig.botName.trim()}] ${t}` : t);
+const cabin = new Cabin({
+  file: path.join(app.getPath('userData'), 'cabin.json'),
+  rendererDir: path.join(__dirname, 'renderer'),
+  say: text => { if (twitchConfig.enabled) twitchChat.say(botPrefix(text)); flightBot._pushLog({ kind: 'reply', text, inChat: twitchChat.canSpeak() }); },
+  reply: (text, user) => { if (twitchConfig.enabled) flightBot.reply(text, { user }); },
+  alert: a => { if (twitchConfig.enabled) pushAlert(a); },
+  lookupAirport: icao => lookupAirport(icao),
+  getBriefing: () => ({ dep: liveState.dep, arr: liveState.arr, callsign: liveState.callsign, aircraft: liveState.aircraft }),
+  getPhase: () => currentDetailedPhase()
+});
+const cabinOn = () => twitchConfig.enabled && cabin.cfg.enabled;
+const sendCabinState = (() => {
+  let t = null;
+  return () => { if (t) return; t = setTimeout(() => { t = null; if (mainWindow) mainWindow.webContents.send('cabin:state', cabin.publicState()); }, 250); };
+})();
+cabin.on('state', sendCabinState);
+twitchChat.on('message', m => { if (cabinOn()) cabin.onMessage(m); });
+let _trackerWasConnected = false;
+tracker.on('status', d => {
+  const on = !!(d && d.connected);
+  if (on && !_trackerWasConnected) {
+    if (cabinOn() && !cabin.flight) cabin.openBoarding(false);
+    if (cabin.cfg.title.autoPropose && mainWindow) mainWindow.webContents.send('cabin:proposeTitle', buildTitleSuggestion());
+  }
+  if (!on && _trackerWasConnected && cabin.flight && !cabin.flight.landedAt) cabin.abort();
+  if (!on && _trackerWasConnected) flightBot.cancelBets(); // tracker coupé avant le toucher : la prédiction est remboursée
+  _trackerWasConnected = on;
+});
+tracker.on('telemetry', d => { if (cabinOn()) cabin.onTick(d, currentDetailedPhase()); });
+tracker.on('flight-landed', d => {
+  if (!cabinOn()) return;
+  const rec = cabin.onLanded({ icao: d.arr && d.arr.icao });
+  if (rec && mainWindow) mainWindow.webContents.send('cabin:landed', { ...rec, landingRate: d.landingRate, startedAt: liveTrack.startedAt });
+});
+tracker.on('flight-end', () => cabin.onFlightEnd());
+
+ipcMain.handle('cabin:getState', () => cabin.publicState());
+ipcMain.handle('cabin:setConfig', (evt, c) => { cabin.setConfig(c); return cabin.publicState(); });
+ipcMain.on('cabin:setPlan', (evt, p) => cabin.setPlan(p));
+ipcMain.handle('cabin:boarding', (evt, action) => {
+  if (action === 'open') cabin.openBoarding(true);
+  else if (action === 'close') cabin.closeBoarding();
+  else if (action === 'end') cabin.abort();
+  return cabin.publicState();
+});
+ipcMain.handle('cabin:ranking', () => cabin.ranking(500));
+ipcMain.handle('cabin:viewer', (evt, user) => cabin.viewerDetail(String(user || '')));
+ipcMain.handle('cabin:removeViewer', (evt, user) => { cabin.removeViewer(String(user || '')); return true; });
+ipcMain.handle('cabin:forgetCity', (evt, user) => { cabin.forgetCity(String(user || '')); return true; });
+ipcMain.handle('cabin:flights', () => cabin.data.flights.slice(0, 100));
+ipcMain.handle('cabin:flightInfo', (evt, r) => cabin.flightRecordAround(+(r && r.from) || 0, +(r && r.to) || Date.now()));
+// Carte postale dessinée par l'interface (canvas) puis enregistrée ici en JPEG.
+ipcMain.handle('cabin:savePostcard', (evt, p) => {
+  try {
+    const m = String((p && p.dataUrl) || '').match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+    if (!m || m[1].length > 12e6) return { ok: false, error: 'Image invalide.' };
+    const key = String(+p.key || Date.now()), name = `carte-${key}.jpg`;
+    fs.mkdirSync(postcardDir(), { recursive: true });
+    fs.writeFileSync(path.join(postcardDir(), name), Buffer.from(m[1], 'base64'));
+    cabin.setPostcard(+key, name);
+    pushAlert({ type: 'cabin-postcard', title: 'Carte postale', data: { url: '/postcards/' + name, city: p.city || null } });
+    return { ok: true, name, file: require('url').pathToFileURL(path.join(postcardDir(), name)).href };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('cabin:postcardUrl', (evt, name) => /^[A-Za-z0-9_-]{1,64}\.jpg$/.test(name || '') && fs.existsSync(path.join(postcardDir(), name)) ? require('url').pathToFileURL(path.join(postcardDir(), name)).href : null);
+ipcMain.handle('cabin:openPostcards', () => { fs.mkdirSync(postcardDir(), { recursive: true }); shell.openPath(postcardDir()); return true; });
+ipcMain.handle('shots:dataUrl', (evt, name) => {
+  try {
+    if (!name || /[\\/]/.test(name)) return null;
+    const buf = fs.readFileSync(path.join(getShots().dir, name));
+    return 'data:image/' + (/\.png$/i.test(name) ? 'png' : 'jpeg') + ';base64,' + buf.toString('base64');
+  } catch (e) { return null; }
+});
+
+/* ---- Titre du stream : proposé au lancement du vol, envoyé seulement après validation ---- */
+let broadcasterAuth = null;
+function getBroadcasterAuth() {
+  if (!broadcasterAuth) broadcasterAuth = new TwitchAuth((u, o) => net.fetch(u, o), path.join(app.getPath('userData'), 'twitch-channel.bin'), twitchCrypt, 'channel:manage:broadcast ' + PREDICTION_SCOPE);
+  if (twitchConfig.clientId) broadcasterAuth.setClientId(twitchConfig.clientId); // même application Twitch que le bot
+  return broadcasterAuth;
+}
+// Remplit le modèle de titre ; les morceaux dont toutes les variables sont vides disparaissent
+// avec leur séparateur (« · » ou « | »), et une flèche sans ville d'un côté est retirée.
+function fillTitleTemplate(tpl, vals) {
+  const parts = String(tpl).split(/(\s*[·|]\s*)/), out = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const seg = parts[i], keys = [...seg.matchAll(/\{(\w+)\}/g)].map(m => m[1]);
+    let txt = seg.replace(/\{(\w+)\}/g, (m, k) => vals[k] != null ? vals[k] : m).replace(/^\s*→\s*|\s*→\s*$/g, '').trim();
+    const bare = !txt.replace(/[\s\p{Extended_Pictographic}\uFE0F\u200D]/gu, '');
+    if (keys.length && keys.every(k => !vals[k]) && i > 0) continue;
+    if (!txt) continue;
+    out.push({ sep: parts[i - 1], txt, bare });
+  }
+  return out.map((o, i) => (i ? (out[i - 1].bare ? ' ' : (o.sep || ' · ')) : '') + o.txt).join('').replace(/\s{2,}/g, ' ').trim();
+}
+function buildTitleSuggestion() {
+  const ls = liveState || {};
+  const city = (icao, name) => cabin.cityForIcao(icao) || (name || '').replace(/\s*(international\s*)?airport.*$/i, '').trim() || (icao || '').toUpperCase();
+  const vals = {
+    indicatif: (ls.callsign || '').trim(), dep: (ls.dep || '').toUpperCase(), arr: (ls.arr || '').toUpperCase(),
+    depart: ls.dep ? city(ls.dep, ls.depName) : '', arrivee: ls.arr ? city(ls.arr, ls.arrName) : '', avion: (ls.aircraft || '').trim()
+  };
+  const t = fillTitleTemplate(T(cabin.cfg.title.template || ''), vals); // modèle par défaut traduit, modèle perso inchangé
+  return { title: t.slice(0, 140), category: cabin.cfg.title.category || '', channel: twitchConfig.channel || '', auth: getBroadcasterAuth().publicInfo() };
+}
+ipcMain.handle('cabin:titleSuggest', () => buildTitleSuggestion());
+ipcMain.handle('cabin:channelAuthInfo', () => getBroadcasterAuth().publicInfo());
+let _chanDevice = null;
+ipcMain.handle('cabin:channelLogin', async () => {
+  try {
+    const a = getBroadcasterAuth();
+    _chanDevice = await a.startDevice(twitchConfig.clientId);
+    shell.openExternal(_chanDevice.verificationUri);
+    a.pollDevice(_chanDevice)
+      .then(info => { _chanDevice = null; if (mainWindow) mainWindow.webContents.send('cabin:channelLoginResult', { ok: true, ...info }); })
+      .catch(err => { _chanDevice = null; if (mainWindow) mainWindow.webContents.send('cabin:channelLoginResult', { ok: false, error: err.message }); });
+    return { ok: true, userCode: _chanDevice.userCode };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('cabin:channelCancel', () => { getBroadcasterAuth().cancelPoll(); _chanDevice = null; return true; });
+ipcMain.handle('cabin:channelLogout', () => { getBroadcasterAuth().logout(); return getBroadcasterAuth().publicInfo(); });
+ipcMain.handle('cabin:setTitle', async (evt, p) => {
+  const a = getBroadcasterAuth();
+  const title = String((p && p.title) || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 140);
+  if (!title) return { ok: false, error: 'Le titre est vide.' };
+  const token = await a.ensureToken().catch(() => null);
+  if (!token || !a.data.userId) return { ok: false, error: 'Connecte d\'abord le compte de ta chaîne (bouton ci-dessous).' };
+  const headers = { Authorization: 'Bearer ' + token, 'Client-Id': a.clientId(), 'Content-Type': 'application/json' };
+  const body = { title };
+  try {
+    const cat = String((p && p.category) || '').trim();
+    if (cat) {
+      const r = await net.fetch('https://api.twitch.tv/helix/games?name=' + encodeURIComponent(cat), { headers });
+      const j = await r.json().catch(() => ({}));
+      if (j.data && j.data[0]) body.game_id = j.data[0].id;
+    }
+    const res = await net.fetch('https://api.twitch.tv/helix/channels?broadcaster_id=' + encodeURIComponent(a.data.userId), { method: 'PATCH', headers, body: JSON.stringify(body) });
+    if (res.status === 204 || res.ok) return { ok: true, title, category: body.game_id ? (p.category || '') : null };
+    const j = await res.json().catch(() => ({}));
+    if (res.status === 401) return { ok: false, error: 'Autorisation refusée : reconnecte le compte de ta chaîne.' };
+    return { ok: false, error: j.message || ('Twitch a répondu HTTP ' + res.status) };
+  } catch (e) { return { ok: false, error: 'Twitch injoignable : ' + (e.message || e) }; }
+});
+
+/* ---- Carnet de vol public (site statique, sans serveur ni compte) ---- */
+ipcMain.handle('cabin:chooseExportDir', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, { title: T('Dossier du carnet de vol public'), properties: ['openDirectory', 'createDirectory'] });
+  return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.handle('cabin:exportPublic', async (evt, opts) => {
+  try {
+    const dir = String((opts && opts.dir) || '');
+    if (!dir) return { ok: false, error: 'Choisis d\'abord un dossier.' };
+    const res = exportPublicLogbook({
+      dir, rendererDir: path.join(__dirname, 'renderer'), db: readDb() || {}, cabin: cabin.publicExport(), postcardDir: postcardDir(),
+      options: (opts && opts.options) || {}, version: app.getVersion()
+    });
+    return { ok: true, ...res };
+  } catch (e) { return { ok: false, error: e.message || String(e) }; }
+});
+ipcMain.handle('cabin:openDir', (evt, dir) => { if (dir && fs.existsSync(dir)) shell.openPath(dir); return true; });
+
+/* =========================================================
    v1.6 — Captures d'écran des vols (voir shots.js)
    ========================================================= */
 let shots = null;
@@ -913,7 +1269,7 @@ ipcMain.handle('shots:stats', () => getShots().stats());
 ipcMain.handle('shots:openFolder', () => { fs.mkdirSync(getShots().dir, { recursive: true }); shell.openPath(getShots().dir); return true; });
 ipcMain.handle('shots:openFile', (evt, name) => { if (name && !/[\\/]/.test(name)) shell.openPath(path.join(getShots().dir, name)); return true; });
 ipcMain.handle('shots:import', async () => {
-  const r = await dialog.showOpenDialog(mainWindow, { title: 'Ajouter des images au vol', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }] });
+  const r = await dialog.showOpenDialog(mainWindow, { title: T('Ajouter des images au vol'), properties: ['openFile', 'multiSelections'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }] });
   if (r.canceled) return [];
   return getShots().importFiles(r.filePaths);
 });
@@ -987,7 +1343,7 @@ function watchOnSample(s) {
     }
     try {
       if (Notification.isSupported()) {
-        const n = new Notification({ title: 'FlightBrief — le tracker ne tourne pas', body: s.onGround ? "Ton avion roule mais le vol n'est pas suivi. Clique pour lancer le tracker." : "Tu voles mais le vol n'est pas suivi ! Clique pour lancer le tracker.", silent: true });
+        const n = new Notification({ title: T('FlightBrief — le tracker ne tourne pas'), body: T(s.onGround ? "Ton avion roule mais le vol n'est pas suivi. Clique pour lancer le tracker." : "Tu voles mais le vol n'est pas suivi ! Clique pour lancer le tracker."), silent: true });
         n.on('click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); mainWindow.webContents.send('watch:focus-tracker'); } });
         n.show();
       }

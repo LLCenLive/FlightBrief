@@ -100,7 +100,7 @@ function renderEtaTiles(r){
   if(!tod) return;
   if(!r){ tod.textContent = '—'; eta.textContent = '—'; src.textContent = ''; return; }
   tod.textContent = r.todState === 'passed' ? 'En descente' : r.todMin != null ? (r.todMin < 1 ? 'Maintenant' : `dans ${fmtMinShort(r.todMin)}${r.todNm != null ? ' · ' + Math.round(r.todNm) + ' NM' : ''}`) : '—';
-  eta.textContent = r.etaIso ? `${new Date(r.etaIso).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })} · ${Math.round(r.remainingNm)} NM` : '—';
+  eta.textContent = r.etaIso ? `${new Date(r.etaIso).toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit' })} · ${Math.round(r.remainingNm)} NM` : '—';
   src.textContent = r.source === 'ofp' ? 'TOD et distance restante calculés le long de la route de l\'OFP SimBrief.'
     : r.source === 'direct' ? 'Sans OFP SimBrief pour ce vol : distance directe jusqu\'à l\'arrivée, début de descente estimé sur une pente de 3°.' : '';
 }
@@ -135,26 +135,36 @@ const ALERT_THEMES = {
 // Cartes d'événement : couleur propre à chaque type ('' = couleur par défaut) et titre modifiable.
 const ALERT_CARD_TYPES = [
   { k: 'landing', icon: '🛬', label: 'Atterrissage', def: '#54d6e8', title: 'Atterrissage', grade: true },
-  { k: 'bet', icon: '🎯', label: 'Paris', def: '#ffd166' },
+  { k: 'bet', icon: '🎯', label: 'Paris d\'atterrissage', def: '#ffd166' },
   { k: 'achievement', icon: '🏆', label: 'Succès', def: '#ffd166', title: 'Succès débloqué' },
-  { k: 'chat', icon: '💬', label: 'Réponse du bot', def: '#9146ff' }
+  { k: 'chat', icon: '💬', label: 'Réponse du bot', def: '#9146ff' },
+  { k: 'cabin', icon: '🎫', label: 'À bord', def: '#39e88f' }
 ];
-function defaultAlertCards(){ return { landing: { color: '', byGrade: true, label: '' }, bet: { color: '', label: '' }, achievement: { color: '', label: '' }, chat: { color: '', label: '' } }; }
+function defaultAlertCards(){ return { landing: { color: '', byGrade: true, label: '' }, bet: { color: '', label: '' }, achievement: { color: '', label: '' }, chat: { color: '', label: '' }, cabin: { color: '', label: '' } }; }
 function defaultAlertStyle(theme){
   const t = ALERT_THEMES[theme] || ALERT_THEMES.flightbrief;
   return { theme: theme || 'flightbrief', bg: t.bg, bg2: t.bg2, gradient: t.bg2 !== t.bg, text: t.text, sub: t.sub, opacity: t.opacity, accent: t.accent, accentMode: 'type',
     font: "'Space Grotesk',sans-serif", width: 420, textScale: 100, radius: 18, animation: 'drop', border: true, borderColor: theme === 'light' ? '#0f1720' : '#e7edf2', borderWidth: 1,
     stripe: true, shadow: true, blur: t.blur, timer: true, sound: false, volume: 60, matchLive: false, cards: defaultAlertCards() };
 }
+// Réglages stockés dans db : on complète les valeurs manquantes EN PLACE, sans jamais remplacer
+// l'objet. (v1.6.2) Avant, chaque lecture recréait l'objet : les curseurs gardaient une référence
+// vers l'ancien, si bien qu'après le premier réglage le volume ne changeait plus du tout.
+function cfgIn(parent, key, defaults){
+  let o = parent[key];
+  if(!o || typeof o !== 'object' || Array.isArray(o)) o = parent[key] = {};
+  for(const k in defaults){
+    const d = defaults[k];
+    if(!(k in o)) o[k] = (d && typeof d === 'object' && !Array.isArray(d)) ? { ...d } : d;
+    else if(d && typeof d === 'object' && !Array.isArray(d)) cfgIn(o, k, d);
+  }
+  return o;
+}
 function alertsCfg(){
-  db.alertsOverlay = Object.assign({ durationSec: 9, position: 'top-right', scale: 100, types: { landing: true, bet: true, achievement: true, chat: true } }, db.alertsOverlay || {});
-  db.alertsOverlay.types = Object.assign({ landing: true, bet: true, achievement: true, chat: true }, db.alertsOverlay.types || {});
-  const st = db.alertsOverlay.style || {};
-  db.alertsOverlay.style = Object.assign(defaultAlertStyle(st.theme), st);
-  // Fusion EN PLACE (les objets doivent rester les mêmes : le formulaire garde des références).
-  const def = defaultAlertCards(), cards = db.alertsOverlay.style.cards = (st.cards && typeof st.cards === 'object') ? st.cards : {};
-  Object.keys(def).forEach(k => { const cur = cards[k] || (cards[k] = {}); Object.keys(def[k]).forEach(x => { if(!(x in cur)) cur[x] = def[k][x]; }); });
-  return db.alertsOverlay;
+  const c = cfgIn(db, 'alertsOverlay', { durationSec: 9, position: 'top-right', scale: 100, types: { landing: true, bet: true, achievement: true, chat: true, cabin: true } });
+  const raw = c.style && typeof c.style === 'object' ? c.style : null;
+  cfgIn(c, 'style', defaultAlertStyle(raw && raw.theme));
+  return c;
 }
 function hexToRgbaStr(hex, pct){
   const h = String(hex || '#e7edf2').replace('#', ''), n = h.length === 3 ? h.split('').map(c => c + c).join('') : h.padEnd(6, '0');
@@ -171,6 +181,7 @@ function effectiveAlertStyle(){
     border: lo.border !== false, borderColor: lo.borderColor || '#ffffff', borderAlpha: 22, borderWidth: 1, shadow: lo.shadow !== false, blur: lo.blur !== false };
 }
 function alertsPayload(){ const c = alertsCfg(); return { ...c, style: effectiveAlertStyle() }; }
+FBv15.alertsCfg = () => alertsCfg(); // v1.7 : volumes des alertes pilotés depuis le Stream Deck
 function landingAlertData(d){
   const cat = currentFlightCategory(d);
   const zone = d.zone || (d.touchdown && d.touchdown.zone) || null;
@@ -189,11 +200,13 @@ function landingAlertData(d){
 FBv15.onLanded = function(d){
   if(!d || d.landingRate == null) return;
   const a = landingAlertData(d);
+  FBv15.lastLandingCard = a; // repris par la carte postale (v1.7)
   showLandingToast(a);
   if(window.alerts && alertsCfg().types.landing) window.alerts.push({ type: 'landing', title: 'Atterrissage', data: a });
   if(window.twitch) window.twitch.landingInfo({ fpm: a.fpm, icao: a.icao, gForce: a.gForce, grade: a.letter, bounces: a.bounces });
 };
 
+FBv15.fx = (...a) => fx(...a);
 function fx(html, cls, ms){
   const stack = $('fxStack');
   if(!stack) return null;
@@ -335,7 +348,7 @@ function achievementStats(){
   s.botReady = !!(db.twitch && db.twitch.clientId && db.twitch.enabled);
   return s;
 }
-const fmtInt = v => Math.floor(v).toLocaleString('fr-FR');
+const fmtInt = v => Math.floor(v).toLocaleString(FBI18N.locale());
 const ACHIEVEMENTS = [
   // Carnet de vol
   { id:'first-flight', cat:'carnet', tier:'bronze', icon:'🛫', title:'Premier vol', desc:'Enregistrer un premier vol.', target:1, val:s => s.flights },
@@ -509,7 +522,7 @@ function achTile(a, s, compact){
       <div class="ach-name">${esc(a.title)}</div>
       ${compact ? '' : `<div class="ach-desc">${esc(a.desc)}</div>`}
       <div class="ach-tier"><span>${t.label}</span><b>+${t.xp} XP</b></div>
-      ${unlocked ? `<div class="ach-date">Débloqué le ${new Date(unlocked).toLocaleDateString('fr-FR')}</div>`
+      ${unlocked ? `<div class="ach-date">Débloqué le ${new Date(unlocked).toLocaleDateString(FBI18N.locale())}</div>`
         : compact ? '' : `<div class="ach-prog"><i style="width:${pct}%"></i></div><div class="ach-date">${f(v)} / ${f(a.target)}</div>`}
     </div>
   </div>`;
@@ -555,7 +568,7 @@ FBv15.disposeApproach3D = function(){
   if(ap3d.controls){ ap3d.controls.dispose(); ap3d.controls = null; }
   if(ap3d.scene){ ap3d.scene.traverse(o => { if(o.geometry) o.geometry.dispose(); if(o.material){ (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); } }); }
   if(ap3d.renderer){ ap3d.renderer.dispose(); if(ap3d.renderer.domElement.parentNode) ap3d.renderer.domElement.remove(); }
-  ap3d.renderer = null; ap3d.scene = null; ap3d.camera = null; ap3d.curve = null; ap3d.plane = null;
+  ap3d.renderer = null; ap3d.scene = null; ap3d.camera = null; ap3d.curve = null; ap3d.plane = null; ap3d.zoom = null;
 };
 FBv15.renderApproach3D = async function(f){
   FBv15.disposeApproach3D();
@@ -567,7 +580,7 @@ FBv15.renderApproach3D = async function(f){
   const z = t && t.zone;
   if(!window.THREE || !t || !z || z.thresholdLat == null || !Array.isArray(td.path)){
     sec.classList.toggle('hidden', !t);
-    if(t) $('approach3dHint').textContent = !window.THREE ? 'Moteur 3D indisponible (connexion Internet nécessaire au premier chargement).' : 'Piste non identifiée pour ce vol : approche 3D indisponible.';
+    if(t) $('approach3dHint').textContent = !window.THREE ? 'Moteur 3D indisponible (fichier renderer/vendor/three manquant).' : 'Piste non identifiée pour ce vol : approche 3D indisponible.';
     if(t) $('approach3d').innerHTML = '';
     return;
   }
@@ -687,8 +700,13 @@ function buildApproachScene(){
 
   // Caméra + contrôles
   let controls = null;
-  if(THREE.OrbitControls){ controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI / 2 - 0.02; }
-  Object.assign(ap3d, { renderer, scene, camera, controls, curve, plane, pts, aimM, tan3, ux, un, elevFt, span });
+  let zoom = null;
+  if(THREE.OrbitControls){
+    controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    controls.minDistance = 40; controls.maxDistance = Math.max(8000, span * 6);
+    if(typeof attachSmoothZoom === 'function') zoom = attachSmoothZoom(controls, camera, renderer.domElement, { floor: 0, speed: 0.0016 });
+  }
+  Object.assign(ap3d, { renderer, scene, camera, controls, zoom, curve, plane, pts, aimM, tan3, ux, un, elevFt, span, dirty: 2 });
   ap3d.u = 0; $('ap3dScrub').value = 0;
   $('ap3dScrub').oninput = e => { ap3d.playing = false; $('ap3dPlay').textContent = '▶ Rejouer'; ap3d.u = e.target.value / 1000; placePlane(); };
   $('ap3dView').value = ap3d.view;
@@ -697,7 +715,7 @@ function buildApproachScene(){
   ap3d.ro = new ResizeObserver(() => {
     const w = host.clientWidth, h = host.clientHeight;
     if(!w || !h || !ap3d.renderer) return;
-    ap3d.renderer.setSize(w, h); ap3d.camera.aspect = w / h; ap3d.camera.updateProjectionMatrix();
+    ap3d.renderer.setSize(w, h); ap3d.camera.aspect = w / h; ap3d.camera.updateProjectionMatrix(); ap3d.dirty = 2;
   });
   ap3d.ro.observe(host);
   let last = performance.now();
@@ -710,9 +728,15 @@ function buildApproachScene(){
       placePlane();
       if(ap3d.u >= 1){ ap3d.playing = false; $('ap3dPlay').textContent = '▶ Rejouer'; }
     }
-    if(ap3d.view === 'pilot') pilotCam();
-    else if(ap3d.controls) ap3d.controls.update();
-    renderer.render(scene, camera);
+    // Rendu seulement quand quelque chose bouge (lecture, souris, zoom, réglage).
+    let changed = ap3d.playing || ap3d.dirty > 0;
+    if(ap3d.dirty > 0) ap3d.dirty--;
+    if(ap3d.view === 'pilot'){ if(changed) pilotCam(); }
+    else {
+      if(ap3d.zoom && ap3d.zoom.step()) changed = true;
+      if(ap3d.controls && ap3d.controls.update()) changed = true;
+    }
+    if(changed) renderer.render(scene, camera);
   };
   ap3d.raf = requestAnimationFrame(loop);
 }
@@ -730,6 +754,7 @@ function makePlaneMesh(THREE){
 }
 function placePlane(){
   if(!ap3d.curve) return;
+  ap3d.dirty = 2;
   const u = Math.max(0.0001, Math.min(1, ap3d.u));
   const p = ap3d.curve.getPointAt(u);
   const tan = ap3d.curve.getTangentAt(Math.min(0.999, u)).normalize();
@@ -767,6 +792,8 @@ function pilotCam(){
 }
 function setCamera(view){
   ap3d.view = view;
+  ap3d.dirty = 2;
+  if(ap3d.zoom) ap3d.zoom.cancel();
   if(!ap3d.camera || !ap3d.curve) return;
   const start = ap3d.curve.getPointAt(0), end = ap3d.curve.getPointAt(1);
   const len = ap3d.span || start.distanceTo(end);
@@ -797,6 +824,12 @@ FBv15.approachPlayToggle = () => {
    5. ATC EN LIGNE (VATSIM + IVAO) — carte du Briefing + liste
    ========================================================= */
 let atcTimer = null, atcData = null, atcLayer = null, atcBusy = false;
+// Étiquettes et badges ATC (éléments HTML) : seuls ceux proches de la vue, et à un niveau de zoom
+// où ils sont lisibles, sont posés sur la carte. Dézoomé, les terrains contrôlés deviennent de
+// simples points dessinés sur le canvas. Avant, des centaines de badges du monde entier étaient
+// recalculés à chaque image du zoom : c'était la principale cause de saccades de la carte.
+const ATC_BADGE_MIN_ZOOM = 5, ATC_LABEL_MIN_ZOOM = 4;
+let atcMarkers = [], atcMarkerLayer = null, atcDotLayer = null, atcSig = '', atcPendingRender = false;
 const NET = { vatsim: { label: 'VATSIM', color: '#3ee0a8' }, ivao: { label: 'IVAO', color: '#5b93ff' } };
 const FAC_ORDER = { ATIS: 0, DEL: 1, GND: 2, TWR: 3, DEP: 4, APP: 5, CTR: 6, FSS: 7 };
 const FAC_LETTER = { ATIS: 'i', DEL: 'D', GND: 'G', TWR: 'T', APP: 'A', DEP: 'A' };
@@ -837,18 +870,38 @@ function ensureAtcLayer(){
   trackMap.createPane('atcAirports').style.zIndex = 590;
   trackMap.getPane('atcLabels').style.pointerEvents = 'none';
   atcLayer = L.layerGroup().addTo(trackMap);
+  atcMarkerLayer = L.layerGroup().addTo(trackMap);
+  atcDotLayer = L.layerGroup();
+  trackMap.on('moveend', cullAtcMarkers);
+  // Données ATC arrivées pendant un zoom : on redessine à la fin de l'animation, pas au milieu.
+  trackMap.on('zoomend', () => { if(atcPendingRender){ atcPendingRender = false; renderAtcMap(); } });
   return atcLayer;
 }
 function popupHtml(list, title){
   return `<div class="atc-pop"><div class="atc-pop-h">${title}</div>${list.slice().sort(sortStations).map(atcRow).join('')}</div>`;
 }
+function cullAtcMarkers(){
+  if(!atcMarkerLayer || !trackMap) return;
+  const z = trackMap.getZoom(), b = trackMap.getBounds().pad(0.25);
+  atcMarkers.forEach(m => {
+    const show = z >= m._fbMinZoom && b.contains(m.getLatLng());
+    if(show !== atcMarkerLayer.hasLayer(m)) show ? atcMarkerLayer.addLayer(m) : atcMarkerLayer.removeLayer(m);
+  });
+  const dots = z < ATC_BADGE_MIN_ZOOM;
+  if(dots !== trackMap.hasLayer(atcDotLayer)) dots ? atcDotLayer.addTo(trackMap) : trackMap.removeLayer(atcDotLayer);
+}
 function renderAtcMap(){
   if(!ensureAtcLayer()) return;
-  atcLayer.clearLayers();
+  if(trackMap._animatingZoom){ atcPendingRender = true; return; }
   const c = atcCfg();
   renderAtcMapChips();
+  const st = c.map ? atcStations() : [];
+  // Rien n'a changé depuis le dernier rafraîchissement (45 s) : on ne reconstruit pas la carte.
+  const sig = c.map + '|' + st.map(s => s.network + s.callsign + s.frequency + s.facility).join(',');
+  if(sig === atcSig) return;
+  atcSig = sig;
+  atcLayer.clearLayers(); atcMarkerLayer.clearLayers(); atcDotLayer.clearLayers(); atcMarkers = [];
   if(!c.map) return;
-  const st = atcStations();
   // Centres / FSS : contours de secteur (ou point si le réseau ne donne pas de contour).
   st.filter(s => s.facility === 'CTR' || s.facility === 'FSS').forEach(s => {
     const col = NET[s.network].color;
@@ -859,8 +912,9 @@ function renderAtcMap(){
     }
     const at = s.pos || (s.poly ? centroid(s.poly[0]) : null);
     if(at){
-      L.marker(at, { pane: 'atcLabels', interactive: false, icon: L.divIcon({ className: 'atc-ctr-label', iconSize: null,
-        html: `<span style="--net:${col}">${esc(s.callsign.replace(/_(CTR|FSS)$/, ''))}<b>${esc(s.frequency)}</b></span>` }) }).addTo(atcLayer);
+      const lbl = L.marker(at, { pane: 'atcLabels', interactive: false, icon: L.divIcon({ className: 'atc-ctr-label', iconSize: null,
+        html: `<span style="--net:${col}">${esc(s.callsign.replace(/_(CTR|FSS)$/, ''))}<b>${esc(s.frequency)}</b></span>` }) });
+      lbl._fbMinZoom = ATC_LABEL_MIN_ZOOM; atcMarkers.push(lbl);
       if(!s.poly) L.circleMarker(at, { pane: 'atcSectors', radius: 5, color: col, weight: 2, fillOpacity: .3 }).bindTooltip(tip, { className: 'atc-tip' }).bindPopup(popupHtml([s], NET[s.network].label), { className: 'atc-popup', maxWidth: 420 }).addTo(atcLayer);
     }
   });
@@ -883,12 +937,20 @@ function renderAtcMap(){
   groups.forEach(g => {
     const facs = [...new Set(g.list.map(s => s.facility === 'DEP' ? 'APP' : s.facility))].sort((a, b) => FAC_ORDER[a] - FAC_ORDER[b]);
     const offset = both.has(g.ap.icao) && g.net === 'ivao' ? 24 : 0; // 2 réseaux : badges empilés au-dessus du terrain
-    L.marker([g.ap.lat, g.ap.lon], { pane: 'atcAirports', zIndexOffset: -100, icon: L.divIcon({ className: 'atc-ap-badge-wrap', iconSize: null, iconAnchor: [0, offset],
+    const pop = () => popupHtml(g.list, `${esc(g.ap.icao)} · ${NET[g.net].label}`);
+    const tip = `<b>${esc(g.ap.icao)}</b><br>` + g.list.sort(sortStations).map(s => `${esc(s.callsign)} ${esc(s.frequency)}`).join('<br>');
+    const badge = L.marker([g.ap.lat, g.ap.lon], { pane: 'atcAirports', zIndexOffset: -100, icon: L.divIcon({ className: 'atc-ap-badge-wrap', iconSize: null, iconAnchor: [0, offset],
       html: `<div class="atc-ap-badge" style="--net:${NET[g.net].color}"><b>${esc(g.ap.icao)}</b>${facs.map(f => `<span class="f-${f}">${FAC_LETTER[f]}</span>`).join('')}</div>` }) })
-      .bindPopup(popupHtml(g.list, `${esc(g.ap.icao)} · ${NET[g.net].label}`), { className: 'atc-popup', maxWidth: 440 })
-      .bindTooltip(g.list.sort(sortStations).map(s => `${esc(s.callsign)} ${esc(s.frequency)}`).join('<br>'), { className: 'atc-tip', direction: 'top', offset: [0, -14] })
-      .addTo(atcLayer);
+      .bindPopup(pop, { className: 'atc-popup', maxWidth: 440 })
+      .bindTooltip(tip, { className: 'atc-tip', direction: 'top', offset: [0, -14] });
+    badge._fbMinZoom = ATC_BADGE_MIN_ZOOM; atcMarkers.push(badge);
+    // Version dézoomée : un point coloré sur le canvas (survol et clic identiques).
+    L.circleMarker([g.ap.lat, g.ap.lon], { pane: 'atcSectors', radius: 3.5, color: NET[g.net].color, weight: 1.5, fillColor: NET[g.net].color, fillOpacity: .85 })
+      .bindPopup(pop, { className: 'atc-popup', maxWidth: 440 })
+      .bindTooltip(tip, { className: 'atc-tip', direction: 'top', offset: [0, -4] })
+      .addTo(atcDotLayer);
   });
+  cullAtcMarkers();
 }
 function centroid(ring){
   let la = 0, lo = 0; ring.forEach(p => { la += p[0]; lo += p[1]; });
@@ -933,7 +995,7 @@ function renderAtc(){
     + ((dep || arr) ? section(dep, 'Départ') + (arr && arr !== dep ? section(arr, 'Arrivée') : '')
       : '<div class="hint">Renseigne le départ et l\'arrivée du vol pour voir les contrôleurs de tes aéroports.</div>');
   const parts = ['vatsim','ivao'].filter(n => c[n] && atcData[n] && atcData[n].ok).map(n => `${NET[n].label} ${atcData[n].stations.filter(s => s.facility !== 'ATIS').length}${atcData[n].stale ? ' ⚠' : ''}`);
-  $('atcUpdated').textContent = parts.join(' · ') + ' · ' + new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+  $('atcUpdated').textContent = parts.join(' · ') + ' · ' + new Date().toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit' });
   $('atcAllCount').textContent = `(${all.filter(s => s.facility !== 'ATIS').length})`;
   renderAtcAll();
 }
@@ -1002,6 +1064,8 @@ async function updateRouteLayer(){
   let pts = [];
   if(o) pts = o.navlog.map(f => [f.lat, f.lon]);
   else if(a && b) pts = FBShared.greatCirclePoints(a, b, 48);
+  // v1.7 : route prévue transmise à « À bord » (survols de viewers annoncés au décollage).
+  if(window.cabin) window.cabin.setPlan({ dep, arr, pts });
   if(pts.length > 1){
     L.polyline(pts, { pane: 'routePlan', color: '#b6c2cf', weight: 2, opacity: .55, dashArray: '2 8', lineCap: 'round', interactive: false }).addTo(routeLayer);
     routeBounds = L.latLngBounds(pts);
@@ -1055,12 +1119,12 @@ function renderMapHud(t){
   const vsArrow = vs > 150 ? '↗' : vs < -150 ? '↘' : '→';
   const cell = (k, v, cls) => `<div class="mh${cls ? ' ' + cls : ''}"><span>${k}</span><b>${v}</b></div>`;
   hud.innerHTML = cell('Phase', esc(ph), 'mh-phase')
-    + cell('Altitude', (t.altFt >= 18000 ? 'FL' + String(Math.round(t.altFt / 100)).padStart(3, '0') : Math.round(t.altFt || 0).toLocaleString('fr-FR') + ' ft'))
+    + cell('Altitude', (t.altFt >= 18000 ? 'FL' + String(Math.round(t.altFt / 100)).padStart(3, '0') : Math.round(t.altFt || 0).toLocaleString(FBI18N.locale()) + ' ft'))
     + cell('Vit. sol', Math.round(t.gsKt || 0) + ' kt')
     + cell('Vario', `${vsArrow} ${vs > 0 ? '+' : ''}${vs}`)
     + cell('Cap', String(Math.round(t.headingDeg || 0)).padStart(3, '0') + '°')
     + (ot.todState === 'passed' ? cell('TOD', 'passé') : ot.todMin != null ? cell('TOD', fmtMinShort(ot.todMin)) : '')
-    + (ot.etaIso ? cell('ETA', new Date(ot.etaIso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + (ot.remainingNm != null ? ` <small>${Math.round(ot.remainingNm)} NM</small>` : '')) : '');
+    + (ot.etaIso ? cell('ETA', new Date(ot.etaIso).toLocaleTimeString(FBI18N.locale(), { hour: '2-digit', minute: '2-digit' }) + (ot.remainingNm != null ? ` <small>${Math.round(ot.remainingNm)} NM</small>` : '')) : '');
 }
 FBv15.toggleAtcLegend = function(){ const l = $('atcLegend'); if(l) l.classList.toggle('hidden'); };
 function initMapUx(){
@@ -1089,7 +1153,7 @@ function initMapUx(){
   const order = ['briefing', 'tools', 'logbook', 'career', 'hangar', 'livetool', 'twitch', 'profil', 'admin'];
   document.addEventListener('keydown', e => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable);
-    if((e.ctrlKey || e.metaKey) && !e.altKey && /^[1-9]$/.test(e.key)){ e.preventDefault(); switchView(order[+e.key - 1]); return; }
+    if((e.ctrlKey || e.metaKey) && !e.altKey && /^[0-9]$/.test(e.key)){ e.preventDefault(); const v = e.key === '0' ? 'cabin' : order[+e.key - 1]; if(streamFeaturesOn() || !['livetool', 'twitch', 'cabin'].includes(v)) switchView(v); return; }
     if(e.key === 'Escape' && document.body.classList.contains('map-full-open')){ FBv15.mapFullscreen(false); e.stopImmediatePropagation(); return; }
     if(e.key === 'Escape'){
       if(!$('lightbox').classList.contains('hidden')){ FBv15.lightboxClose(); e.stopImmediatePropagation(); return; }
@@ -1110,7 +1174,6 @@ function initMapUx(){
 /* =========================================================
    5 ter. OUTIL LIVE — ordre des blocs, position à l'écran, mode « Libre » (v1.6)
    ========================================================= */
-const LO_CUSTOM_LABEL = { custom1: 'Texte libre 1', custom2: 'Texte libre 2' };
 function loSaveAndPush(){ pushLiveOverlayConfig(); queueSaveDb(); }
 function initLiveOverlayLayout(){
   const list = $('loFieldList');
@@ -1239,13 +1302,30 @@ FBv15.renderFreeCanvas = function(){
    5 quater. CAPTURES D'ÉCRAN DES VOLS (v1.6)
    ========================================================= */
 function shotsCfg(){
-  db.shotsCfg = Object.assign({ hotkey: 'Ctrl+Alt+F12', source: 'auto', autoEnabled: true, auto: { takeoff: true, cruise: true, landing: true }, sound: true, volume: 50 }, db.shotsCfg || {});
-  db.shotsCfg.auto = Object.assign({ takeoff: true, cruise: true, landing: true }, db.shotsCfg.auto || {});
-  return db.shotsCfg;
+  return cfgIn(db, 'shotsCfg', { hotkey: 'Ctrl+Alt+F12', source: 'auto', autoEnabled: true, auto: { takeoff: true, cruise: true, landing: true }, sound: true, volume: 50 });
 }
 // Volume perçu : l'oreille est logarithmique, un curseur linéaire ne s'entend presque pas
 // entre 40 et 100 %. On applique donc une courbe (≈ −12 dB à 50 %, silence à 0).
 function volGain(pct, max){ const v = Math.max(0, Math.min(100, +pct || 0)) / 100; return (max || 1) * v * v; }
+// Un seul AudioContext pour toute l'appli (en créer un par son est lent et Chromium en limite le nombre).
+let _sfxCtx = null;
+function sfxCtx(){
+  try{
+    if(!_sfxCtx || _sfxCtx.state === 'closed') _sfxCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(_sfxCtx.state === 'suspended') _sfxCtx.resume();
+    return _sfxCtx;
+  }catch(e){ return null; }
+}
+// Note de cloche douce : fondamentale + harmoniques légères, attaque rapide, longue extinction.
+function sfxBell(ac, out, freq, t, peak, decay){
+  [[1, 1], [2, 0.28], [3.01, 0.09]].forEach(([mul, amp]) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine'; o.frequency.value = freq * mul;
+    const d = decay / mul;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak * amp, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.05);
+  });
+}
 const hotkeyLabel = acc => String(acc || '').split('+').filter(Boolean).map(k => k === 'Shift' ? 'Maj' : k === 'Control' ? 'Ctrl' : k);
 function renderHotkeyCaps(acc, recording){
   const box = $('hotkeyCaps'); if(!box) return;
@@ -1280,16 +1360,15 @@ function shutterSound(force){
   if(!c.sound && !force) return;
   const vol = volGain(c.volume, 0.22);
   if(vol <= 0) return;
+  const ac = sfxCtx(); if(!ac) return;
   try{
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.connect(ac.destination);
     [[1318, 0], [1760, 0.075]].forEach(([f, t0]) => {
-      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + t0;
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + 0.01 + t0;
       o.type = 'sine'; o.frequency.value = f;
       g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
       o.connect(g); g.connect(lp); o.start(t); o.stop(t + 0.18);
     });
-    setTimeout(() => ac.close(), 600);
   }catch(e){ /* pas d'audio */ }
 }
 FBv15.shutterTest = () => shutterSound(true);
@@ -1311,7 +1390,7 @@ FBv15.takeShot = async () => {
 function onShotTaken(shot){
   shutterSound();
   const labels = { 'manuel': 'Capture', 'raccourci': 'Capture (raccourci)', 'décollage': 'Capture auto · décollage', 'croisière': 'Capture auto · croisière', 'atterrissage': 'Capture auto · atterrissage' };
-  fx(`<div class="shot-toast"><img src="${esc(shot.url)}" alt=""><div><div class="lc-eyebrow">${esc(labels[shot.reason] || 'Capture')}</div><div class="hint" style="margin:2px 0 0;">${shot.from === 'window' ? 'Fenêtre du simulateur' : 'Écran principal'} · ${new Date(shot.ts).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}<br>Rattachée au PIREP de ce vol.</div></div></div>`, 'fx-shot', 3500);
+  fx(`<div class="shot-toast"><img src="${esc(shot.url)}" alt=""><div><div class="lc-eyebrow">${esc(labels[shot.reason] || 'Capture')}</div><div class="hint" style="margin:2px 0 0;">${shot.from === 'window' ? 'Fenêtre du simulateur' : 'Écran principal'} · ${new Date(shot.ts).toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit', second:'2-digit' })}<br>Rattachée au PIREP de ce vol.</div></div></div>`, 'fx-shot', 3500);
 }
 // Au PIREP : on rattache au vol les captures prises entre son début et sa fin (+ 3 min).
 FBv15.attachFlightShots = async (data) => {
@@ -1349,7 +1428,7 @@ async function renderGallery(){
   if(f.trackData && f.trackData.screenshots) f.trackData.screenshots = f.trackData.screenshots.filter(n => valid.has(n));
   if(f.screenshots) f.screenshots = f.screenshots.filter(n => valid.has(n));
   $('galleryGrid').innerHTML = galleryItems.length
-    ? galleryItems.map((g, i) => `<button class="g-item" onclick="FBv15.lightboxOpen(${i})"><img src="${esc(g.url)}" loading="lazy" alt=""><span>${new Date(g.ts).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })}</span></button>`).join('')
+    ? galleryItems.map((g, i) => `<button class="g-item" onclick="FBv15.lightboxOpen(${i})"><img src="${esc(g.url)}" loading="lazy" alt=""><span>${new Date(g.ts).toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit' })}</span></button>`).join('')
     : `<div class="g-empty"><div style="font-size:30px;">📷</div><b>Aucune capture pour ce vol</b><div class="hint">Pendant un vol suivi, utilise le bouton « Capture d'écran » du Briefing ou ton raccourci. Tu peux aussi ajouter des images existantes.</div></div>`;
 }
 FBv15.closeGallery = () => { $('galleryOverlay').classList.add('hidden'); FBv15.lightboxClose(); renderLogbook(); };
@@ -1366,7 +1445,7 @@ FBv15.lightboxStep = (d) => { if(!galleryItems.length) return; lbIndex = (lbInde
 function showLb(){
   const g = galleryItems[lbIndex]; if(!g) return FBv15.lightboxClose();
   $('lightboxImg').src = g.url;
-  $('lightboxCap').textContent = `${lbIndex + 1} / ${galleryItems.length} · ${new Date(g.ts).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'medium' })}`;
+  $('lightboxCap').textContent = `${lbIndex + 1} / ${galleryItems.length} · ${new Date(g.ts).toLocaleString(FBI18N.locale(), { dateStyle:'short', timeStyle:'medium' })}`;
 }
 FBv15.lightboxOpenFile = () => { const g = galleryItems[lbIndex]; if(g) window.shots.openFile(g.name); };
 FBv15.lightboxDelete = async () => {
@@ -1380,6 +1459,7 @@ FBv15.lightboxDelete = async () => {
   if(galleryItems.length){ lbIndex = Math.min(lbIndex, galleryItems.length - 1); showLb(); } else FBv15.lightboxClose();
 };
 async function renderRouteShots(f){
+  if(window.FBCabin) FBCabin.renderRouteCabin(f).catch(() => {});
   const box = $('routeShots');
   if(!box || !window.shots) return;
   const names = flightShotNames(f);
@@ -1466,8 +1546,8 @@ function bindShotsSettings(){
     loadShotsForm(); save();
   });
   [['shotAutoTakeoff','takeoff'],['shotAutoCruise','cruise'],['shotAutoLanding','landing']].forEach(([id, k]) => $(id).addEventListener('change', e => { c.auto[k] = e.target.checked; save(); }));
-  $('shotSound').addEventListener('change', e => { c.sound = e.target.checked; save(); if(c.sound) shutterSound(true); });
-  $('shotVolume').addEventListener('input', e => { c.volume = +e.target.value; $('shotVolumeVal').textContent = e.target.value + '%'; updateRangeFill(e.target); });
+  $('shotSound').addEventListener('change', e => { shotsCfg().sound = e.target.checked; save(); if(e.target.checked) shutterSound(true); });
+  $('shotVolume').addEventListener('input', e => { shotsCfg().volume = +e.target.value; $('shotVolumeVal').textContent = e.target.value + '%'; updateRangeFill(e.target); });
   $('shotVolume').addEventListener('change', () => { save(); shutterSound(true); });
   // Écoute du clavier AVANT tous les autres raccourcis de l'appli (Ctrl+1…9, F, V, P…).
   window.addEventListener('keydown', onHotkeyKeydown, true);
@@ -1479,23 +1559,20 @@ FBv15.shotHotkeyReset = () => { if(hotkeyRec) hotkeyRec = false; $('hotkeyRecord
    5 quinquies. RAPPEL « TRACKER NON LANCÉ » (v1.6)
    ========================================================= */
 function watchCfgR(){
-  db.watchCfg = Object.assign({ enabled: true, autoStart: false, volume: 70 }, db.watchCfg || {});
-  return db.watchCfg;
+  return cfgIn(db, 'watchCfg', { enabled: true, autoStart: false, volume: 50 });
 }
 let watchMuteUntil = 0, watchBanner = null;
+// v1.6.2 : carillon doux façon « appel cabine » (deux notes de cloche montantes, Do–Mi)
+// à la place des bips carrés « master caution », jugés agressifs.
 function watchSound(){
+  const vol = volGain(watchCfgR().volume, 0.32);
+  if(vol <= 0) return;
+  const ac = sfxCtx(); if(!ac) return;
   try{
-    const vol = volGain(watchCfgR().volume, 0.3);
-    if(vol <= 0) return;
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    // Trois bips montants façon « master caution ».
-    [[880, 0], [880, 0.22], [1175, 0.44]].forEach(([f, t0]) => {
-      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + t0;
-      o.type = 'square'; o.frequency.value = f;
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.setValueAtTime(vol, t + 0.14); g.gain.linearRampToValueAtTime(0, t + 0.17);
-      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.2);
-    });
-    setTimeout(() => ac.close(), 1200);
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200; lp.connect(ac.destination);
+    const t = ac.currentTime + 0.02;
+    sfxBell(ac, lp, 659.25, t, vol, 1.6);         // Mi5
+    sfxBell(ac, lp, 523.25, t + 0.42, vol, 2.0);  // Do5 (ding… dong)
   }catch(e){ /* pas d'audio */ }
 }
 FBv15.watchTestSound = () => watchSound();
@@ -1522,7 +1599,7 @@ function bindWatchSettings(){
   const push = () => { queueSaveDb(); window.watch && window.watch.setConfig({ enabled: c.enabled, autoStart: c.autoStart }); };
   $('watchEnabled').addEventListener('change', e => { c.enabled = e.target.checked; push(); });
   $('watchAutoStart').addEventListener('change', e => { c.autoStart = e.target.checked; push(); });
-  $('watchVolume').addEventListener('input', e => { c.volume = +e.target.value; $('watchVolumeVal').textContent = e.target.value + '%'; updateRangeFill(e.target); queueSaveDb(); });
+  $('watchVolume').addEventListener('input', e => { watchCfgR().volume = +e.target.value; $('watchVolumeVal').textContent = e.target.value + '%'; updateRangeFill(e.target); queueSaveDb(); });
   $('watchVolume').addEventListener('change', () => watchSound());
   window.watch.onMoving(onWatchMoving);
   window.watch.onAutoStarted(() => fx(`<div class="lc-eyebrow">Tracker lancé automatiquement</div><div class="hint" style="margin:4px 0 0;">Ton avion bougeait : le suivi du vol a démarré tout seul.</div>`, 'fx-shot', 6000));
@@ -1538,7 +1615,7 @@ async function renderBackups(){
   if(!box || !window.backups) return;
   const list = await window.backups.list();
   box.innerHTML = list.length ? list.map(b => `<div class="backup-row">
-      <span class="bk-date">${esc(new Date(b.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short', year:'numeric' }))}</span>
+      <span class="bk-date">${esc(new Date(b.date + 'T12:00:00').toLocaleDateString(FBI18N.locale(), { weekday:'short', day:'numeric', month:'short', year:'numeric' }))}</span>
       <span class="bk-meta">${b.valid ? (b.flights != null ? b.flights + ' vol' + (b.flights > 1 ? 's' : '') : '') : '⚠ illisible'} · ${(b.size / 1024).toFixed(0)} Ko</span>
       <button class="btn small" ${b.valid ? '' : 'disabled'} onclick="FBv15.restoreBackup('${esc(b.name)}')">Restaurer</button>
     </div>`).join('') : '<div class="hint">Aucune sauvegarde pour l\'instant — la première sera faite à ta prochaine modification.</div>';
@@ -1561,7 +1638,7 @@ async function checkRecovery(){
   const info = await window.backups.recoveryInfo();
   if(!info) return;
   if(info.from){
-    fx(`<div class="lc-eyebrow">Sauvegarde restaurée</div><div class="ach-title">Ton fichier de données était illisible</div><div class="hint" style="margin:4px 0 0;">FlightBrief a repris automatiquement la sauvegarde du ${esc(new Date(info.date + 'T12:00:00').toLocaleDateString('fr-FR'))}. Le fichier abîmé a été mis de côté dans le dossier de données.</div>`, 'fx-warn', 0);
+    fx(`<div class="lc-eyebrow">Sauvegarde restaurée</div><div class="ach-title">Ton fichier de données était illisible</div><div class="hint" style="margin:4px 0 0;">FlightBrief a repris automatiquement la sauvegarde du ${esc(new Date(info.date + 'T12:00:00').toLocaleDateString(FBI18N.locale()))}. Le fichier abîmé a été mis de côté dans le dossier de données.</div>`, 'fx-warn', 0);
   } else {
     fx(`<div class="lc-eyebrow">Attention</div><div class="ach-title">Fichier de données illisible</div><div class="hint" style="margin:4px 0 0;">Aucune sauvegarde valide n'a été trouvée. Le fichier abîmé a été copié dans le dossier de données (Admin → Données) : ne le supprime pas.</div>`, 'fx-warn', 0);
   }
@@ -1633,18 +1710,21 @@ let twState = null;
 function twCfg(){
   const d = { enabled: false, channel: '', botName: 'FlightBot', prefixMessages: true, clientId: '', cooldownSec: 15, replyOnOverlay: false,
     commands: { eta: true, route: true, metar: true, avion: true, alt: true, landing: true, pari: true, top: true, fb: true },
-    bets: { autoOpen: true, autoLock: true, lockAglFt: 1000, announceInChat: true } };
+    bets: { autoOpen: true, autoLock: true, lockAglFt: 1000, announceInChat: true, prediction: false } };
   const c = db.twitch || {};
   db.twitch = { ...d, ...c, commands: { ...d.commands, ...(c.commands || {}) }, bets: { ...d.bets, ...(c.bets || {}) } };
   if(!db.twitch.channel && db.userProfile && db.userProfile.twitchHandle) db.twitch.channel = db.userProfile.twitchHandle.replace(/^@/, '').toLowerCase();
   return db.twitch;
 }
+// Ce qui part vers le bot : coupé si les fonctions streaming sont désactivées (Profil), sans toucher au réglage enregistré.
+const twPayload = () => ({ ...twCfg(), enabled: twCfg().enabled && streamFeaturesOn() });
+FBv15.pushTwitch = () => pushTwitchCfg();
 let _pushTwTimer = null;
 function pushTwitchCfg(){
   clearTimeout(_pushTwTimer);
   _pushTwTimer = setTimeout(async () => {
     queueSaveDb();
-    if(window.twitch){ twState = await window.twitch.setConfig(twCfg()); renderTwitch(); }
+    if(window.twitch){ twState = await window.twitch.setConfig(twPayload()); renderTwitch(); }
   }, 300);
 }
 function bindTwitch(){
@@ -1659,6 +1739,7 @@ function bindTwitch(){
   $('twBetAutoLock').checked = c.bets.autoLock;
   $('twBetLockAgl').value = c.bets.lockAglFt; $('twBetLockAglVal').textContent = c.bets.lockAglFt + ' ft'; updateRangeFill($('twBetLockAgl'));
   $('twBetAnnounce').checked = c.bets.announceInChat;
+  $('twBetPrediction').checked = !!c.bets.prediction;
   $('twCommands').innerHTML = TW_COMMANDS.map(([k, cmd, d]) => `<div class="switch-row tw-cmd"><span><code>${esc(cmd)}</code><small>${esc(d)}</small></span><label class="switch"><input type="checkbox" data-cmd="${k}" ${c.commands[k] ? 'checked' : ''}><span class="slider"></span></label></div>`).join('');
   $('twCommands').querySelectorAll('input[data-cmd]').forEach(i => i.addEventListener('change', () => { twCfg().commands[i.dataset.cmd] = i.checked; pushTwitchCfg(); }));
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
@@ -1672,11 +1753,18 @@ function bindTwitch(){
   on('twBetAutoLock', 'change', e => { twCfg().bets.autoLock = e.target.checked; pushTwitchCfg(); });
   on('twBetLockAgl', 'input', e => { twCfg().bets.lockAglFt = +e.target.value; $('twBetLockAglVal').textContent = e.target.value + ' ft'; updateRangeFill(e.target); pushTwitchCfg(); });
   on('twBetAnnounce', 'change', e => { twCfg().bets.announceInChat = e.target.checked; pushTwitchCfg(); });
+  on('twBetPrediction', 'change', e => { twCfg().bets.prediction = e.target.checked; pushTwitchCfg(); });
 }
 function renderTwitch(){
   const s = twState;
   if(!s || !$('twStatusText')) return;
   const st = s.status || {}, c = twCfg();
+  const pr = s.prediction || {}, prEl = $('twPredStatus');
+  if(prEl){
+    const PR = { active: 'Prédiction en cours sur Twitch', locked: 'Prédiction verrouillée — en attente du toucher', resolved: 'Prédiction terminée ✓', canceled: 'Prédiction annulée (points remboursés)' };
+    prEl.className = 'status-msg' + (pr.state === 'error' ? ' err' : '');
+    prEl.textContent = !c.bets.prediction ? '' : pr.state === 'error' ? pr.error : (PR[pr.state] || 'Prête : s\'ouvrira avec les paris d\'atterrissage');
+  }
   const dot = $('twStatusDot');
   const label = !c.enabled ? 'Désactivé'
     : st.state === 'connected' ? (st.anonymous ? `Connecté au chat de #${st.channel} en lecture — réponses sur l'overlay Alertes` : `Connecté au chat de #${st.channel} en tant que ${st.login}`)
@@ -1718,7 +1806,7 @@ function renderTwitch(){
       <div class="bar-track"><div class="bar-fill" style="width:${Math.round(100 * p.wins / maxW)}%"></div></div>
       <span class="count">${p.wins}<span class="pct">/${p.bets}</span></span></div>`).join('') : '<div class="empty">Personne n\'a encore gagné de pari.</div>';
   const kindIcon = { cmd: '💬', reply: '🤖', bet: '🎲', error: '⚠', info: 'ℹ' };
-  $('twLog').innerHTML = (s.log || []).length ? s.log.map(l => `<div class="tw-log-row k-${esc(l.kind)}"><span class="t">${new Date(l.at).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })}</span><span>${kindIcon[l.kind] || ''}</span><span>${l.user ? '<b>' + esc(l.user) + '</b> ' : ''}${esc(l.text)}${l.kind === 'reply' && !l.inChat ? ' <i>(overlay)</i>' : ''}</span></div>`).join('') : '<div class="hint">Rien pour l\'instant. Tape <code>!fb</code> dans ton chat pour tester.</div>';
+  $('twLog').innerHTML = (s.log || []).length ? s.log.map(l => `<div class="tw-log-row k-${esc(l.kind)}"><span class="t">${new Date(l.at).toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit' })}</span><span>${kindIcon[l.kind] || ''}</span><span>${l.user ? '<b>' + esc(l.user) + '</b> ' : ''}${esc(l.text)}${l.kind === 'reply' && !l.inChat ? ' <i>(overlay)</i>' : ''}</span></div>`).join('') : '<div class="hint">Rien pour l\'instant. Tape <code>!fb</code> dans ton chat pour tester.</div>';
 }
 /* ---- Application Twitch propre à chaque utilisateur (Client ID) ---- */
 let twAppEditing = false;
@@ -1774,7 +1862,7 @@ FBv15.twitchSaveClientId = async () => {
   twCfg().clientId = id;
   twAppEditing = false;
   queueSaveDb();
-  twState = await window.twitch.setConfig(twCfg());
+  twState = await window.twitch.setConfig(twPayload());
   renderTwitch();
   const m = $('twLoginMsg');
   m.className = 'status-msg ok';
@@ -1785,7 +1873,7 @@ FBv15.twitchClearClientId = async () => {
   twCfg().clientId = '';
   twAppEditing = false;
   queueSaveDb();
-  twState = await window.twitch.setConfig(twCfg());
+  twState = await window.twitch.setConfig(twPayload());
   renderTwitch();
 };
 FBv15.twitchLogin = async () => {
@@ -1811,12 +1899,12 @@ function bindAlertsOverlay(){
   $('alPosition').value = c.position;
   $('alDuration').value = c.durationSec; $('alDurationVal').textContent = c.durationSec + ' s'; updateRangeFill($('alDuration'));
   $('alScale').value = c.scale; $('alScaleVal').textContent = c.scale + '%'; updateRangeFill($('alScale'));
-  $('alTypeLanding').checked = c.types.landing; $('alTypeBet').checked = c.types.bet; $('alTypeAchievement').checked = c.types.achievement; $('alTypeChat').checked = c.types.chat;
+  $('alTypeLanding').checked = c.types.landing; $('alTypeBet').checked = c.types.bet; $('alTypeAchievement').checked = c.types.achievement; $('alTypeChat').checked = c.types.chat; $('alTypeCabin').checked = c.types.cabin;
   const push = () => { queueSaveDb(); window.alerts && window.alerts.setConfig(alertsPayload()); };
   $('alPosition').addEventListener('change', e => { alertsCfg().position = e.target.value; push(); });
   $('alDuration').addEventListener('input', e => { alertsCfg().durationSec = +e.target.value; $('alDurationVal').textContent = e.target.value + ' s'; updateRangeFill(e.target); push(); });
   $('alScale').addEventListener('input', e => { alertsCfg().scale = +e.target.value; $('alScaleVal').textContent = e.target.value + '%'; updateRangeFill(e.target); push(); });
-  [['alTypeLanding','landing'],['alTypeBet','bet'],['alTypeAchievement','achievement'],['alTypeChat','chat']].forEach(([id, k]) => $(id).addEventListener('change', e => { alertsCfg().types[k] = e.target.checked; push(); }));
+  [['alTypeLanding','landing'],['alTypeBet','bet'],['alTypeAchievement','achievement'],['alTypeChat','chat'],['alTypeCabin','cabin']].forEach(([id, k]) => $(id).addEventListener('change', e => { alertsCfg().types[k] = e.target.checked; push(); }));
   bindAlertsDesign(push);
   push();
 }
@@ -1871,16 +1959,15 @@ function alertsChime(type){
   const st = alertsCfg().style;
   const vol = volGain(st.volume != null ? st.volume : 60, 0.3);
   if(vol <= 0) return;
+  const ac = sfxCtx(); if(!ac) return;
   try{
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
     const notes = type === 'achievement' ? [660, 880, 1320] : type === 'landing' ? [523, 784] : [784];
     notes.forEach((f, i) => {
-      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + i * 0.13;
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + 0.01 + i * 0.13;
       o.type = 'sine'; o.frequency.value = f;
       g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
       o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.65);
     });
-    setTimeout(() => ac.close(), 1300);
   }catch(e){ /* pas d'audio */ }
 }
 FBv15.alertsChimeTest = () => alertsChime('achievement');
@@ -2007,7 +2094,7 @@ FBv15.init = async function(){
       m.className = 'status-msg ' + (r.ok ? 'ok' : 'err');
       m.textContent = r.ok ? `Compte ${r.login} connecté ✓` : `Connexion annulée ou refusée (${r.error}).`;
     });
-    twState = await window.twitch.setConfig(twCfg());
+    twState = await window.twitch.setConfig(twPayload());
     renderTwitch();
   }
   const atcSearch = $('atcSearch');

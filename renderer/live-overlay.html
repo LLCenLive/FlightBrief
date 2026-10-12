@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<script src="/i18n.js"></script>
 <title>FlightBrief — Overlay Live</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -126,7 +127,7 @@ function fieldValue(key, t){
   if(key === 'callsign') return escapeHtml(t.callsign || '—');
   if(key === 'route') return `<span>${escapeHtml((t.dep || '----').toUpperCase())}</span><span class="lo-arrow">→</span><span>${escapeHtml((t.arr || '----').toUpperCase())}</span>`;
   if(key === 'phase') return escapeHtml(PHASE_LABELS[t.phase] || t.phase || '—');
-  if(key === 'altitude') return (t.altFt != null) ? Math.round(t.altFt).toLocaleString('fr-FR') + ' ft' : '—';
+  if(key === 'altitude') return (t.altFt != null) ? Math.round(t.altFt).toLocaleString(FBI18N.locale()) + ' ft' : '—';
   if(key === 'heading') return (t.headingDeg != null) ? String(Math.round(t.headingDeg)).padStart(3,'0') + '°' : '—';
   if(key === 'radio') return (t.comFreqMhz != null) ? t.comFreqMhz.toFixed(3) : '—';
   if(key === 'distance') return (t.distanceNm != null) ? Math.round(t.distanceNm) + ' NM' : '—';
@@ -135,7 +136,7 @@ function fieldValue(key, t){
     if(t.todState === 'passed') return 'En descente';
     return t.todMin != null ? (t.todMin <= 0 ? 'Maintenant' : 'dans ' + fmtMinShort(t.todMin)) : '—';
   }
-  if(key === 'eta') return t.etaIso ? new Date(t.etaIso).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) + (t.etaMin != null ? ` <span class="lo-sub">${fmtMinShort(t.etaMin)}</span>` : '') : '—';
+  if(key === 'eta') return t.etaIso ? new Date(t.etaIso).toLocaleTimeString(FBI18N.locale(), { hour:'2-digit', minute:'2-digit' }) + (t.etaMin != null ? ` <span class="lo-sub">${fmtMinShort(t.etaMin)}</span>` : '') : '—';
   return '—';
 }
 

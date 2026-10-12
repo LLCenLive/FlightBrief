@@ -8,6 +8,11 @@ const need = [
   ['renderer/data/airports.json', "index des aéroports (globe, distances, détection départ/arrivée)"],
   ['renderer/data/runways.json', 'pistes (analyse du toucher des roues)'],
   ['renderer/data/coastlines.json', 'tracé des côtes du globe'],
+  ['renderer/data/cities.json', 'villes du monde (!maville, vue du hublot, cartes postales)'],
+  ['renderer/public-logbook/index.html', 'modèle du carnet de vol public'],
+  ['renderer/vendor/three/three.min.js', 'moteur 3D (globe du Profil, approche 3D)'],
+  ['renderer/vendor/three/OrbitControls.js', 'contrôles souris des vues 3D'],
+  ['renderer/vendor/leaflet/leaflet.js', 'cartes (Briefing, logbook)'],
   ['build/icon.ico', "icône Windows de l'appli et de l'installeur"],
   ['build/icon.png', 'icône de la fenêtre et de la barre de titre']
 ];

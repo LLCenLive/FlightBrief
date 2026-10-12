@@ -44,7 +44,7 @@
   /* ---------------- Accès aux données d'un vol du logbook ---------------- */
   function flightLandingRate(f){
     const td = f && f.trackData;
-    if(!td) return null;
+    if(!td) return f && f.landingRateFpm != null && !isNaN(f.landingRateFpm) ? Number(f.landingRateFpm) : null; // vol importé (v1.7)
     const v = td.landingRateFpm != null ? td.landingRateFpm : td.landingRate;
     return (v == null || isNaN(v)) ? null : Number(v);
   }
@@ -140,7 +140,7 @@
     return Math.floor(min / 60) + 'h' + String(min % 60).padStart(2, '0');
   }
   function fmtNm(nm){
-    return nm == null ? '—' : Math.round(nm).toLocaleString('fr-FR') + ' NM';
+    return nm == null ? '—' : Math.round(nm).toLocaleString(FBI18N.locale()) + ' NM';
   }
   function fmtDateFr(iso){
     if(!iso) return '—';
@@ -374,7 +374,7 @@
       <circle cx="${xPos.toFixed(1)}" cy="${yPos.toFixed(1)}" r="6" fill="#ff5c5c" stroke="#fff" stroke-width="1.5"></circle>
       <text x="${margin}" y="${cy + halfW + 14}" class="axis-label">${esc(zone.runway)}</text>
       <text x="${(margin + tdzFt * sc / 2).toFixed(1)}" y="${cy - halfW - 5}" class="axis-label" text-anchor="middle">TDZ</text>
-      <text x="${w - margin}" y="${cy + halfW + 14}" class="axis-label" text-anchor="end">${esc(Math.round(lenFt).toLocaleString('fr-FR'))} ft</text>
+      <text x="${w - margin}" y="${cy + halfW + 14}" class="axis-label" text-anchor="end">${esc(Math.round(lenFt).toLocaleString(FBI18N.locale()))} ft</text>
     </svg>`;
   }
 
@@ -497,8 +497,23 @@
     return '<svg class="fb-plane" viewBox="0 0 64 64" aria-hidden="true">' + ic.svg + '</svg>';
   }
 
+  // v1.7 — Cartes d'aéroport en un clic (sites publics, ouverts dans le navigateur).
+  function chartLinks(icao){
+    icao = up(icao);
+    if(!/^[A-Z0-9]{4}$/.test(icao)) return [];
+    const out = [
+      { label: 'ChartFox', url: `https://chartfox.org/${icao}` },
+      { label: 'Navigraph', url: `https://charts.navigraph.com/airport/${icao}` },
+      { label: 'SkyVector', url: `https://skyvector.com/airport/${icao}` }
+    ];
+    if(/^K/.test(icao)) out.push({ label: 'AirNav', url: `https://www.airnav.com/airport/${icao}` });
+    out.push({ label: 'OurAirports', url: `https://ourairports.com/airports/${icao}/` });
+    return out;
+  }
+
   setLandingThresholds(null);
   const api = {
+    chartLinks,
     up, low, haversineNm, greatCirclePoints,
     flightLandingRate, flightTrackedDistance, flightDistance,
     LANDING_GRADES, LANDING_CATEGORIES, DEFAULT_LANDING_THRESHOLDS, normLandingThresholds, setLandingThresholds, getLandingThresholds,

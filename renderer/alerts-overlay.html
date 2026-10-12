@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<script src="/i18n.js"></script>
 <title>FlightBrief — Alertes</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -96,6 +97,27 @@
   .chat .bot{background:#9146ff; color:#fff; font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; letter-spacing:.04em;}
   .chat .to{font-size:12px; color:var(--sub);}
   .chat .txt{font-size:17px; line-height:1.4; font-weight:500;}
+
+  /* À bord (v1.7) */
+  .cb-names{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .cb-names span{font-size:13.5px; font-weight:600; padding:3px 10px; border-radius:20px; background:var(--tile); border:1px solid color-mix(in srgb, var(--accent) 40%, transparent);}
+  .cb-names span.more{color:var(--sub); font-weight:500;}
+  .cb-note{font-size:13px; color:var(--sub); margin-top:8px;}
+  .cb-note b{color:var(--text);}
+  .cb-big{display:flex; gap:16px; align-items:center;}
+  .cb-big .ic{width:70px; height:70px; flex:none; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:36px; background:color-mix(in srgb, var(--accent) 16%, transparent); border:1px solid color-mix(in srgb, var(--accent) 50%, transparent); animation:pop .7s .2s cubic-bezier(.2,1.7,.4,1) both;}
+  .cb-big .t{font-size:22px; font-weight:700; line-height:1.15; margin:2px 0;}
+  .cb-big .s{font-size:14.5px; color:var(--sub);}
+  .cb-big .bonus{display:inline-block; margin-top:6px; font-family:var(--mono); font-size:13px; font-weight:600; color:var(--accent);}
+  .cb-q{font-size:18px; font-weight:600; line-height:1.35; margin:6px 0 8px;}
+  .cb-list{display:flex; flex-direction:column; gap:4px; margin-top:8px;}
+  .cb-list div{display:flex; justify-content:space-between; gap:10px; font-size:14px;}
+  .cb-list div span{color:var(--sub);}
+  .cb-card{margin:-18px -20px; }
+  .cb-card img{display:block; width:100%; border-radius:var(--radius) var(--radius) 0 0;}
+  .cb-card .cap{padding:10px 16px 14px; font-size:14px;}
+  .cb-card .cap b{font-size:16px;}
+  code{font-family:var(--mono); color:var(--ifr); background:rgba(84,214,232,.12); padding:1px 6px; border-radius:5px;}
 </style>
 </head>
 <body>
@@ -103,7 +125,7 @@
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let cfg = { durationSec: 9, position: 'top-right', scale: 100, types: { landing: true, bet: true, achievement: true, chat: true }, style: {} };
+let cfg = { durationSec: 9, position: 'top-right', scale: 100, types: { landing: true, bet: true, achievement: true, chat: true, cabin: true }, style: {} };
 const PREVIEW = new URLSearchParams(location.search).has('preview');
 function hexA(hex, a){
   const h = String(hex || '#0a0d11').replace('#','');
@@ -123,7 +145,7 @@ const queue = [];
 let showing = 0;
 const MAX_VISIBLE = 3;
 
-function category(t){ return t === 'landing' ? 'landing' : t === 'achievement' ? 'achievement' : t === 'chat-answer' ? 'chat' : t.startsWith('bet') ? 'bet' : null; }
+function category(t){ return t === 'landing' ? 'landing' : t === 'achievement' ? 'achievement' : t === 'chat-answer' ? 'chat' : t.startsWith('bet') ? 'bet' : t.startsWith('cabin-') ? 'cabin' : null; }
 function fpm(v){ return v == null ? '—' : '−' + Math.abs(Math.round(v)) + ' ft/min'; }
 
 function landingHtml(e){
@@ -148,7 +170,7 @@ function landingHtml(e){
       <div><span>Travers</span><b>${a.crosswindKt != null ? Math.abs(a.crosswindKt) + ' kt' : '—'}</b></div>
     </div>
     ${z ? `<div class="rwy"><div class="tdz" style="width:${tdz}%"></div><div class="thr"></div><div class="cl"></div><div class="dot" style="left:${pct}%; top:calc(50% + ${lat}px)"></div></div>
-    <div class="rwy-cap"><span>Seuil ${esc(String(z.runway).split('/')[0])}</span><span>${(z.distanceFromThresholdFt || 0).toLocaleString('fr-FR')} ft après le seuil · ${z.lateralOffsetFt || 0} ft à ${esc(z.side || '')}</span></div>` : ''}` };
+    <div class="rwy-cap"><span>Seuil ${esc(String(z.runway).split('/')[0])}</span><span>${(z.distanceFromThresholdFt || 0).toLocaleString(FBI18N.locale())} ft après le seuil · ${z.lateralOffsetFt || 0} ft à ${esc(z.side || '')}</span></div>` : ''}` };
 }
 function betHtml(e){
   if(e.type === 'bet-result' && e.data){
@@ -167,9 +189,35 @@ function achHtml(e){
 function chatHtml(e){
   return { accent: '#9146ff', html: `<div class="chat"><div class="who"><span class="bot">${esc(e.title || 'FlightBot')}</span>${e.user ? `<span class="to">répond à ${esc(e.user)}</span>` : ''}</div><div class="txt">${esc(e.text)}</div></div>` };
 }
+// Cartes « À bord » : embarquement, survols, vue du hublot, quiz, heure d'arrivée, carte postale.
+function cabinHtml(e){
+  const d = e.data || {};
+  const lbl = cardLabel('cabin', '');
+  const eb = t => `<div class="eyebrow">${esc(lbl || t)}</div>`;
+  const big = (ic, eyebrow, t, s, extra, accent) => ({ accent: accent || '#39e88f', html: `<div class="cb-big"><div class="ic">${ic}</div><div>${eb(eyebrow)}<div class="t">${t}</div>${s ? `<div class="s">${s}</div>` : ''}${extra || ''}</div></div>` });
+  switch(e.type){
+    case 'cabin-open': return big('🛫', 'Embarquement ouvert', esc(e.text || 'Vol au départ'), 'Tape <code>!embarquer</code> pour monter à bord');
+    case 'cabin-boarding': return { accent: '#39e88f', html: `${eb('Embarquement · ' + (d.total || 0) + ' à bord')}
+      <div class="cb-names">${(d.names || []).map(n => `<span>${esc(n)}</span>`).join('')}${d.more ? `<span class="more">+${d.more}</span>` : ''}</div>
+      ${(d.connections || []).length ? `<div class="cb-note">🧳 Correspondance : ${d.connections.slice(0, 3).map(c => `<b>${esc(c.name)}</b> (${c.leg}e vol)`).join(', ')}</div>` : ''}` };
+    case 'cabin-flyover': return big('🏠', 'Survol', `On survole chez ${esc(d.name)} !`, `${esc(d.flag || '')} ${esc(d.city || '')} · coucou en bas 👋`, d.aboard ? '<div class="bonus">+150 miles</div>' : '', '#ffd166');
+    case 'cabin-flyover-soon': return big('👀', 'Survol imminent', `Dans ~${esc(d.etaMin)} min : chez ${esc(d.name)}`, `${esc(d.flag || '')} ${esc(d.city || '')}`, '', '#ffd166');
+    case 'cabin-window': return big('🪟', 'Vue du hublot', d.city ? `${esc(d.city)} ${esc(d.flag || '')}` : 'Rien que le paysage', [d.where, d.alt, d.gs != null ? d.gs + ' kt sol' : ''].filter(Boolean).map(esc).join(' · '), '', '#54d6e8');
+    case 'cabin-country': return big(esc(d.flag || '🌍'), 'Nouveau pays sous nos ailes', esc(d.name || ''), '', '', '#54d6e8');
+    case 'cabin-route': return { accent: '#ffd166', html: `${eb('Au programme de ce vol')}<div class="cb-q">On survolera chez :</div>
+      <div class="cb-list">${(d.list || []).map(x => `<div><b>${esc(x.name)}</b><span>${esc(x.flag || '')} ${esc(x.city)}</span></div>`).join('')}${d.more ? `<div><span>et ${d.more} autres…</span></div>` : ''}</div>` };
+    case 'cabin-quiz': return { accent: '#a06cf5', html: `${eb('🧭 Quiz du hublot · +50 miles')}<div class="cb-q">${esc(d.text || '')}</div><div class="cb-note">Réponds avec <code>!rep …</code></div>` };
+    case 'cabin-quiz-result': return big('🧭', 'Quiz du hublot', `Réponse : ${esc(d.answer || '')}`, d.winner ? `Bravo <b>${esc(d.winner)}</b> !` : 'Personne n\'a trouvé cette fois', d.winner ? '<div class="bonus">+50 miles</div>' : '', '#a06cf5');
+    case 'cabin-arrival-open': return big('⏱️', "Heure d'arrivée", `À quelle heure on touche${d.arr ? ' à ' + esc(d.arr) : ''} ?`, 'Pronostique : <code>!arrivee 21:47</code>', '', '#54d6e8');
+    case 'cabin-arrival-result': return big('⏱️', "Heure d'arrivée", `Toucher à ${esc(d.time || '')}`, d.winner ? `Bravo <b>${esc(d.winner)}</b> (${esc(d.guess || '')})` : '', d.winner ? '<div class="bonus">+100 miles</div>' : '', '#54d6e8');
+    case 'cabin-tier': return big(esc(e.icon || '🎫'), 'Nouveau statut', esc(e.title || ''), esc(e.text || ''), '', '#ffd166');
+    case 'cabin-postcard': return { accent: '#ffd166', html: `<div class="cb-card"><img src="${esc(d.url || '')}" alt=""><div class="cap">${eb('Carte postale')}<b>Bons baisers${d.city ? ' de ' + esc(d.city) : ''} !</b></div></div>` };
+    default: return big('🎫', 'À bord', esc(e.title || ''), esc(e.text || ''));
+  }
+}
 function renderForce(e){
   const c = category(e.type);
-  const r = c === 'landing' ? landingHtml(e) : c === 'bet' ? betHtml(e) : c === 'achievement' ? achHtml(e) : chatHtml(e);
+  const r = c === 'landing' ? landingHtml(e) : c === 'bet' ? betHtml(e) : c === 'achievement' ? achHtml(e) : c === 'cabin' ? cabinHtml(e) : chatHtml(e);
   return { ...r, accent: accentFor(r.accent, c) };
 }
 function render(e){
@@ -182,7 +230,8 @@ function pump(){
     const e = queue.shift();
     const r = render(e);
     if(!r) continue;
-    const dur = (e.type === 'landing' || e.type === 'bet-result' ? 1.6 : e.type === 'chat-answer' ? 1 : 0.8) * (cfg.durationSec || 9);
+    const dur = e.type === 'cabin-quiz' && e.data && e.data.sec ? Math.min(90, e.data.sec)
+      : (e.type === 'landing' || e.type === 'bet-result' || e.type === 'cabin-postcard' ? 1.6 : e.type === 'chat-answer' || e.type === 'cabin-flyover' || e.type === 'cabin-route' ? 1.1 : 0.8) * (cfg.durationSec || 9);
     const n = document.createElement('div');
     n.className = 'al';
     n.style.setProperty('--accent', r.accent);
@@ -262,6 +311,7 @@ const SAMPLES = [
   { type:'landing', data:{ fpm:-142, gForce:1.18, bounces:0, score:94, letter:'A', color:'#39e88f', gradeLabel:'Doux', gradeColor:'#54d6e8', windDir:250, windKt:12, crosswindKt:6, icao:'LFBO', zone:{ runway:'32L/14R', lengthFt:11483, distanceFromThresholdFt:1240, percentAlongRunway:11, lateralOffsetFt:6, side:'droite' } } },
   { type:'bet-result', title:'Pari gagné !', data:{ actual:142, podium:[{ name:'Viewer42', fpm:150, diff:8 }, { name:'PiloteDu59', fpm:120, diff:22 }, { name:'Kéro', fpm:180, diff:38 }], count:12 } },
   { type:'achievement', title:'Beurre', text:'Un atterrissage à moins de 100 ft/min.', icon:'🧈' },
+  { type:'cabin-flyover', data:{ name:'Kéro', city:'Pézenas', flag:'🇫🇷', aboard:true } },
   { type:'chat-answer', title:'FlightBot', text:'ETA LFBO : 21:47 (dans 38 min) · 212 NM restants', user:'Viewer42' }
 ];
 function renderPreview(){

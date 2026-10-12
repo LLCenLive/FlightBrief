@@ -55,6 +55,32 @@ const FAST_VARS = [
   { name: 'PLANE ALT ABOVE GROUND', unit: 'feet', key: 'agl' },
   { name: 'SIM ON GROUND', unit: 'bool', key: 'onGround' }
 ];
+// v1.7 — Systèmes de l'avion (1 Hz), dans une 3e définition SimConnect : alimentent le
+// copilote vocal. Variables « standard » du simulateur : la plupart
+// des avions les tiennent à jour ; certains add-ons très poussés (Fenix, PMDG…) passent par
+// leurs propres variables : le rappel correspondant reste alors muet.
+// Une variable refusée par le simu est retirée et la définition reconstruite sans elle.
+const DEF_ID_SYS = 3;
+const REQ_ID_SYS = 3;
+const SYS_VARS = [
+  { name: 'ELECTRICAL MASTER BATTERY', unit: 'bool', key: 'battery' },
+  { name: 'BRAKE PARKING POSITION', unit: 'bool', key: 'parkBrake' },
+  { name: 'GEAR HANDLE POSITION', unit: 'bool', key: 'gearDown' },
+  { name: 'FLAPS HANDLE INDEX', unit: 'number', key: 'flapsIdx' },
+  { name: 'LIGHT BEACON', unit: 'bool', key: 'beacon' },
+  { name: 'LIGHT NAV', unit: 'bool', key: 'navLight' },
+  { name: 'LIGHT STROBE', unit: 'bool', key: 'strobe' },
+  { name: 'LIGHT LANDING', unit: 'bool', key: 'landingLight' },
+  { name: 'LIGHT TAXI', unit: 'bool', key: 'taxiLight' },
+  { name: 'GENERAL ENG COMBUSTION:1', unit: 'bool', key: 'eng1' },
+  { name: 'NUMBER OF ENGINES', unit: 'number', key: 'engines' },
+  { name: 'ENGINE TYPE', unit: 'enum', key: 'engType' },
+  { name: 'KOHLSMAN SETTING MB', unit: 'millibars', key: 'baroMb' },
+  { name: 'SPOILERS ARMED', unit: 'bool', key: 'spoilersArmed' },
+  { name: 'AUTOPILOT MASTER', unit: 'bool', key: 'apMaster' },
+  { name: 'CABIN SEATBELTS ALERT SWITCH', unit: 'bool', key: 'seatbelts' },
+  { name: 'TRANSPONDER STATE:1', unit: 'number', key: 'xpdrState' }
+];
 const FAST_BUFFER_MS = 9000;          // historique gardé en mémoire (glissant)
 const TOUCHDOWN_FINALIZE_MS = 3000;   // délai avant de figer les mesures du toucher (pic de G + rebond éventuel)
 const APPROACH_SAMPLE_MS = 1000;      // échantillonnage du trajet resserré sous 2 500 ft sol en descente (approche 3D)
@@ -562,8 +588,12 @@ class FlightTracker extends EventEmitter {
       console.error('[FlightBrief] [SimConnect] flux rapide indisponible :', e.message);
     }
 
+    this._sys = null; this._sysMissing = new Set();
+    this._defineSys(handle, sc);
+
     handle.on('simObjectData', packet => {
-      if (packet && packet.requestID === REQ_ID_FAST) this._handleFastPacket(packet);
+      if (packet && packet.requestID === REQ_ID_SYS) this._handleSysPacket(packet);
+      else if (packet && packet.requestID === REQ_ID_FAST) this._handleFastPacket(packet);
       else this._handlePacket(packet);
     });
     handle.on('quit', () => this._handleDisconnect());
@@ -580,6 +610,12 @@ class FlightTracker extends EventEmitter {
     handle.on('exception', exc => {
       // Exception sur le flux rapide (variable inconnue d'une version du simu…) : on le
       // désactive sans bruit, le flux principal et la mesure 1 Hz prennent le relais.
+      if (exc && this._sysSendIds && this._sysSendIds.has(exc.sendId)) {
+        const bad = this._sysSendIds.get(exc.sendId);
+        if (bad) { this._sysMissing.add(bad); console.warn('[FlightBrief] [SimConnect] variable système indisponible :', bad); }
+        this._defineSys(this._handle, loadSimconnect()); // reconstruite sans la variable refusée
+        return;
+      }
       if (exc && this._fastSendIds.has(exc.sendId)) {
         this._fastFailed = true;
         console.warn('[FlightBrief] [SimConnect] flux rapide refusé (variable', (FAST_VARS[exc.index] || {}).name || '?', ') — repli sur la mesure 1 Hz.');
@@ -618,6 +654,28 @@ class FlightTracker extends EventEmitter {
     this._processTelemetry(data);
   }
 
+  // Les variables refusées (voir handle.on('exception')) ne sont pas redemandées.
+  _sysVars() { return SYS_VARS.filter(v => !this._sysMissing.has(v.key)); }
+  _defineSys(handle, sc) {
+    if (!handle) return;
+    this._sysGen = (this._sysGen || 0) + 1;
+    this._sysSendIds = new Map();
+    try {
+      if (this._sysGen > 1) handle.clearDataDefinition(DEF_ID_SYS);
+      this._sysVars().forEach((v, i) => {
+        const id = handle.addToDataDefinition(DEF_ID_SYS, v.name, v.unit, sc.SimConnectDataType.FLOAT64, 0, i);
+        if (typeof id === 'number') this._sysSendIds.set(id, v.key);
+      });
+      const rid = handle.requestDataOnSimObject(REQ_ID_SYS, DEF_ID_SYS, 0, sc.SimConnectPeriod.SECOND, 0, 0, 0, 0);
+      if (typeof rid === 'number') this._sysSendIds.set(rid, null);
+    } catch (e) { console.warn('[FlightBrief] [SimConnect] systèmes indisponibles :', e.message); }
+  }
+  _handleSysPacket(packet) {
+    const d = packet.data, s = { ts: Date.now() };
+    try { this._sysVars().forEach(v => { s[v.key] = d.readFloat64(); }); } catch (e) { return; }
+    this._sys = s;
+  }
+
   _handleFastPacket(packet) {
     const d = packet.data;
     const s = { ts: Date.now() };
@@ -631,6 +689,8 @@ class FlightTracker extends EventEmitter {
     // Valeur « résiduelle » du toucher précédent, mémorisée tant qu'on est en l'air : à
     // l'impact, le simu la remplace par la nouvelle — c'est ce changement qui la valide.
     if (this._phase === 'airborne' && !s.onGround && !this._touchdownPoint) this._tdvAirborne = s.tdv;
+    // Copilote vocal : hauteur sol à ~10 Hz sous 120 ft en descente (annonces 50, 40, 30, 20, 10).
+    if (this._phase === 'airborne' && !s.onGround && Number.isFinite(s.agl) && s.agl < 120 && s.vs < 0) this.emit('fast-agl', { agl: Math.round(s.agl), vs: Math.round(s.vs) });
   }
 
   _fastFresh() {
@@ -840,7 +900,8 @@ class FlightTracker extends EventEmitter {
       aglFt: fast && Number.isFinite(fast.agl) ? Math.round(fast.agl) : null,
       windDir: fast && Number.isFinite(fast.windDir) ? Math.round(fast.windDir) : null,
       windKt: fast && Number.isFinite(fast.windKt) ? Math.round(fast.windKt) : null,
-      gForce: fast && Number.isFinite(fast.g) ? Math.round(fast.g * 100) / 100 : null
+      gForce: fast && Number.isFinite(fast.g) ? Math.round(fast.g * 100) / 100 : null,
+      sys: this._sys && Date.now() - this._sys.ts < 5000 ? this._sys : null
     });
   }
 

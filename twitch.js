@@ -17,6 +17,8 @@ const tls = require('tls');
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
+const { writeJsonSafe, readJsonSafe } = require('./backups');
+const I18N = require('./renderer/i18n.js');
 
 // Client ID : fourni par chaque utilisateur (sa propre application Twitch, type « Public »).
 // Format Twitch : 30 caractères minuscules / chiffres.
@@ -32,8 +34,11 @@ function form(obj) {
 }
 
 class TwitchAuth {
-  constructor(fetchFn, storeFile, crypt) {
+  // scopes : droits demandés (chat du bot par défaut ; « channel:manage:broadcast » pour le
+  // compte de la chaîne qui modifie le titre du stream, v1.7).
+  constructor(fetchFn, storeFile, crypt, scopes) {
     this.fetch = fetchFn;
+    this.scopes = scopes || SCOPES;
     this.file = storeFile;
     this.crypt = crypt || null; // { encrypt(str)->Buffer, decrypt(Buffer)->str } (safeStorage)
     this.data = this._load(); // { clientId, accessToken, refreshToken, expiresAt, login, userId }
@@ -85,7 +90,7 @@ class TwitchAuth {
     if (!clientId) throw new Error("Commence par déclarer ton application Twitch (étape 1 de l'onglet Twitch).");
     const res = await this.fetch('https://id.twitch.tv/oauth2/device', {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: form({ client_id: clientId, scopes: SCOPES })
+      body: form({ client_id: clientId, scopes: this.scopes })
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.message || ('HTTP ' + res.status));
@@ -103,7 +108,7 @@ class TwitchAuth {
       if (abort.aborted) throw new Error('Connexion annulée.');
       const res = await this.fetch('https://id.twitch.tv/oauth2/token', {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: form({ client_id: dev.clientId, scopes: SCOPES, device_code: dev.deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' })
+        body: form({ client_id: dev.clientId, scopes: this.scopes, device_code: dev.deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' })
       });
       const j = await res.json().catch(() => ({}));
       if (res.ok && j.access_token) {
@@ -128,7 +133,7 @@ class TwitchAuth {
     if (res.status === 401) return false;
     const j = await res.json().catch(() => ({}));
     if (!res.ok) return false;
-    this.data.login = j.login; this.data.userId = j.user_id;
+    this.data.login = j.login; this.data.userId = j.user_id; this.data.scopes = j.scopes || [];
     if (j.expires_in) this.data.expiresAt = Date.now() + j.expires_in * 1000;
     this._save();
     return true;
@@ -203,6 +208,7 @@ class TwitchChat extends EventEmitter {
     this.state = 'disconnected'; this.wanted = false; this.retry = 0; this.retryTimer = null;
     this.queue = []; this.sentTimes = []; this.drainTimer = null; this.pingTimer = null; this.lastRx = 0;
     this.getToken = null;
+    this.translate = s => s; // remplacé par la traduction de l'appli (main.js)
   }
   _status(state, extra) { this.state = state; this.emit('status', { state, channel: this.channel, anonymous: this.anonymous, login: this.login, ...(extra || {}) }); }
 
@@ -297,7 +303,9 @@ class TwitchChat extends EventEmitter {
   // File d'envoi : au plus 1 message / 1,5 s et 18 / 30 s (sous la limite Twitch de 20).
   say(text) {
     if (!this.canSpeak()) return false;
-    this.queue.push(String(text).replace(/[\r\n]+/g, ' ').slice(0, 480));
+    // « [NomDuBot] texte » : seul le texte est traduit.
+    const m = String(text).match(/^(\[[^\]]*\] )?([\s\S]*)$/);
+    this.queue.push(((m[1] || '') + this.translate(m[2])).replace(/[\r\n]+/g, ' ').slice(0, 480));
     this._drain();
     return true;
   }
@@ -323,7 +331,7 @@ const DEFAULT_CONFIG = {
   enabled: false, channel: '', botName: 'FlightBot', prefixMessages: true, clientId: '',
   commands: { eta: true, route: true, metar: true, avion: true, alt: true, landing: true, pari: true, top: true, fb: true },
   cooldownSec: 15,
-  bets: { autoOpen: true, autoLock: true, lockAglFt: 1000, announceInChat: true },
+  bets: { autoOpen: true, autoLock: true, lockAglFt: 1000, announceInChat: true, prediction: false },
   replyOnOverlay: false // true : réponses AUSSI affichées sur l'overlay Alertes quand le bot parle dans le chat
 };
 
@@ -349,10 +357,10 @@ class FlightBot extends EventEmitter {
     chat.on('message', m => this._onMessage(m));
   }
   _loadStats() {
-    try { const s = JSON.parse(fs.readFileSync(this.ctx.statsFile, 'utf-8')); return { players: s.players || {}, history: s.history || [] }; }
-    catch (e) { return { players: {}, history: [] }; }
+    const s = readJsonSafe(this.ctx.statsFile) || {};
+    return { players: s.players || {}, history: s.history || [] };
   }
-  _saveStats() { try { fs.writeFileSync(this.ctx.statsFile, JSON.stringify(this.stats, null, 2)); } catch (e) { /* best effort */ } }
+  _saveStats() { try { writeJsonSafe(this.ctx.statsFile, this.stats); } catch (e) { /* best effort */ } }
   setConfig(c) { this.config = mergeConfig(c); }
   _pushLog(entry) {
     this.log.unshift({ at: new Date().toISOString(), ...entry });
@@ -377,12 +385,12 @@ class FlightBot extends EventEmitter {
     if (!text.startsWith('!')) return;
     const [rawCmd, ...args] = text.slice(1).split(/\s+/);
     const cmd = (rawCmd || '').toLowerCase()
-      .replace(/^(landing|atterro|atterrissage)$/, 'landing')
-      .replace(/^(avion|aircraft|plane)$/, 'avion')
-      .replace(/^(alt|altitude)$/, 'alt')
-      .replace(/^(pari|bet)$/, 'pari')
-      .replace(/^(fb|flightbrief|commandes)$/, 'fb')
-      .replace(/^(top|classement)$/, 'top');
+      .replace(/^(landing|atterro|atterrissage|aterrizaje)$/, 'landing')
+      .replace(/^(avion|aircraft|plane|avión)$/, 'avion')
+      .replace(/^(alt|altitude|altitud)$/, 'alt')
+      .replace(/^(pari|bet|apuesta)$/, 'pari')
+      .replace(/^(fb|flightbrief|commandes|commands|comandos)$/, 'fb')
+      .replace(/^(top|classement|ranking|leaderboard)$/, 'top');
     if (!COMMANDS.includes(cmd) || !this.config.commands[cmd]) return;
     this._pushLog({ kind: 'cmd', user: m.displayName, text });
     if (cmd === 'pari') return this._onBet(m, args);
@@ -403,7 +411,7 @@ class FlightBot extends EventEmitter {
       case 'eta': {
         if (!flying || !t.etaIso) return this.reply(arr ? `Pas encore d'ETA calculable vers ${arr} (vol pas commencé ou vitesse trop faible).` : 'Aucun vol en cours.', { user });
         const eta = new Date(t.etaIso);
-        const hh = eta.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: c.timeZone || undefined });
+        const hh = eta.toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit', timeZone: c.timeZone || undefined });
         let s = `ETA ${arr || 'arrivée'} : ${hh} (dans ${fmtMin(t.etaMin)})`;
         if (t.remainingNm != null) s += ` · ${Math.round(t.remainingNm)} NM restants`;
         if (t.todMin != null && t.todMin > 0) s += ` · début de descente dans ${fmtMin(t.todMin)}`;
@@ -426,7 +434,7 @@ class FlightBot extends EventEmitter {
       }
       case 'alt': {
         if (!flying || t.altFt == null) return this.reply('Pas de vol en cours.', { user });
-        const lvl = t.altFt >= 10000 ? `FL${String(Math.round(t.altFt / 100)).padStart(3, '0')} (${t.altFt.toLocaleString('fr-FR')} ft)` : `${Math.round(t.altFt).toLocaleString('fr-FR')} ft`;
+        const lvl = t.altFt >= 10000 ? `FL${String(Math.round(t.altFt / 100)).padStart(3, '0')} (${t.altFt.toLocaleString(I18N.locale())} ft)` : `${Math.round(t.altFt).toLocaleString(I18N.locale())} ft`;
         return this.reply(`${lvl}${t.gsKt != null ? ' · ' + t.gsKt + ' kt sol' : ''}${t.phaseLabel ? ' · ' + t.phaseLabel : ''}`, { user });
       }
       case 'landing': {
@@ -444,8 +452,9 @@ class FlightBot extends EventEmitter {
         return this.reply('🏆 Paris d\'atterrissage : ' + top.map((p, i) => `${i + 1}. ${p.name} (${p.wins})`).join(' · '), { user });
       }
       case 'fb': {
-        const on = COMMANDS.filter(k => this.config.commands[k] && k !== 'fb').map(k => '!' + k);
-        return this.reply(`Commandes du vol : ${on.join(' ')}`, { user });
+        const local = { en: { avion: 'aircraft', pari: 'bet' }, es: { avion: 'avion', pari: 'apuesta', landing: 'aterrizaje' } }[I18N.lang] || {};
+        const on = COMMANDS.filter(k => this.config.commands[k] && k !== 'fb').map(k => '!' + (local[k] || k));
+        return this.reply(`Commandes du vol : ${on.join(' ')} · À bord : !embarquer !miles !passeport !maville !voyage`, { user });
       }
       default: return null;
     }
@@ -463,6 +472,7 @@ class FlightBot extends EventEmitter {
     if (this.config.bets.announceInChat) this.chat.say(this.config.prefixMessages ? `[${this.config.botName}] ${msg}` : msg);
     this.emit('alert', { type: 'bet-open', title: 'Paris ouverts', text: 'Devine le taux de toucher : !pari 180' });
     this._pushLog({ kind: 'bet', text: 'Paris ouverts' + (reason ? ` (${reason})` : '') });
+    this.emit('bet', 'open');
     return true;
   }
   lockBets(reason) {
@@ -473,12 +483,14 @@ class FlightBot extends EventEmitter {
     if (this.config.bets.announceInChat) this.chat.say(this.config.prefixMessages ? `[${this.config.botName}] ${msg}` : msg);
     this.emit('alert', { type: 'bet-locked', title: 'Paris fermés', text: `${n} pronostic${n > 1 ? 's' : ''} — verdict au toucher` });
     this._pushLog({ kind: 'bet', text: 'Paris fermés' + (reason ? ` (${reason})` : '') });
+    this.emit('bet', 'lock');
     return true;
   }
   cancelBets() {
     if (this.bet.state === 'closed' || this.bet.state === 'resolved') return false;
     this.bet = { state: 'closed', guesses: new Map(), openedAt: null, lockedAt: null, result: null, flightKey: this.bet.flightKey };
     this._pushLog({ kind: 'bet', text: 'Paris annulés' });
+    this.emit('bet', 'cancel');
     return true;
   }
   _onBet(m, args) {
@@ -498,6 +510,7 @@ class FlightBot extends EventEmitter {
     const winner = ranked[0] || null;
     const result = { actual, winner: winner ? { name: winner.name, user: winner.user, fpm: winner.fpm, diff: winner.diff } : null, podium: ranked.slice(0, 3).map(g => ({ name: g.name, fpm: g.fpm, diff: g.diff })), count: ranked.length, icao: landing.icao || null, at: new Date().toISOString() };
     this.bet.state = 'resolved'; this.bet.result = result;
+    this.emit('bet', 'resolve', { fpm: actual });
     if (winner) {
       ranked.forEach(g => {
         const p = this.stats.players[g.user] || { name: g.name, wins: 0, bets: 0, exact: 0 };
@@ -531,7 +544,8 @@ class FlightBot extends EventEmitter {
     if (b.autoLock && this.bet.state === 'open' && aglFt != null && aglFt < (b.lockAglFt || 1000) && (vsFpm || 0) < 0) this.lockBets(`sous ${b.lockAglFt || 1000} ft sol`);
   }
   onFlightStart() {
-    // Nouveau vol : paris remis à zéro (on garde le classement).
+    // Nouveau vol : paris remis à zéro (on garde le classement) ; une prédiction restée ouverte est remboursée.
+    if (this.bet.state === 'open' || this.bet.state === 'locked') this.emit('bet', 'cancel');
     this.bet = { state: 'closed', guesses: new Map(), openedAt: null, lockedAt: null, result: null, flightKey: Date.now() };
     this.emit('state');
   }
