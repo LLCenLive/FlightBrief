@@ -9,6 +9,26 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '1.8.0',
+    date: '2026-10-14',
+    title: 'Confort, records et télécommande sur le téléphone',
+    items: [
+      ['new', "Fin de vol intelligente : le vol se clôture quand tu coupes les moteurs au parking, plus au premier arrêt au point d'attente ou dans une file de roulage. Sous le bouton d'arrêt, l'appli te dit ce qu'elle attend."],
+      ['new', "Pop-ups en bas de l'appli avec un petit son : vol terminé, PIREP enregistré, vol trop court, erreur du simulateur… Son et volume réglables dans le Profil."],
+      ['new', "PIREP enregistré : un bouton « Annuler » pendant 10 secondes, en cas de fausse manip."],
+      ['new', "Briefing remis à zéro après l'envoi du PIREP, prêt pour le vol suivant (avec « Rétablir »)."],
+      ['new', "Profil : records personnels (atterrissage le plus doux, meilleure note, vol le plus long, plus longue distance, plus haute altitude, aéroport fétiche). Un clic rouvre le vol."],
+      ['improved', "Profil : Gratte-pays et Défis aéroports ramenés à deux tuiles compactes. Le détail s'ouvre dans une fenêtre, avec recherche, tri et filtres par niveau."],
+      ['new', "Téléphone, pour les streamers : onglet Stream avec l'état du bot, les paris en cours, les passagers à bord, le chat du bot et une télécommande (tracker, capture, paris, embarquement, copilote, alertes)."],
+      ['new', "Téléphone : tes photos de vol, rangées par vol, avec une visionneuse plein écran (sur le Wi-Fi de la maison)."],
+      ['improved', "Rappel « tracker non lancé » : plus d'alarme au lancement du simulateur. Il attend 5 minutes de roulage ou de vol avant de sonner."],
+      ['improved', "Un vol trop court n'est plus effacé en silence : l'appli te propose de l'enregistrer quand même."],
+      ['fix', "Un roulage rapide (plus de 40 kt au sol) était pris pour un décollage : le vrai vol devenait un rebond et était rejeté comme « trop court »."],
+      ['fix', "Des aéroports restés dans le Briefing passaient devant ceux du vol réel dans le PIREP (ex. LFPG → LFBO pour un LEMD → LEPP). Le terrain où l'avion s'est vraiment posé l'emporte désormais."],
+      ['fix', "Replay 3D de l'approche : l'avion se dressait à la verticale au toucher. Il suit maintenant le cap, l'assiette et l'inclinaison réelles."]
+    ]
+  },
+  {
     version: '1.7.0',
     date: '2026-10-12',
     title: 'À bord : le chat voyage avec toi',

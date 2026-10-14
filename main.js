@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, shell, net, safeStorage, desktopCapturer, screen, globalShortcut, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, shell, net, safeStorage, desktopCapturer, screen, globalShortcut, dialog, Notification, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -475,7 +475,8 @@ function buildMobilePayloadBase() {
         simAircraft: td.simAircraft || null,
         touchdown: td.touchdown ? { lat: td.touchdown.lat, lon: td.touchdown.lon, vsFpm: td.touchdown.vsFpm, zone: td.touchdown.zone || null } : null,
         phases: Array.isArray(td.phases) ? td.phases.map(p => ({ phase: p.phase, durationSec: p.durationSec, distanceNm: p.distanceNm, minAltFt: p.minAltFt, maxAltFt: p.maxAltFt, avgIasKt: p.avgIasKt, maxIasKt: p.maxIasKt })) : [],
-        path: downsamplePath(td.path, 150)
+        path: downsamplePath(td.path, 150),
+        screenshots: Array.isArray(td.screenshots) ? td.screenshots : [] // v1.8 : photos du vol sur le téléphone
       };
     }
     return out;
@@ -488,7 +489,7 @@ function buildMobilePayloadBase() {
   const p = db.userProfile || {};
   const base = {
     appVersion: app.getVersion(),
-    profile: { firstName: p.firstName || '', network: p.network || '', homeBase: p.homeBase || '', twitchHandle: p.twitchHandle || '', landingThresholds: p.landingThresholds || null, planeIcon: db.planeIcon || 'airliner' },
+    profile: { firstName: p.firstName || '', network: p.network || '', homeBase: p.homeBase || '', twitchHandle: p.twitchHandle || '', landingThresholds: p.landingThresholds || null, planeIcon: db.planeIcon || 'airliner', streamer: p.twitchFeatures !== false },
     logbook, careers: db.careers || [], hangar: db.hangar || [], airports,
     dataUpdatedAt: mtimeMs ? new Date(mtimeMs).toISOString() : null
   };
@@ -499,6 +500,50 @@ function buildMobilePayload() {
   const t = liveOverlayState.telemetry || null;
   const fresh = t && t.altFt != null && (Date.now() - liveOverlayUpdatedAt) < 20000;
   return { ...buildMobilePayloadBase(), generatedAt: new Date().toISOString(), live: fresh ? t : null };
+}
+
+/* ---- v1.8 — Téléphone : onglet Stream (bot, paris, passagers, télécommande) et photos ---- */
+function buildMobileStream() {
+  const bet = flightBot.betState();
+  const cs = cabin.publicState ? cabin.publicState() : {};
+  const st = twitchStatus || {};
+  return {
+    at: new Date().toISOString(),
+    enabled: !!twitchConfig.enabled,
+    bot: { name: (twitchConfig.botName || 'FlightBot').trim(), state: st.state || 'disconnected', channel: st.channel || twitchConfig.channel || '', anonymous: !!st.anonymous, canSpeak: twitchChat.canSpeak() },
+    bet: { state: bet.state, count: bet.count, openedAt: bet.openedAt, lockedAt: bet.lockedAt,
+      guesses: bet.guesses.slice(-12).reverse().map(g => ({ name: g.name, fpm: g.fpm })),
+      result: bet.result ? { actual: bet.result.actual, icao: bet.result.icao, winner: bet.result.winner ? { name: bet.result.winner.name, fpm: bet.result.winner.fpm, diff: bet.result.winner.diff } : null, podium: bet.result.podium || [] } : null },
+    leaderboard: flightBot.leaderboard(5).map(p => ({ name: p.name || p.user, wins: p.wins || 0, bets: p.bets || 0 })),
+    log: flightBot.log.slice(0, 20).map(e => ({ at: e.at, kind: e.kind, user: e.user || null, text: String(e.text || '').slice(0, 280) })),
+    cabin: cs.enabled ? { flight: cs.flight ? { dep: cs.flight.dep, arr: cs.flight.arr, boarding: cs.flight.boarding, landed: cs.flight.landed } : null,
+      passengers: (cs.passengers || []).slice(0, 60).map(p => ({ name: p.name, miles: p.miles, tier: p.tier, tierIcon: p.tierIcon, present: p.present })), nextFlyover: cs.nextFlyover || null } : null,
+    remote: deckState()
+  };
+}
+const MOBILE_REMOTE_ACTIONS = new Set(['tracker', 'shot', 'copilot', 'boarding', 'bets', 'alerts-mute', 'copilot-brief']);
+function mobileRemoteAction(a) {
+  if (!MOBILE_REMOTE_ACTIONS.has(a)) return { ok: false, error: 'action' };
+  return deckAction(a);
+}
+function mobileListShots() {
+  return getShots().list().map(s => ({ name: s.name, ts: s.ts }));
+}
+// Miniatures redimensionnées une fois puis gardées en mémoire (le téléphone en affiche beaucoup).
+const _thumbCache = new Map();
+function mobileShot(name, w) {
+  const file = path.join(getShots().dir, name);
+  if (!fs.existsSync(file)) return null;
+  const width = w ? Math.max(160, Math.min(1600, Math.round(w))) : 0;
+  if (!width) return { type: /\.png$/i.test(name) ? 'image/png' : /\.webp$/i.test(name) ? 'image/webp' : 'image/jpeg', buf: fs.readFileSync(file) };
+  const key = name + '@' + width;
+  if (_thumbCache.has(key)) return _thumbCache.get(key);
+  const img = nativeImage.createFromPath(file);
+  if (img.isEmpty()) return null;
+  const out = { type: 'image/jpeg', buf: img.resize({ width, quality: 'good' }).toJPEG(78) };
+  _thumbCache.set(key, out);
+  if (_thumbCache.size > 300) _thumbCache.delete(_thumbCache.keys().next().value);
+  return out;
 }
 
 function getLocalTls() {
@@ -549,6 +594,7 @@ function startMobileServerSafely() {
     mobileServer = startMobileAppServer(MOBILE_HTTPS_PORT, {
       appVersion: app.getVersion(),
       getToken: getMobileToken, getPayload: buildMobilePayload, getLive: buildLivePayload, getAtc: buildAtcForEfb, getOfp: efbOfp,
+      getStream: buildMobileStream, remoteAction: mobileRemoteAction, listShots: mobileListShots, getShot: mobileShot,
       getTls: () => refreshMobileCert()
     });
     mobileServer.on('error', onMobileServerError('https', MOBILE_HTTPS_PORT));
@@ -698,6 +744,7 @@ tracker.on('fast-agl', data => mainWindow && mainWindow.webContents.send('tracke
 tracker.on('flight-start', data => mainWindow && mainWindow.webContents.send('tracker:flight-start', data));
 tracker.on('flight-landed', data => mainWindow && mainWindow.webContents.send('tracker:flight-landed', data));
 tracker.on('flight-end', data => mainWindow && mainWindow.webContents.send('tracker:flight-end', data));
+tracker.on('flight-rejected', data => mainWindow && mainWindow.webContents.send('tracker:flight-rejected', data));
 // Phases + rapport détaillé mis à jour en direct au fil du vol (voir tracker.js) —
 // affichés désormais directement dans la page Briefing, plus seulement à la fin
 // dans la vue synthétique de l'onglet Carte du Logbook.
@@ -1301,7 +1348,10 @@ tracker.on('flight-landed', () => { if (getShots().autoOn('landing')) setTimeout
    La surveillance s'arrête dès que le vrai tracker est connecté.
    ========================================================= */
 let watchCfg = { enabled: true, autoStart: false };
-let watchHandle = null, watchTimer = null, watchConnecting = false, watchState = { moving: false, notifiedAt: 0 };
+let watchHandle = null, watchTimer = null, watchConnecting = false, watchState = { moving: false, movingSince: 0, notifiedAt: 0 };
+// v1.8 : le 1er rappel n'arrive qu'après 5 min de mouvement continu (l'avion a eu le temps de
+// rouler un peu : on ne bipe plus au lancement du simu, sur un repositionnement ou un pushback).
+const WATCH_GRACE_MS = 5 * 60000;
 async function watchTryConnect() {
   if (!watchCfg.enabled || watchHandle || watchConnecting || tracker.isConnected()) return;
   watchConnecting = true;
@@ -1317,25 +1367,34 @@ async function watchTryConnect() {
       const gs = p.data.readFloat64(), onGround = p.data.readFloat64() > 0.5, agl = p.data.readFloat64();
       watchOnSample({ gs, onGround, agl });
     });
-    const drop = () => { if (watchHandle === h) watchHandle = null; watchState.moving = false; };
+    const drop = () => { if (watchHandle === h) watchHandle = null; watchState.moving = false; watchState.movingSince = 0; };
     h.on('quit', drop); h.on('close', drop); h.on('error', () => {}); h.on('exception', () => {});
   } catch (e) { watchHandle = null; }
   finally { watchConnecting = false; }
 }
 function watchStop() {
   if (watchHandle) { try { watchHandle.close(); } catch (e) { /* ignoré */ } }
-  watchHandle = null; watchState.moving = false;
+  watchHandle = null; watchState.moving = false; watchState.movingSince = 0;
 }
 function watchOnSample(s) {
   if (tracker.isConnected()) { watchStop(); return; }
-  const moving = s.gs > 8 || (!s.onGround && s.agl > 50);
+  // v1.8 : vitesse sol exigée aussi « en l'air » — au menu de MSFS, l'avion de fond est souvent
+  // vu hors sol à vitesse nulle, ce qui déclenchait l'alarme dès le lancement de l'appli.
+  const moving = s.gs > 8;
   if (moving && !watchState.moving) {
     watchState.moving = true;
+    watchState.movingSince = Date.now();
     if (watchCfg.autoStart) { watchStop(); tracker.connect().catch(() => {}); if (mainWindow) mainWindow.webContents.send('watch:autostarted'); return; }
   }
-  if (!moving) watchState.moving = false;
-  // Rappel immédiat puis toutes les 60 s tant que l'avion bouge sans tracker.
-  if (watchState.moving && Date.now() - watchState.notifiedAt > 60000) {
+  // Un arrêt court (point d'attente, feu rouge du roulage…) ne remet pas le délai à zéro : il
+  // faut 2 min immobile pour considérer que l'avion est vraiment arrêté.
+  if (moving) watchState.stoppedSince = 0;
+  else if (watchState.moving) {
+    if (!watchState.stoppedSince) watchState.stoppedSince = Date.now();
+    else if (Date.now() - watchState.stoppedSince > 120000) { watchState.moving = false; watchState.movingSince = 0; watchState.stoppedSince = 0; }
+  }
+  // Rappel après 5 min de mouvement, puis toutes les 60 s tant que l'avion bouge sans tracker.
+  if (watchState.moving && Date.now() - watchState.movingSince >= WATCH_GRACE_MS && Date.now() - watchState.notifiedAt > 60000) {
     watchState.notifiedAt = Date.now();
     if (mainWindow) {
       mainWindow.webContents.send('watch:moving', { gs: Math.round(s.gs), airborne: !s.onGround });

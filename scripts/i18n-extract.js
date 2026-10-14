@@ -8,7 +8,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 
 const FILES = [
-  'renderer/index.html', 'renderer/app.js', 'renderer/v15.js', 'renderer/cabin-ui.js', 'renderer/v17.js', 'renderer/copilot.js', 'renderer/fb-shared.js',
+  'renderer/index.html', 'renderer/app.js', 'renderer/v15.js', 'renderer/cabin-ui.js', 'renderer/v17.js', 'renderer/v18.js', 'renderer/copilot.js', 'renderer/fb-shared.js',
   'renderer/alerts-overlay.html', 'renderer/cabin-overlay.html', 'renderer/live-overlay.html', 'renderer/obs.html',
   'renderer/mobile/index.html', 'renderer/mobile/mobile.js', 'renderer/mobile/setup.html',
   'renderer/public-logbook/index.html', 'renderer/public-logbook/app.js',

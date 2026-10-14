@@ -164,17 +164,56 @@ async function countriesOf(icaos){
   return geoCache;
 }
 const flightAirports = flights => [...new Set(flights.flatMap(f => [f.dep, f.arr]).filter(Boolean).map(x => String(x).toUpperCase()))];
+// v1.8 : tuile compacte dans le Profil + détail dans une modale (recherche, tri, aéroports visités).
+const pctTxt = v => (Math.round(v * 10) / 10).toLocaleString(FBI18N.locale(), { maximumFractionDigits: 1 });
+let scData = { list: [], aps: [] }, scSortKey = 'n';
 async function renderScratch(){
-  if(!$('scGrid')) return;
+  if(!$('colScratch')) return;
   const aps = flightAirports(db.logbook || []);
   const g = await countriesOf(aps);
   const by = {};
   aps.forEach(ic => { const cc = g.byIcao[ic]; if(cc) (by[cc] = by[cc] || new Set()).add(ic); });
-  const list = Object.entries(by).map(([cc, set]) => ({ cc, n: set.size, total: Math.max(set.size, g.totals[cc] || 0) })).sort((a, b) => b.n - a.n);
-  $('scSummary').textContent = list.length ? `${list.length} pays sur ~195 · ${aps.length} aéroports` : "Pose-toi quelque part pour gratter ton premier pays !";
-  $('scGrid').innerHTML = list.map(x => `<div class="sc-card"><div class="sc-top"><span class="sc-flag">${flag(x.cc)}</span><span>${esc(g.names[x.cc] || x.cc)}</span></div>
-    <div class="sc-n">${x.n} / ${x.total} aéroports</div><div class="sc-bar"><i style="width:${Math.max(3, Math.round(x.n / x.total * 100))}%"></i></div></div>`).join('');
+  const list = Object.entries(by).map(([cc, set]) => {
+    const total = Math.max(set.size, g.totals[cc] || 0);
+    return { cc, name: g.names[cc] || cc, n: set.size, total, pct: total ? set.size / total : 0, aps: [...set].sort() };
+  }).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  scData = { list, aps };
+  $('colScN').textContent = list.length;
+  $('colScMeter').style.width = Math.min(100, list.length / 195 * 100).toFixed(1) + '%';
+  const shown = list.slice(0, 9);
+  $('colScFlags').innerHTML = shown.map(x => `<span class="cf" title="${esc(x.name)}">${flag(x.cc)}</span>`).join('') + (list.length > shown.length ? `<span class="cf more">+${list.length - shown.length}</span>` : '');
+  $('scSummary').textContent = list.length ? `${aps.length} aéroport${aps.length > 1 ? 's' : ''} · ${pctTxt(list.length / 195 * 100)} % du monde` : 'Pose-toi quelque part pour gratter ton premier pays !';
+  if(!$('scratchModalOverlay').classList.contains('hidden')) renderScratchModal();
 }
+function renderScratchModal(){
+  const { list, aps } = scData;
+  const top = list[0];
+  $('scHero').innerHTML = `<div class="cm-stat"><b>${list.length}</b><span>pays</span></div><div class="cm-stat"><b>${aps.length}</b><span>aéroports</span></div>
+    <div class="cm-stat"><b>${pctTxt(list.length / 195 * 100)} %</b><span>du monde</span></div>
+    ${top ? `<div class="cm-stat wide"><b>${flag(top.cc)} ${esc(top.name)}</b><span>ton pays le plus visité · ${top.n} aéroport${top.n > 1 ? 's' : ''}</span></div>` : ''}`;
+  const q = ($('scSearch').value || '').trim().toLowerCase();
+  let rows = list.filter(x => !q || x.name.toLowerCase().includes(q) || x.cc.toLowerCase() === q || x.aps.some(a => a.toLowerCase().includes(q)));
+  if(scSortKey === 'az') rows = rows.slice().sort((a, b) => a.name.localeCompare(b.name));
+  else if(scSortKey === 'pct') rows = rows.slice().sort((a, b) => b.pct - a.pct || b.n - a.n);
+  $('scGrid').innerHTML = rows.length ? rows.map(x => {
+    const pct = Math.round(x.pct * 1000) / 10;
+    return `<div class="sc-row"><span class="sc-flag">${flag(x.cc)}</span>
+      <div class="sc-mid"><div class="sc-name">${esc(x.name)}</div>
+        <div class="sc-aps">${x.aps.slice(0, 10).map(a => `<span>${esc(a)}</span>`).join('')}${x.aps.length > 10 ? `<span class="more">+${x.aps.length - 10}</span>` : ''}</div></div>
+      <div class="sc-prog"><div class="sc-num"><b>${x.n}</b> / ${x.total}</div><div class="sc-bar"><i style="width:${Math.max(2, Math.min(100, pct))}%"></i></div><div class="sc-pct">${pctTxt(pct)} %</div></div></div>`;
+  }).join('') : `<div class="cm-empty">${list.length ? 'Aucun pays ne correspond.' : 'Pose-toi quelque part pour gratter ton premier pays !'}</div>`;
+}
+FBv17.scratchOpen = () => {
+  $('scratchModalOverlay').classList.remove('hidden');
+  if(!$('scSearch').dataset.bound){
+    $('scSearch').dataset.bound = '1';
+    $('scSearch').addEventListener('input', renderScratchModal);
+    $('scSort').addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if(!b) return; scSortKey = b.dataset.k; [...$('scSort').children].forEach(x => x.classList.toggle('on', x === b)); renderScratchModal(); });
+  }
+  renderScratchModal();
+  setTimeout(() => $('scSearch').focus(), 50);
+};
+FBv17.scratchClose = () => $('scratchModalOverlay').classList.add('hidden');
 
 /* ---------------- Profil : défis aéroports ---------------- */
 const CHALLENGES = [
@@ -194,26 +233,62 @@ const CHALLENGES = [
   ['LFKC', 'Calvi', "Approche en virage serré au pied des montagnes corses.", 1],
   ['SBRJ', 'Santos Dumont', "Piste courte au bord de la baie de Rio, au pied du Pain de Sucre.", 1]
 ];
-function renderChallenges(){
-  if(!$('chGrid')) return;
+// v1.8 : tuile compacte (pastilles par défi) + modale filtrable par statut et par niveau.
+const CH_LEVELS = { 3: ['Extrême', 'lv3'], 2: ['Difficile', 'lv2'], 1: ['Technique', 'lv1'] };
+let chFilter = { status: 'all', level: 0 };
+function challengeState(){
   const fl = db.logbook || [];
-  let done = 0;
-  $('chGrid').innerHTML = CHALLENGES.map(([icao, name, desc, lvl]) => {
+  return CHALLENGES.map(([icao, name, desc, lvl]) => {
     const here = fl.filter(f => String(f.arr || '').toUpperCase() === icao);
     const rates = here.map(f => FBShared.flightLandingRate(f)).filter(v => v != null).map(Math.abs);
     const best = rates.length ? Math.min(...rates) : null;
-    if(here.length) done++;
-    return `<div class="chal ${here.length ? 'done' : 'locked'}"><span class="ch-badge">${here.length ? '🏅' : '🔒'}</span>
-      <div class="ch-icao">${esc(icao)} · ${'⚠️'.repeat(lvl)}</div><div class="ch-name">${esc(name)}</div><div class="ch-desc">${esc(desc)}</div>
-      <div class="ch-foot"><span>${here.length ? (best != null ? `Meilleur toucher : −${Math.round(best)} ft/min` : `${here.length}× posé`) : 'À relever'}</span>
-      <button class="btn small" onclick="FBv17.challengeGo('${icao}')">${here.length ? 'Y retourner' : 'Relever le défi'}</button></div></div>`;
-  }).join('');
-  const h = $('chGrid').previousElementSibling;
-  if(h) h.dataset.done = `${done}/${CHALLENGES.length}`;
+    const lastDate = here.map(f => f.date || '').sort().pop() || null;
+    return { icao, name, desc, lvl, n: here.length, best, lastDate, done: here.length > 0 };
+  });
 }
+function renderChallenges(){
+  if(!$('colChal')) return;
+  const st = challengeState();
+  const done = st.filter(x => x.done).length;
+  $('colChN').textContent = done; $('colChOf').textContent = ` sur ${st.length}`;
+  $('colChPips').innerHTML = [3, 2, 1].map(l => `<span class="pip-group">${st.filter(x => x.lvl === l).map(x => `<i class="pip ${CH_LEVELS[l][1]} ${x.done ? 'on' : ''}" title="${esc(x.name)} (${esc(x.icao)})${x.done ? ' ✓' : ''}"></i>`).join('')}</span>`).join('');
+  const next = st.filter(x => !x.done).sort((a, b) => a.lvl - b.lvl)[0];
+  $('colChNext').innerHTML = next ? `Prochain défi conseillé : <b>${esc(next.name)}</b> <span class="mono">${esc(next.icao)}</span> · <span>${CH_LEVELS[next.lvl][0]}</span>` : '🏅 Tous les défis sont relevés, chapeau !';
+  if(!$('chalModalOverlay').classList.contains('hidden')) renderChallengesModal();
+}
+function renderChallengesModal(){
+  const st = challengeState();
+  const done = st.filter(x => x.done).length;
+  $('chHero').innerHTML = `<div class="cm-stat"><b>${done} / ${st.length}</b><span>défis relevés</span></div>`
+    + [3, 2, 1].map(l => { const g = st.filter(x => x.lvl === l); return `<div class="cm-stat"><b class="${CH_LEVELS[l][1]}-t">${g.filter(x => x.done).length} / ${g.length}</b><span>${CH_LEVELS[l][0]}</span></div>`; }).join('');
+  const rows = st.filter(x => (chFilter.status === 'all' || (chFilter.status === 'done') === x.done) && (!chFilter.level || x.lvl === chFilter.level))
+    .sort((a, b) => b.lvl - a.lvl || Number(b.done) - Number(a.done));
+  $('chGrid').innerHTML = rows.length ? rows.map(x => {
+    const g = x.best != null ? FBShared.landingGrade(-x.best, null) : null;
+    return `<div class="ch-card ${CH_LEVELS[x.lvl][1]} ${x.done ? 'done' : 'locked'}">
+      <div class="ch-top"><span class="ch-icao">${esc(x.icao)}</span><span class="ch-lvl">${CH_LEVELS[x.lvl][0]}</span><span class="ch-state">${x.done ? '✓' : '🔒'}</span></div>
+      <div class="ch-name">${esc(x.name)}</div>
+      <div class="ch-desc">${esc(x.desc)}</div>
+      <div class="ch-foot">
+        <div class="ch-res">${x.done ? (x.best != null ? `<span>Meilleur toucher</span><b style="color:${g ? g.color : 'inherit'}">−${Math.round(x.best)} ft/min</b>` : `<span>Posé</span><b>${x.n}×</b>`) : '<span>Pas encore relevé</span>'}</div>
+        <button class="btn small ${x.done ? '' : 'primary'}" onclick="FBv17.challengeGo('${x.icao}')">${x.done ? 'Y retourner' : 'Relever le défi'}</button>
+      </div></div>`;
+  }).join('') : '<div class="cm-empty">Aucun défi ne correspond à ces filtres.</div>';
+}
+FBv17.challengesOpen = () => {
+  $('chalModalOverlay').classList.remove('hidden');
+  const bind = (id, key, num) => {
+    const box = $(id); if(box.dataset.bound) return; box.dataset.bound = '1';
+    box.addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if(!b) return; chFilter[key] = num ? +b.dataset.k : b.dataset.k; [...box.children].forEach(x => x.classList.toggle('on', x === b)); renderChallengesModal(); });
+  };
+  bind('chStatus', 'status', false); bind('chLevel', 'level', true);
+  renderChallengesModal();
+};
+FBv17.challengesClose = () => $('chalModalOverlay').classList.add('hidden');
 FBv17.challengeGo = icao => {
   const set = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('input', { bubbles: true })); };
   set('arrIcao', icao); set('arrName', (CHALLENGES.find(c => c[0] === icao) || [])[1] || '');
+  FBv17.challengesClose();
   switchView('briefing');
 };
 
@@ -460,4 +535,8 @@ FBv17.init = async () => {
     deckPushUi(); setInterval(deckPushUi, 5000); // volumes réglés dans l'appli : reflétés sur le Stream Deck
   }
 };
+// v1.8 : une seule initialisation, et démarrage ici si app.js a déjà fini la sienne (fichier local
+// lu très vite : app.js peut atteindre la fin de son démarrage avant que ce script soit chargé).
+{ const run = FBv17.init; let started = false; FBv17.init = async () => { if(started) return; started = true; return run(); }; }
+if(window.__fbAppReady) FBv17.init().catch(e => console.warn('[v1.7]', e));
 })();

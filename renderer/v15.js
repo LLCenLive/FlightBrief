@@ -585,8 +585,17 @@ FBv15.renderApproach3D = async function(f){
     return;
   }
   const tdTs = t.ts || Infinity;
-  const pts = td.path.filter(p => (p.phase === 'air' || p.phase === 'touchdown') && p.ts <= tdTs + 500 && FBShared.haversineNm(p.lat, p.lon, t.lat, t.lon) <= 6);
-  if(!pts.some(p => p.phase === 'touchdown')) pts.push({ ...t, phase: 'touchdown' });
+  const raw = td.path.filter(p => (p.phase === 'air' || p.phase === 'touchdown') && p.ts <= tdTs + 500 && FBShared.haversineNm(p.lat, p.lon, t.lat, t.lon) <= 6);
+  if(!raw.some(p => p.phase === 'touchdown')) raw.push({ ...t, phase: 'touchdown' });
+  // v1.8 : au toucher, le tracker enregistre un point « air » et un point « touchdown » au même
+  // endroit (hauteur altimètre puis 0) : la courbe faisait alors un segment vertical et l'avion
+  // se dressait à la verticale. On écarte les points à moins de 4 m du précédent (le dernier gagne).
+  const pts = [];
+  raw.forEach(p => {
+    const prev = pts[pts.length - 1];
+    if(prev && FBShared.haversineNm(prev.lat, prev.lon, p.lat, p.lon) * 1852 < 4) pts[pts.length - 1] = p;
+    else pts.push(p);
+  });
   if(pts.length < 4){
     sec.classList.remove('hidden');
     $('approach3d').innerHTML = '';
@@ -663,7 +672,8 @@ function buildApproachScene(){
   gsLine.computeLineDistances(); scene.add(gsLine);
 
   // Trajectoire réelle
-  const hOf = p => p.phase === 'touchdown' ? 0 : (p.altFt != null ? p.altFt - elevFt : (p.aglFt || 0));
+  // Hauteur sol : la radiosonde (aglFt, v1.5+) fait foi ; sinon altimètre − altitude du terrain.
+  const hOf = p => p.phase === 'touchdown' ? 0 : (p.aglFt != null ? p.aglFt : (p.altFt != null ? p.altFt - elevFt : 0));
   const v3 = pts.map(p => toV(p.lat, p.lon, hOf(p)));
   const curve = new THREE.CatmullRomCurve3(v3, false, 'centripetal');
   const span = Math.max(1500, v3[0].distanceTo(v3[v3.length - 1]));
@@ -759,7 +769,20 @@ function placePlane(){
   const p = ap3d.curve.getPointAt(u);
   const tan = ap3d.curve.getTangentAt(Math.min(0.999, u)).normalize();
   ap3d.plane.position.copy(p).setY(p.y + 4);
-  ap3d.plane.lookAt(p.clone().sub(tan)); // le nez (-z local) pointe dans le sens de déplacement
+  // v1.8 : orientation calculée (cap + assiette réelle + inclinaison enregistrée) plutôt qu'un
+  // lookAt sur la tangente : une tangente presque verticale dressait l'avion. L'assiette est
+  // recalculée sans l'exagération verticale et bornée à ±20°.
+  const back = ap3d.curve.getPointAt(Math.max(0, u - 0.01)), fwd = ap3d.curve.getPointAt(Math.min(1, u + 0.01));
+  const dx = fwd.x - back.x, dz = fwd.z - back.z, dy = (fwd.y - back.y) / (ap3d.exag || 1);
+  const horiz = Math.hypot(dx, dz);
+  if(horiz > 0.01){
+    const ii = Math.min(ap3d.pts.length - 1, Math.round(u * (ap3d.pts.length - 1)));
+    const bank = Number.isFinite((ap3d.pts[ii] || {}).bankDeg) ? ap3d.pts[ii].bankDeg : 0;
+    ap3d.plane.rotation.order = 'YXZ';
+    ap3d.plane.rotation.y = Math.atan2(-dx, -dz);                                   // nez (-z local) vers l'avant
+    ap3d.plane.rotation.x = Math.max(-0.35, Math.min(0.35, Math.atan2(dy, horiz)));  // assiette
+    ap3d.plane.rotation.z = Math.max(-60, Math.min(60, bank)) * Math.PI / 180;       // inclinaison (simu : virage à droite = négatif)
+  }
   // HUD
   const along = p.x * ap3d.ux + (-p.z) * ap3d.un;
   const distM = Math.max(0, -along); // avant le seuil
@@ -1316,6 +1339,8 @@ function sfxCtx(){
     return _sfxCtx;
   }catch(e){ return null; }
 }
+// v1.8 : partagés avec v18.js (sons des pop-ups).
+FBv15.sfx = { ctx: () => sfxCtx(), bell: (...a) => sfxBell(...a), gain: (...a) => volGain(...a) };
 // Note de cloche douce : fondamentale + harmoniques légères, attaque rapide, longue extinction.
 function sfxBell(ac, out, freq, t, peak, decay){
   [[1, 1], [2, 0.28], [3.01, 0.09]].forEach(([mul, amp]) => {

@@ -1228,7 +1228,6 @@ Seules les carrières de type IVAO apparaissent ici. Crée d'abord une carrière
 Seuls le bouton et le raccourci prennent des captures.	Only the button and the shortcut take screenshots.	Solo el botón y el atajo hacen capturas.
 Shadow	Shadow	Sombra
 Shift	Shift	Mayús
-Si ton avion roule ou vole dans le simulateur alors que le suivi n'est pas lancé, FlightBrief te prévient par un son et une notification Windows, puis toutes les minutes.	If your aircraft is taxiing or flying in the simulator while tracking isn't running, FlightBrief warns you with a sound and a Windows notification, then every minute.	Si tu avión rueda o vuela en el simulador sin que el seguimiento esté activo, FlightBrief te avisa con un sonido y una notificación de Windows, y luego cada minuto.
 Si Twitch le demande, active d'abord la double authentification sur ton compte.	If Twitch asks, enable two-factor authentication on your account first.	Si Twitch lo pide, activa primero la verificación en dos pasos en tu cuenta.
 Signal perdu	Signal lost	Señal perdida
 Silhouette	Silhouette	Silueta
@@ -1959,4 +1958,152 @@ Copilote vocal (Briefing) : décollage, montée, croisière, approche stabilisé
 EFB sur téléphone ou tablette : carte avec l'ATC VATSIM / IVAO, plan de vol SimBrief et cartes d'aéroport, mise en page tablette.	EFB on phone or tablet: map with VATSIM / IVAO ATC, SimBrief flight plan and airport charts, tablet layout.	EFB en teléfono o tableta: mapa con el ATC de VATSIM / IVAO, plan de vuelo de SimBrief y cartas de aeropuerto, diseño para tableta.
 « Où voler aujourd'hui ? » (Outils) : 3 destinations selon ton temps, ton avion, la météo réelle, l'ATC en ligne et les events VATSIM — terrains jamais visités ou tes préférés —, avec ouverture dans SimBrief.	“Where to fly today?” (Tools): 3 destinations based on your time, aircraft, real weather, online ATC and VATSIM events — airfields never visited or your favourites — with opening in SimBrief.	«¿Adónde volar hoy?» (Herramientas): 3 destinos según tu tiempo, tu avión, la meteo real, el ATC en línea y los events de VATSIM — aeródromos nunca visitados o tus favoritos —, con apertura en SimBrief.
 Plugin Stream Deck (Profil → Stream Deck) : tracker, capture, copilote, infos de vol sur les touches, molettes du Stream Deck +. Installé d'un clic.	Stream Deck plugin (Profile → Stream Deck): tracker, screenshot, copilot, flight info on the keys, Stream Deck + dials. Installed in one click.	Plugin de Stream Deck (Perfil → Stream Deck): seguimiento, captura, copiloto, datos de vuelo en las teclas, diales del Stream Deck +. Se instala con un clic.
+# ---- v1.8 ----
+(joue un exemple quand tu relâches le curseur)	(plays an example when you release the slider)	(reproduce un ejemplo al soltar el control)
+Action impossible : le PC est-il joignable ?	Action failed: can the PC be reached?	Acción imposible: ¿se puede acceder al PC?
+Activer le copilote	Turn on the copilot	Activar el copiloto
+Ajoutée au vol	Added to the flight	Añadida al vuelo
+Alertes muettes	Alerts muted	Alertas silenciadas
+Annonces actives	Callouts on	Anuncios activos
+Annoncé par le copilote	Read out by the copilot	Anunciado por el copiloto
+Arrivés	Arrived	Llegados
+Arrêté	Stopped	Detenido
+Atterrissage le plus doux	Softest landing	Aterrizaje más suave
+Aucun défi ne correspond à ces filtres.	No challenge matches these filters.	Ningún reto coincide con estos filtros.
+Aucun pari	No bets	Ninguna apuesta
+Aucun pari en cours	No bets running	Ninguna apuesta en curso
+Aucun pays ne correspond.	No country matches.	Ningún país coincide.
+Aucun vol en cours à arrêter	No flight in progress to stop	Ningún vuelo en curso que detener
+Aucun vol « À bord » en cours.	No “On board” flight in progress.	Ningún vuelo «A bordo» en curso.
+Aucune photo pour l’instant	No photos yet	Todavía no hay fotos
+Aéroport fétiche	Favourite airport	Aeropuerto favorito
+Aéroports pris sur le vol réel (le briefing indiquait {0}).	Airports taken from the actual flight (the briefing said {0}).	Aeropuertos tomados del vuelo real (el briefing indicaba {0}).
+Bot désactivé	Bot disabled	Bot desactivado
+Briefing remis à zéro	Briefing cleared	Briefing reiniciado
+C'est ici que FlightBrief te prévient (vol terminé, PIREP enregistré, erreur…).	This is where FlightBrief lets you know (flight finished, PIREP saved, error…).	Aquí es donde FlightBrief te avisa (vuelo terminado, PIREP guardado, error…).
+Capture d’écran	Screenshot	Captura de pantalla
+Captures prises pendant tes vols	Screenshots taken during your flights	Capturas tomadas durante tus vuelos
+Chargement des photos…	Loading photos…	Cargando fotos…
+Chat du bot	Bot chat	Chat del bot
+Chaîne non renseignée	No channel set	Canal no indicado
+Chercher un pays ou un aéroport…	Search a country or an airport…	Buscar un país o un aeropuerto…
+Clique sur un record pour revoir le vol.	Click a record to see the flight again.	Haz clic en un récord para volver a ver el vuelo.
+Connecté au chat	Connected to chat	Conectado al chat
+Connecté au simu	Connected to the sim	Conectado al simulador
+Connexion à FlightBrief…	Connecting to FlightBrief…	Conectando con FlightBrief…
+Connexion…	Connecting…	Conectando…
+Couper le copilote	Mute the copilot	Silenciar el copiloto
+Couper le son des alertes	Mute alert sounds	Silenciar las alertas
+Couper le tracker	Stop the tracker	Detener el seguimiento
+Difficile	Hard	Difícil
+Enregistrer quand même	Save anyway	Guardar de todos modos
+Envoyé à FlightBrief ✓	Sent to FlightBrief ✓	Enviado a FlightBrief ✓
+Exemple de pop-up	Example pop-up	Ejemplo de aviso
+Extrême	Extreme	Extremo
+Fermer les paris	Close bets	Cerrar las apuestas
+Fermer l’embarquement	Close boarding	Cerrar el embarque
+Fermés	Closed	Cerradas
+FlightBrief s'est fermé avant l'envoi du PIREP. Vérifie le résumé puis envoie-le.	FlightBrief closed before the PIREP was sent. Check the summary, then send it.	FlightBrief se cerró antes de enviar el PIREP. Revisa el resumen y luego envíalo.
+Hors vol enregistré	Not linked to a flight	Fuera de un vuelo registrado
+Ignorer	Ignore	Ignorar
+L'onglet Stream fonctionne sur le	The Stream tab works on the	La pestaña Stream funciona en la
+Le tracker ne suit aucun vol pour l'instant (avion pas encore parti ?).	The tracker isn't following any flight right now (aircraft not moving yet?).	El seguimiento no sigue ningún vuelo por ahora (¿el avión aún no ha salido?).
+Le vol a été coupé en plein trajet : certaines données (atterrissage, carburant) peuvent manquer.	The flight was cut off mid-way: some data (landing, fuel) may be missing.	El vuelo se cortó a mitad de camino: pueden faltar algunos datos (aterrizaje, combustible).
+Le vol est de nouveau prêt à être envoyé.	The flight is ready to be sent again.	El vuelo vuelve a estar listo para enviarse.
+Les captures restent sur ton PC. Ouvre cet écran sur le	Screenshots stay on your PC. Open this screen on the	Las capturas se quedan en tu PC. Abre esta pantalla en la
+Les messages importants (vol terminé, PIREP enregistré, vol trop court, erreur du simulateur) s'affichent en bas de la fenêtre avec un petit son.	Important messages (flight finished, PIREP saved, flight too short, simulator error) appear at the bottom of the window with a short sound.	Los mensajes importantes (vuelo terminado, PIREP guardado, vuelo demasiado corto, error del simulador) aparecen abajo de la ventana con un pequeño sonido.
+Meilleure note d'atterrissage	Best landing score	Mejor nota de aterrizaje
+Meilleurs parieurs	Top bettors	Mejores apostadores
+Mes photos	My photos	Mis fotos
+Mes photos de vol	My flight photos	Mis fotos de vuelo
+Muet	Muted	Silenciado
+Ouverts	Open	Abiertas
+Ouvrir l’embarquement	Open boarding	Abrir el embarque
+PC injoignable	PC unreachable	PC inaccesible
+PIREP annulé	PIREP cancelled	PIREP cancelado
+PIREP enregistré dans le logbook	PIREP saved to the logbook	PIREP guardado en el logbook
+Paris d’atterrissage {0}	Landing bets {0}	Apuestas de aterrizaje {0}
+Pas de gagnant	No winner	Sin ganador
+Pas encore relevé	Not done yet	Aún no superado
+Photos	Photos	Fotos
+Photos du vol	Flight photos	Fotos del vuelo
+Photos indisponibles hors du Wi-Fi	Photos unavailable away from Wi-Fi	Fotos no disponibles fuera del Wi-Fi
+Plus haute altitude	Highest altitude	Mayor altitud
+Plus longue distance	Longest distance	Mayor distancia
+Plus visités	Most visited	Más visitados
+Point de situation	Status report	Punto de situación
+Posé	Landed	Aterrizado
+Prends des captures pendant tes vols (raccourci clavier ou captures automatiques) : elles apparaîtront ici, rangées par vol.	Take screenshots during your flights (hotkey or automatic captures): they'll show up here, sorted by flight.	Haz capturas durante tus vuelos (atajo de teclado o capturas automáticas): aparecerán aquí, ordenadas por vuelo.
+Problème avec le simulateur	Problem with the simulator	Problema con el simulador
+Prochain défi conseillé :	Suggested next challenge:	Próximo reto aconsejado:
+Prochain survol :	Next flyover:	Próximo sobrevuelo:
+Précédente	Previous	Anterior
+Prêt pour le prochain vol.	Ready for the next flight.	Listo para el próximo vuelo.
+Relevés	Done	Superados
+Rien pour l’instant : les commandes du chat (!eta, !pari…) et les réponses du bot s’afficheront ici.	Nothing yet: chat commands (!eta, !bet…) and the bot's replies will show up here.	Nada por ahora: los comandos del chat (!eta, !apuesta…) y las respuestas del bot aparecerán aquí.
+Résolus	Settled	Resueltas
+Résultat annoncé	Result announced	Resultado anunciado
+Résultat{0}	Result{0}	Resultado{0}
+Rétablir	Restore	Restablecer
+Rétablir le son des alertes	Unmute alert sounds	Reactivar el sonido de las alertas
+Si ton avion roule ou vole dans le simulateur alors que le suivi n'est pas lancé, FlightBrief te prévient par un son et une notification Windows après 5 minutes de roulage ou de vol, puis toutes les minutes.	If your aircraft is taxiing or flying in the simulator while tracking isn't running, FlightBrief warns you with a sound and a Windows notification after 5 minutes of taxiing or flying, then every minute.	Si tu avión rueda o vuela en el simulador sin que el seguimiento esté activo, FlightBrief te avisa con un sonido y una notificación de Windows tras 5 minutos de rodaje o de vuelo, y luego cada minuto.
+Son des alertes actif	Alert sounds on	Sonido de alertas activo
+Son des pop-ups	Pop-up sound	Sonido de los avisos
+Suivante	Next	Siguiente
+Technique	Technical	Técnico
+Tes records apparaîtront ici après ton premier vol.	Your records will show up here after your first flight.	Tus récords aparecerán aquí tras tu primer vuelo.
+Tous niveaux	All levels	Todos los niveles
+Télécommande	Remote control	Mando a distancia
+Voir	View	Ver
+Voir le détail →	See details →	Ver el detalle →
+Voir le résumé	View the summary	Ver el resumen
+Voir le vol	View the flight	Ver el vuelo
+Voir les défis →	See the challenges →	Ver los retos →
+Vol interrompu récupéré	Interrupted flight recovered	Vuelo interrumpido recuperado
+Vol récupéré	Flight recovered	Vuelo recuperado
+Vol trop court pour être enregistré automatiquement	Flight too short to be saved automatically	Vuelo demasiado corto para guardarse automáticamente
+Vols illustrés	Flights with photos	Vuelos con fotos
+Vérifie que le téléphone est sur le même Wi-Fi que ton PC, avec FlightBrief ouvert.	Check that the phone is on the same Wi-Fi as your PC, with FlightBrief open.	Comprueba que el teléfono está en el mismo Wi-Fi que tu PC, con FlightBrief abierto.
+a parié −{0} (écart {1})	bet −{0} (off by {1})	apostó −{0} (diferencia {1})
+aéroports	airports	aeropuertos
+du monde	of the world	del mundo
+défis relevés	challenges done	retos superados
+que ton PC, avec FlightBrief ouvert.	as your PC, with FlightBrief open.	que tu PC, con FlightBrief abierto.
+relevés	done	superados
+sur 15	out of 15	de 15
+ton pays le plus visité · {0} aéroport{1}	your most visited country · {0} airport{1}	tu país más visitado · {0} aeropuerto{1}
+{0} aéroport{1} · {2} % du monde	{0} airport{1} · {2}% of the world	{0} aeropuerto{1} · {2} % del mundo
+{0} passage{1} au départ ou à l'arrivée	{0} visit{1} as departure or arrival	{0} paso{1} como salida o llegada
+{0} · {1}{2} — le briefing est remis à zéro.{3}	{0} · {1}{2} — the briefing has been cleared.{3}	{0} · {1}{2} — el briefing se ha reiniciado.{3}
+{0} → {1} · {2} · {3} NM. Vérifie le résumé puis envoie le PIREP.	{0} → {1} · {2} · {3} NM. Check the summary, then send the PIREP.	{0} → {1} · {2} · {3} NM. Revisa el resumen y luego envía el PIREP.
+{0}{1} s en l'air (minimum 2 min). Tu peux l'enregistrer quand même ou l'ignorer.	{0}{1} s in the air (2 min minimum). You can save it anyway or ignore it.	{0}{1} s en el aire (mínimo 2 min). Puedes guardarlo de todos modos o ignorarlo.
+À bord {0}	On board {0}	A bordo {0}
+— relevé	— done	— superado
+▶ Voir un exemple	▶ See an example	▶ Ver un ejemplo
+⚠️ Plus de nouvelles du PC — infos de la dernière minute.	⚠️ No news from the PC — info from the last minute.	⚠️ Sin noticias del PC — datos del último minuto.
+✅ Moteurs coupés : clôture du vol…	✅ Engines off: closing the flight…	✅ Motores apagados: cerrando el vuelo…
+✈️ En vol	✈️ Airborne	✈️ En vuelo
+🅿️ Avion garé : coupe les moteurs pour clôturer le vol (ou utilise le bouton ci-dessus).	🅿️ Aircraft parked: shut down the engines to close the flight (or use the button above).	🅿️ Avión estacionado: apaga los motores para cerrar el vuelo (o usa el botón de arriba).
+🅿️ Avion immobile : le vol se clôture tout seul dans quelques secondes.	🅿️ Aircraft stopped: the flight will close by itself in a few seconds.	🅿️ Avión detenido: el vuelo se cerrará solo en unos segundos.
+🏅 Tous les défis sont relevés, chapeau !	🏅 All challenges done, hats off!	🏅 Todos los retos superados, ¡enhorabuena!
+💬 Pop-ups de l'appli	💬 App pop-ups	💬 Avisos de la aplicación
+📶 Les photos s'affichent quand le téléphone est sur le même Wi-Fi que ton PC (FlightBrief ouvert).	📶 Photos show up when the phone is on the same Wi-Fi as your PC (FlightBrief open).	📶 Las fotos aparecen cuando el teléfono está en el mismo Wi-Fi que tu PC (FlightBrief abierto).
+# ---- journal des nouveautés 1.8 ----
+Confort, records et télécommande sur le téléphone	Comfort, records and a remote control on your phone	Comodidad, récords y mando a distancia en el teléfono
+Fin de vol intelligente : le vol se clôture quand tu coupes les moteurs au parking, plus au premier arrêt au point d'attente ou dans une file de roulage. Sous le bouton d'arrêt, l'appli te dit ce qu'elle attend.	Smart flight end: the flight closes when you shut down the engines at the gate, no longer at the first stop at the holding point or in a taxi queue. Below the stop button, the app tells you what it's waiting for.	Fin de vuelo inteligente: el vuelo se cierra cuando apagas los motores en el parking, ya no en la primera parada en el punto de espera o en una cola de rodaje. Bajo el botón de parada, la aplicación te dice qué está esperando.
+Pop-ups en bas de l'appli avec un petit son : vol terminé, PIREP enregistré, vol trop court, erreur du simulateur… Son et volume réglables dans le Profil.	Pop-ups at the bottom of the app with a short sound: flight finished, PIREP saved, flight too short, simulator error… Sound and volume adjustable in Profile.	Avisos abajo de la aplicación con un pequeño sonido: vuelo terminado, PIREP guardado, vuelo demasiado corto, error del simulador… Sonido y volumen ajustables en el Perfil.
+PIREP enregistré : un bouton « Annuler » pendant 10 secondes, en cas de fausse manip.	PIREP saved: an “Undo” button for 10 seconds, in case of a slip.	PIREP guardado: un botón «Deshacer» durante 10 segundos, por si te equivocas.
+Briefing remis à zéro après l'envoi du PIREP, prêt pour le vol suivant (avec « Rétablir »).	Briefing cleared after the PIREP is sent, ready for the next flight (with “Restore”).	Briefing reiniciado tras enviar el PIREP, listo para el siguiente vuelo (con «Restablecer»).
+Profil : records personnels (atterrissage le plus doux, meilleure note, vol le plus long, plus longue distance, plus haute altitude, aéroport fétiche). Un clic rouvre le vol.	Profile: personal records (softest landing, best score, longest flight, longest distance, highest altitude, favourite airport). One click opens the flight again.	Perfil: récords personales (aterrizaje más suave, mejor nota, vuelo más largo, mayor distancia, mayor altitud, aeropuerto favorito). Un clic vuelve a abrir el vuelo.
+Profil : Gratte-pays et Défis aéroports ramenés à deux tuiles compactes. Le détail s'ouvre dans une fenêtre, avec recherche, tri et filtres par niveau.	Profile: Scratch map and Airport challenges shrunk to two compact tiles. Details open in a window, with search, sorting and level filters.	Perfil: Rasca-países y Retos de aeropuertos reducidos a dos tarjetas compactas. El detalle se abre en una ventana, con búsqueda, orden y filtros por nivel.
+Téléphone, pour les streamers : onglet Stream avec l'état du bot, les paris en cours, les passagers à bord, le chat du bot et une télécommande (tracker, capture, paris, embarquement, copilote, alertes).	Phone, for streamers: Stream tab with the bot status, current bets, passengers on board, the bot chat and a remote control (tracker, screenshot, bets, boarding, copilot, alerts).	Teléfono, para streamers: pestaña Stream con el estado del bot, las apuestas en curso, los pasajeros a bordo, el chat del bot y un mando a distancia (seguimiento, captura, apuestas, embarque, copiloto, alertas).
+Téléphone : tes photos de vol, rangées par vol, avec une visionneuse plein écran (sur le Wi-Fi de la maison).	Phone: your flight photos, sorted by flight, with a full-screen viewer (on your home Wi-Fi).	Teléfono: tus fotos de vuelo, ordenadas por vuelo, con un visor a pantalla completa (en el Wi-Fi de casa).
+Rappel « tracker non lancé » : plus d'alarme au lancement du simulateur. Il attend 5 minutes de roulage ou de vol avant de sonner.	“Tracker not started” reminder: no more alarm when the simulator starts. It waits for 5 minutes of taxiing or flying before ringing.	Aviso «seguimiento no iniciado»: ya no suena al abrir el simulador. Espera 5 minutos de rodaje o de vuelo antes de sonar.
+Un vol trop court n'est plus effacé en silence : l'appli te propose de l'enregistrer quand même.	A flight that's too short is no longer silently discarded: the app offers to save it anyway.	Un vuelo demasiado corto ya no se borra en silencio: la aplicación te propone guardarlo de todos modos.
+Un roulage rapide (plus de 40 kt au sol) était pris pour un décollage : le vrai vol devenait un rebond et était rejeté comme « trop court ».	A fast taxi (over 40 kt on the ground) was mistaken for a takeoff: the real flight became a bounce and was rejected as “too short”.	Un rodaje rápido (más de 40 kt en tierra) se tomaba por un despegue: el vuelo real se convertía en un rebote y se rechazaba como «demasiado corto».
+Des aéroports restés dans le Briefing passaient devant ceux du vol réel dans le PIREP (ex. LFPG → LFBO pour un LEMD → LEPP). Le terrain où l'avion s'est vraiment posé l'emporte désormais.	Airports left in the Briefing took priority over those of the actual flight in the PIREP (e.g. LFPG → LFBO for an LEMD → LEPP). The airfield where the aircraft really landed now wins.	Los aeropuertos que quedaban en el Briefing tenían prioridad sobre los del vuelo real en el PIREP (p. ej. LFPG → LFBO para un LEMD → LEPP). Ahora gana el aeródromo donde el avión aterrizó de verdad.
+Replay 3D de l'approche : l'avion se dressait à la verticale au toucher. Il suit maintenant le cap, l'assiette et l'inclinaison réelles.	3D approach replay: the aircraft stood up vertically at touchdown. It now follows the real heading, pitch and bank.	Repetición 3D de la aproximación: el avión se ponía vertical en la toma. Ahora sigue el rumbo, el cabeceo y la inclinación reales.
+🏆 Records personnels	🏆 Personal records	🏆 Récords personales
+pays	countries	países
+sur ~195	out of ~195	de ~195
 `);

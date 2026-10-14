@@ -232,6 +232,36 @@ function startMobileAppServer(port, opts) {
       if (!tokenOk()) return sendJson(res, 401, { error: 'unauthorized' });
       return sendJson(res, 200, { ofp: opts.getOfp ? opts.getOfp() : null });
     }
+    // v1.8 — Stream (streamers) : infos du bot Twitch, paris, passagers, et télécommande
+    // (mêmes actions que le plugin Stream Deck).
+    if (url === '/api/stream') {
+      if (!tokenOk()) return sendJson(res, 401, { error: 'unauthorized' });
+      try { return sendJson(res, 200, opts.getStream ? opts.getStream() : { enabled: false }); }
+      catch (e) { return sendJson(res, 500, { error: String(e && e.message || e) }); }
+    }
+    if (url === '/api/remote') {
+      if (!tokenOk()) return sendJson(res, 401, { error: 'unauthorized' });
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method' });
+      try { return sendJson(res, 200, opts.remoteAction ? opts.remoteAction(u.searchParams.get('a') || '') : { ok: false }); }
+      catch (e) { return sendJson(res, 500, { error: String(e && e.message || e) }); }
+    }
+    // v1.8 — Photos des vols : liste, puis image (miniature si w est donné). Servies seulement
+    // quand le téléphone est sur le même Wi-Fi : rien n'est envoyé ailleurs.
+    if (url === '/api/shots') {
+      if (!tokenOk()) return sendJson(res, 401, { error: 'unauthorized' });
+      try { return sendJson(res, 200, { shots: opts.listShots ? opts.listShots() : [] }); }
+      catch (e) { return sendJson(res, 500, { error: String(e && e.message || e) }); }
+    }
+    if (url === '/api/shot') {
+      if (!tokenOk()) { res.writeHead(401); return res.end(); }
+      const name = u.searchParams.get('n') || '';
+      if (!/^[A-Za-z0-9_.-]{1,80}\.(jpe?g|png|webp)$/i.test(name)) { res.writeHead(400); return res.end(); }
+      return Promise.resolve(opts.getShot ? opts.getShot(name, +u.searchParams.get('w') || 0) : null).then(img => {
+        if (!img) { res.writeHead(404); return res.end(); }
+        res.writeHead(200, { 'Content-Type': img.type, 'Cache-Control': 'private, max-age=86400', 'Content-Length': img.buf.length });
+        res.end(img.buf);
+      }).catch(() => { res.writeHead(500); res.end(); });
+    }
     if (url === '/api/data') {
       if (!tokenOk()) return sendJson(res, 401, { error: 'unauthorized' });
       try { return sendJson(res, 200, opts.getPayload()); }

@@ -2177,9 +2177,13 @@ async function stopTrackingAndSendPirep(){
   btn.disabled = true;
   btn.textContent = 'Arrêt du vol…';
   _pendingManualStop = true;
+  window.__fbManualStop = true; // v1.8 : pas de pop-up « Vol terminé » pour un arrêt manuel
   const res = await window.tracker.stopTracking();
   if(!res || !res.ok){
     _pendingManualStop = false;
+    window.__fbManualStop = false;
+    // v1.8 : vol trop court → pop-up « Enregistrer quand même » (événement flight-rejected).
+    if(window.FBNotice && !(res && res.reason === 'too_short')) FBNotice.show({ kind: 'err', title: 'Aucun vol en cours à arrêter', text: "Le tracker ne suit aucun vol pour l'instant (avion pas encore parti ?).", ms: 8000 });
     btn.disabled = false;
     btn.textContent = 'Arrêter le vol & envoyer le PIREP';
     el('trkStatusMsg').textContent = res && res.reason === 'too_short'
@@ -2240,6 +2244,14 @@ function initTrackerListeners(){
   });
 
   window.tracker.onTelemetry(data => {
+    // v1.8 : ce qu'attend la clôture automatique une fois l'avion garé.
+    const eh = el('trkEndHint');
+    if(eh){
+      const msg = data.endHint === 'engines' ? "🅿️ Avion garé : coupe les moteurs pour clôturer le vol (ou utilise le bouton ci-dessus)."
+        : data.endHint === 'closing' ? '✅ Moteurs coupés : clôture du vol…'
+        : data.endHint === 'parked' ? '🅿️ Avion immobile : le vol se clôture tout seul dans quelques secondes.' : '';
+      eh.textContent = msg; eh.classList.toggle('hidden', !msg);
+    }
     el('trkPhase').textContent = ({ idle:'—', ground:'Au sol / roulage', airborne:'En vol', landed:'Atterri / roulage' })[data.phase] || data.phase;
     el('trkAlt').textContent = Math.round(data.altFt).toLocaleString(FBI18N.locale()) + ' ft';
     el('trkIas').textContent = Math.round(data.iasKt) + ' kt';
@@ -2390,6 +2402,7 @@ async function checkForRecoverableFlight(){
     _lastTrackedFlight = snapshot.result;
     updateBriefingSaveVisibility();
     renderTrkResultPanel(snapshot.result);
+    setTimeout(() => { if(window.FBv18) FBv18.onRecovered(snapshot); }, 800);
     el('trkStatusMsg').textContent = snapshot.final
       ? '⚠️ Vol récupéré après une fermeture inattendue — vérifie les infos puis envoie le PIREP (ou ignore-le ci-dessous).'
       : '⚠️ Vol interrompu (crash/fermeture en plein trajet) — récupération partielle, certaines données (atterrissage, carburant) manquent. Vérifie avant d\'envoyer.';
@@ -2467,11 +2480,13 @@ function populateLogbookFieldsFromTrackedFlight(data){
 async function applyTrackedFlightToLogbook(switchToLogbook){
   if(!_lastTrackedFlight) return;
   const data = _lastTrackedFlight;
+  const v18ctx = window.FBv18 ? await FBv18.beforePirep(data) : null; // v1.8 : toast « Annuler » + briefing remis à zéro
   populateLogbookFieldsFromTrackedFlight(data);
   if(window.FBv15) await FBv15.attachFlightShots(data);
   if(window.FBCabin) await FBCabin.attachToTrack(data);
   await saveLogbookEntry();
   dismissTrackedFlight();
+  if(v18ctx) FBv18.afterPirep(v18ctx);
   if(switchToLogbook !== false) switchView('logbook');
 }
 
@@ -4506,6 +4521,7 @@ async function endTour(){
   window.__fbAppReady = true;
   if(window.FBv15) await FBv15.init();
   if(window.FBv17) await FBv17.init().catch(e => console.warn('[v1.7]', e));
+  if(window.FBv18) await FBv18.init().catch(e => console.warn('[v1.8]', e));
   applyStreamFeatures();
   maybeShowOnboarding();
   await maybeShowChangelogAfterUpdate();

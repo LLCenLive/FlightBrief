@@ -96,7 +96,13 @@ function windComponents(windDirDeg, windKt, refHdgDeg) {
 const AIRBORNE_SPEED_KT = 40;    // GS au-dessus duquel on considère l'avion en l'air même si le capteur onGround retarde
 const STOPPED_GS_KT = 3;          // en dessous, on considère l'avion à l'arrêt (parqué)
 const MIN_FLIGHT_MIN = 2;         // durée minimale en vol pour enregistrer un vol
-const PARKED_TIMEOUT_MS = 25000;  // temps immobile après roulage avant de considérer le vol terminé
+const PARKED_TIMEOUT_MS = 25000;  // sans infos systèmes : temps immobile après roulage avant de considérer le vol terminé
+// v1.8 — Fin de vol « intelligente » (variables systèmes lues pour le copilote) : le vol se
+// clôture quand l'avion est immobile ET moteurs coupés, pas au premier arrêt au point d'attente
+// ou dans une file de roulage. Filets de sécurité si les moteurs restent allumés.
+const SHUTDOWN_CONFIRM_MS = 5000;        // immobile + moteurs coupés depuis 5 s
+const PARKBRAKE_TIMEOUT_MS = 3 * 60000;  // immobile + frein de parc serré depuis 3 min (moteurs allumés)
+const STATIONARY_MAX_MS = 10 * 60000;    // immobile depuis 10 min, quoi qu'il arrive
 // Juste après le décollage, le capteur SIM ON GROUND peut repasser brièvement à vrai (train qui
 // finit de se rétracter, rebond de suspension à la rotation) sans que l'avion touche vraiment le
 // sol. Sous ce délai, un contact au sol est ignoré comme bruit capteur plutôt que traité comme un
@@ -768,6 +774,26 @@ class FlightTracker extends EventEmitter {
     });
   }
 
+  // v1.8 — L'avion est-il garé pour de bon ? Voir SHUTDOWN_CONFIRM_MS & co.
+  _parkedLongEnough(now) {
+    const still = now - this._stationarySince;
+    const sys = this._sys && now - this._sys.ts < 5000 ? this._sys : null;
+    const engKnown = sys && Number.isFinite(sys.eng1);
+    if (!engKnown) return still >= PARKED_TIMEOUT_MS; // pas d'infos systèmes : comportement historique
+    const enginesOff = sys.eng1 < 0.5 || (Number.isFinite(sys.engines) && sys.engines < 1);
+    if (enginesOff) return still >= SHUTDOWN_CONFIRM_MS;
+    if (sys.parkBrake > 0.5 && still >= PARKBRAKE_TIMEOUT_MS) return true;
+    return still >= STATIONARY_MAX_MS;
+  }
+
+  // Ce qu'attend la clôture automatique, pour l'afficher dans l'interface (null = rien).
+  _endHint(now) {
+    if (this._phase !== 'landed' || !this._stationarySince) return null;
+    const sys = this._sys && now - this._sys.ts < 5000 ? this._sys : null;
+    if (!sys || !Number.isFinite(sys.eng1)) return 'parked';
+    return (sys.eng1 < 0.5 || (Number.isFinite(sys.engines) && sys.engines < 1)) ? 'closing' : 'engines';
+  }
+
   // Suivi du roulis en continu pendant que l'avion est en l'air : détecte le début/fin de
   // chaque virage (|bank| qui repasse sous le seuil) et mémorise son inclinaison maximale.
   // Volontairement séparé de l'échantillonnage du trajet (_point/AIR_SAMPLE_MS) : la détection
@@ -905,7 +931,7 @@ class FlightTracker extends EventEmitter {
           }
         } else {
           if (!this._stationarySince) this._stationarySince = now;
-          else if (now - this._stationarySince >= PARKED_TIMEOUT_MS) this._terminateFlight();
+          else if (this._parkedLongEnough(now)) this._terminateFlight();
         }
         break;
     }
@@ -925,7 +951,8 @@ class FlightTracker extends EventEmitter {
       windDir: fast && Number.isFinite(fast.windDir) ? Math.round(fast.windDir) : null,
       windKt: fast && Number.isFinite(fast.windKt) ? Math.round(fast.windKt) : null,
       gForce: fast && Number.isFinite(fast.g) ? Math.round(fast.g * 100) / 100 : null,
-      sys: this._sys && Date.now() - this._sys.ts < 5000 ? this._sys : null
+      sys: this._sys && Date.now() - this._sys.ts < 5000 ? this._sys : null,
+      endHint: this._endHint(now)
     });
   }
 
@@ -994,7 +1021,7 @@ class FlightTracker extends EventEmitter {
     if (!this._hasBeenAirborne || !this._takeoffAt) { this._resetFlightState(); return { ok: false, reason: 'no_flight' }; }
 
     const airDuration = (this._touchdownAt || now) - this._takeoffAt;
-    if (airDuration < MIN_FLIGHT_MIN * 60 * 1000) { this._resetFlightState(); return { ok: false, reason: 'too_short' }; }
+    const tooShort = airDuration < MIN_FLIGHT_MIN * 60 * 1000;
     // Vol clôturé juste après le toucher (arrêt manuel) : on fige les mesures tout de suite.
     if (this._touchdownPoint && !this._tdFinalized) {
       if (this._tdTimer) { clearTimeout(this._tdTimer); this._tdTimer = null; }
@@ -1052,6 +1079,13 @@ class FlightTracker extends EventEmitter {
     // échoue (fenêtre détruite, exception quelconque côté UI), le vol complet reste
     // récupérable sur disque au prochain lancement plutôt que perdu silencieusement.
     this._writeSnapshot(result, true);
+    // v1.8 : un vol jugé trop court n'est plus effacé en silence : il reste en sauvegarde de
+    // secours et l'interface propose de l'enregistrer quand même (pop-up « flight-rejected »).
+    if (tooShort) {
+      this.emit('flight-rejected', { reason: 'too_short', airSec: Math.round(airDuration / 1000), result });
+      this._resetFlightState();
+      return { ok: false, reason: 'too_short' };
+    }
     this.emit('flight-end', result);
     this._resetFlightState();
     return { ok: true };

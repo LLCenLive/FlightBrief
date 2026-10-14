@@ -212,7 +212,7 @@ function hideGate(){
 let _navDepth = 0;
 function go(hash){
   const [kind] = String(hash).split('/');
-  if(['logbook','career','live','hangar','profile'].includes(kind)) _navDepth = 0; else _navDepth++;
+  if(['logbook','career','live','stream','hangar','profile'].includes(kind)) _navDepth = 0; else _navDepth++;
   location.hash = hash;
 }
 // Bouton « Retour » des écrans de détail.
@@ -239,6 +239,7 @@ function switchTab(tab){
   document.querySelectorAll('main .view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab));
   if(tab === 'profile') setTimeout(drawProfileMap, 30);
   if(tab === 'live') startLiveView(); else stopLiveView();
+  if(tab === 'stream') startStreamView(); else stopStreamView();
   // Le bandeau « vol en cours » est inutile sur l'onglet En vol lui-même.
   $('liveSlot').classList.toggle('hidden', tab === 'live');
   $('appMain').scrollTop = 0;
@@ -253,7 +254,7 @@ let _lastTab = 'logbook';
 function route(){
   if(!DATA) return;
   const [kind, a, b] = decodeURIComponent(location.hash.slice(1)).split('/');
-  if(!kind || ['logbook','career','live','hangar','profile'].includes(kind)){
+  if(!kind || ['logbook','career','live','stream','hangar','profile'].includes(kind)){
     closeSheet();
     _lastTab = kind || _lastTab;
     switchTab(_lastTab);
@@ -263,6 +264,7 @@ function route(){
   else if(kind === 'tour') openTour(a, b);
   else if(kind === 'aircraft') openAircraft(a);
   else if(kind === 'airport') openAirport(a);
+  else if(kind === 'photos') openPhotos();
   else { closeToTab(); } // ancre inconnue : on ne laisse jamais un écran vide/bloqué
 }
 window.addEventListener('hashchange', route);
@@ -346,6 +348,7 @@ function renderLogbook(){
       ${stat('Heures', F.fmtHm(totalMin))}
       ${stat('Dernier', last ? F.fmtDateFr(last.date).slice(0, 5) : '—', 'var(--vfr)')}
     </div>
+    <button class="photos-entry" onclick="go('photos')"><span class="pe-ic">📷</span><span><b>Mes photos de vol</b><small>Captures prises pendant tes vols</small></span><span class="pe-go">›</span></button>
     <input class="search" id="lbSearch" type="search" placeholder="Indicatif, OACI, appareil…" value="${esc(_lb.search)}" autocomplete="off">
     <div class="chips" id="lbChips">
       ${[['all','Tous'],['IFR','IFR'],['VFR','VFR'],['tracked','Trackés']].map(([k, l]) => `<button class="chip ${_lb.filter === k ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}
@@ -443,6 +446,7 @@ function openFlight(id){
       ${td.phases.map(p => `<tr><td style="font-family:var(--font-body)">${esc(PHASE_LABELS[p.phase] || p.phase)}</td><td>${p.durationSec >= 60 ? Math.round(p.durationSec / 60) + ' min' : p.durationSec + ' s'}</td><td>${p.maxAltFt != null ? Math.round(p.maxAltFt).toLocaleString(FBI18N.locale()) : '—'}</td><td>${p.avgIasKt != null ? p.avgIasKt + ' kt' : '—'}</td></tr>`).join('')}
       </tbody></table>` : ''}
     ${f.remarks ? `<h2 class="section">Remarques</h2><div class="remarks">${esc(f.remarks)}</div>` : ''}
+    ${flightShots(f).length ? `<h2 class="section">Photos du vol <span class="sec-n">${flightShots(f).length}</span></h2>${photoGrid(flightShots(f))}` : ''}
   `);
   const map = makeMap('sheet', 'sheetMap');
   if(!map) return;
@@ -997,6 +1001,167 @@ function renderLiveView(){
   }
 }
 
+/* =========================================================
+   v1.8 — PHOTOS DES VOLS
+   Images servies par le PC (même Wi-Fi) : miniatures redimensionnées côté PC, rien en ligne.
+   ========================================================= */
+const shotUrl = (name, w) => `/api/shot?n=${encodeURIComponent(name)}${w ? '&w=' + w : ''}&t=${encodeURIComponent(TOKEN)}`;
+function flightShots(f){
+  const td = f && f.trackData;
+  return [...new Set([...((td && td.screenshots) || []), ...((f && f.screenshots) || [])])].filter(n => typeof n === 'string');
+}
+function photoGrid(names){
+  if(!online) return `<div class="photo-off">📶 Les photos s'affichent quand le téléphone est sur le même Wi-Fi que ton PC (FlightBrief ouvert).</div>`;
+  return `<div class="photo-grid">${names.map((n, i) => `<button class="ph" onclick='openViewer(${esc(JSON.stringify(names))}, ${i})'><img loading="lazy" src="${shotUrl(n, 360)}" alt="" onerror="this.parentNode.classList.add('broken')"></button>`).join('')}</div>`;
+}
+async function openPhotos(){
+  openSheet('Mes photos', `<div class="empty">Chargement des photos…</div>`);
+  if(!online){ $('sheetBody').innerHTML = liveEmpty('📶', 'Photos indisponibles hors du Wi-Fi', "Les captures restent sur ton PC. Ouvre cet écran sur le <b>même Wi-Fi</b> que ton PC, avec FlightBrief ouvert."); return; }
+  let shots = [];
+  try{
+    const r = await fetch('/api/shots?t=' + encodeURIComponent(TOKEN), { cache: 'no-store' });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    shots = (await r.json()).shots || [];
+  }catch(e){ $('sheetBody').innerHTML = liveEmpty('📶', 'PC injoignable', 'Vérifie que le téléphone est sur le même Wi-Fi que ton PC, avec FlightBrief ouvert.'); return; }
+  if(!shots.length){ $('sheetBody').innerHTML = liveEmpty('📷', 'Aucune photo pour l’instant', 'Prends des captures pendant tes vols (raccourci clavier ou captures automatiques) : elles apparaîtront ici, rangées par vol.'); return; }
+  const byName = new Map(shots.map(x => [x.name, x]));
+  const used = new Set();
+  const groups = [];
+  sortedFlights().forEach(f => {
+    const names = flightShots(f).filter(n => byName.has(n));
+    if(names.length){ names.forEach(n => used.add(n)); groups.push({ f, names }); }
+  });
+  const loose = shots.filter(x => !used.has(x.name)).sort((a, b) => b.ts - a.ts).map(x => x.name);
+  $('sheetBody').innerHTML = `<div class="stats two">${stat('Photos', shots.length, 'var(--ifr)')}${stat('Vols illustrés', groups.length, 'var(--vfr)')}</div>`
+    + groups.map(g => `<button class="ph-head" onclick="go('flight/${esc(g.f.id)}')"><span class="route mono">${esc(g.f.dep || '----')} → ${esc(g.f.arr || '----')}</span><span class="muted">${esc(F.fmtDateFr(g.f.date))} · ${g.names.length} photo${g.names.length > 1 ? 's' : ''}</span><span class="pe-go">›</span></button>${photoGrid(g.names)}`).join('')
+    + (loose.length ? `<h2 class="section">Hors vol enregistré <span class="sec-n">${loose.length}</span></h2>${photoGrid(loose)}` : '');
+}
+// Visionneuse plein écran : glisser à gauche / à droite, toucher pour fermer.
+let _viewer = null;
+function openViewer(names, i){
+  closeViewer();
+  const v = document.createElement('div');
+  v.className = 'viewer';
+  v.innerHTML = `<div class="vw-top"><span id="vwCount"></span><button class="vw-x" aria-label="Fermer">✕</button></div>
+    <div class="vw-stage"><img id="vwImg" alt=""></div>
+    <button class="vw-nav prev" aria-label="Précédente">‹</button><button class="vw-nav next" aria-label="Suivante">›</button>`;
+  document.body.appendChild(v);
+  _viewer = { el: v, names, i };
+  const show = () => {
+    const n = _viewer.names[_viewer.i];
+    $('vwImg').src = shotUrl(n, 1600);
+    $('vwCount').textContent = `${_viewer.i + 1} / ${_viewer.names.length}`;
+    v.querySelector('.prev').style.visibility = _viewer.i > 0 ? '' : 'hidden';
+    v.querySelector('.next').style.visibility = _viewer.i < _viewer.names.length - 1 ? '' : 'hidden';
+  };
+  const step = d => { const j = _viewer.i + d; if(j >= 0 && j < _viewer.names.length){ _viewer.i = j; show(); } };
+  v.querySelector('.vw-x').onclick = closeViewer;
+  v.querySelector('.prev').onclick = e => { e.stopPropagation(); step(-1); };
+  v.querySelector('.next').onclick = e => { e.stopPropagation(); step(1); };
+  let x0 = null;
+  v.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  v.addEventListener('touchend', e => { if(x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if(Math.abs(dx) > 45) step(dx < 0 ? 1 : -1); }, { passive: true });
+  show();
+  requestAnimationFrame(() => v.classList.add('open'));
+}
+function closeViewer(){ if(_viewer){ const el = _viewer.el; el.classList.remove('open'); setTimeout(() => el.remove(), 200); _viewer = null; } }
+document.addEventListener('keydown', e => { if(!_viewer) return; if(e.key === 'Escape') closeViewer(); });
+
+/* =========================================================
+   v1.8 — STREAM (streamers) : bot Twitch, paris, passagers, télécommande
+   ========================================================= */
+let _streamTimer = null, _stream = null, _streamBusy = false;
+function applyStreamerTab(){
+  const on = !!(DATA && DATA.profile && DATA.profile.streamer);
+  const b = document.querySelector('.tabbar button[data-tab="stream"]');
+  if(b) b.classList.toggle('hidden', !on);
+  document.body.classList.toggle('six-tabs', on);
+  if(!on && _lastTab === 'stream'){ _lastTab = 'logbook'; if(DATA) route(); }
+}
+function startStreamView(){ stopStreamView(); renderStream(); pollStream(); _streamTimer = setInterval(pollStream, 3000); }
+function stopStreamView(){ clearInterval(_streamTimer); _streamTimer = null; }
+async function pollStream(){
+  if(document.hidden || _streamBusy) return;
+  _streamBusy = true;
+  try{
+    const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch('/api/stream?t=' + encodeURIComponent(TOKEN), { cache: 'no-store', signal: ctrl.signal });
+    clearTimeout(to);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    _stream = await r.json(); _stream._ok = true;
+  }catch(e){ _stream = _stream ? { ..._stream, _ok: false } : { _ok: false }; }
+  finally{ _streamBusy = false; }
+  renderStream();
+}
+const REMOTE = [
+  { a: 'tracker', ic: '🛰️', label: s => s.connected ? 'Couper le tracker' : 'Lancer le tracker', st: s => s.connected ? (s.flying ? 'Vol en cours' : 'Connecté au simu') : 'Arrêté', on: s => s.connected },
+  { a: 'shot', ic: '📸', label: () => 'Capture d’écran', st: () => 'Ajoutée au vol', on: () => false },
+  { a: 'bets', ic: '🎲', label: s => s.bets === 'open' ? 'Fermer les paris' : 'Ouvrir les paris', st: s => ({ open: 'Paris ouverts', locked: 'Paris fermés', resolved: 'Résultat annoncé' })[s.bets] || 'Aucun pari', on: s => s.bets === 'open' },
+  { a: 'boarding', ic: '🎫', label: s => s.boarding ? 'Fermer l’embarquement' : 'Ouvrir l’embarquement', st: s => s.boarding ? 'Embarquement ouvert' : 'Fermé', on: s => s.boarding },
+  { a: 'copilot', ic: '🎙️', label: s => s.copilot ? 'Couper le copilote' : 'Activer le copilote', st: s => s.copilot ? 'Annonces actives' : 'Muet', on: s => s.copilot },
+  { a: 'copilot-brief', ic: '📢', label: () => 'Point de situation', st: () => 'Annoncé par le copilote', on: () => false },
+  { a: 'alerts-mute', ic: '🔕', label: s => s.alertsSound ? 'Couper le son des alertes' : 'Rétablir le son des alertes', st: s => s.alertsSound ? 'Son des alertes actif' : 'Alertes muettes', on: s => !s.alertsSound }
+];
+async function remote(a, btn){
+  if(btn) btn.classList.add('busy');
+  try{
+    const r = await fetch('/api/remote?a=' + encodeURIComponent(a) + '&t=' + encodeURIComponent(TOKEN), { method: 'POST', cache: 'no-store' });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const st = await r.json();
+    if(st && st.ok === false) throw new Error(st.error || 'refus');
+    if(navigator.vibrate) navigator.vibrate(12);
+    toast('Envoyé à FlightBrief ✓', 'ok');
+    setTimeout(pollStream, 700);
+  }catch(e){ toast('Action impossible : le PC est-il joignable ?', 'err'); }
+  finally{ if(btn) setTimeout(() => btn.classList.remove('busy'), 400); }
+}
+const LOG_IC = { cmd: '💬', reply: '🤖', bet: '🎲', info: 'ℹ️', error: '⚠️' };
+function renderStream(){
+  const el = $('view-stream'); if(!el) return;
+  const d = _stream;
+  if(!d){ el.innerHTML = '<div class="empty">Connexion à FlightBrief…</div>'; return; }
+  if(!d._ok && !d.bot){ el.innerHTML = liveEmpty('📶', 'PC injoignable', "L'onglet Stream fonctionne sur le <b>même Wi-Fi</b> que ton PC, avec FlightBrief ouvert."); return; }
+  const s = d.remote || {};
+  const bot = d.bot || {};
+  const stLabel = !d.enabled ? 'Bot désactivé' : bot.state === 'connected' ? (bot.canSpeak ? 'Connecté au chat' : 'Lecture seule') : bot.state === 'connecting' ? 'Connexion…' : 'Déconnecté';
+  const stCls = !d.enabled ? '' : bot.state === 'connected' ? (bot.canSpeak ? 'ok' : 'warn') : 'off';
+  const bet = d.bet || {};
+  const res = bet.result;
+  const cab = d.cabin;
+  el.innerHTML = `
+    ${!d._ok ? '<div class="stale">⚠️ Plus de nouvelles du PC — infos de la dernière minute.</div>' : ''}
+    <div class="card bot-card">
+      <div class="bc-top"><div class="bc-av">🤖</div><div class="bc-id"><b>${esc(bot.name || 'FlightBot')}</b><span class="muted">${bot.channel ? '#' + esc(bot.channel) : 'Chaîne non renseignée'}</span></div><span class="st-pill ${stCls}">${esc(stLabel)}</span></div>
+      ${s.arr ? `<div class="bc-flight mono">${s.flying ? '✈️ En vol' : 'Au sol'} · vers ${esc(s.arr)}${s.altFt != null && s.flying ? ' · ' + Math.round(s.altFt).toLocaleString(FBI18N.locale()) + ' ft' : ''}</div>` : ''}
+    </div>
+
+    <h2 class="section">Télécommande</h2>
+    <div class="remote-grid">${REMOTE.map(r => `<button class="rm ${r.on(s) ? 'on' : ''}" onclick="remote('${r.a}', this)">
+        <span class="rm-ic">${r.ic}</span><span class="rm-l">${esc(r.label(s))}</span><span class="rm-s">${esc(r.st(s))}</span></button>`).join('')}</div>
+
+    <h2 class="section">Paris d’atterrissage ${bet.count ? `<span class="sec-n">${bet.count}</span>` : ''}</h2>
+    <div class="card">
+      ${res ? `<div class="bet-res"><div class="br-k">Résultat${res.icao ? ' · ' + esc(res.icao) : ''}</div><div class="br-v mono">−${Math.abs(Math.round(res.actual || 0))} ft/min</div>
+          ${res.winner ? `<div class="br-w">🏆 <b>${esc(res.winner.name)}</b> a parié −${res.winner.fpm} (écart ${res.winner.diff})</div>` : '<div class="muted">Pas de gagnant</div>'}</div>`
+        : `<div class="bet-state"><span class="st-pill ${bet.state === 'open' ? 'ok' : ''}">${esc(({ open: 'Ouverts', locked: 'Fermés', resolved: 'Résolus' })[bet.state] || 'Aucun pari en cours')}</span><span class="muted">${bet.count || 0} pari${(bet.count || 0) > 1 ? 's' : ''}</span></div>`}
+      ${(bet.guesses || []).length ? `<div class="guess-list">${bet.guesses.map(g => `<span><b>${esc(g.name)}</b> −${g.fpm}</span>`).join('')}</div>` : ''}
+    </div>
+
+    ${cab ? `<h2 class="section">À bord ${(cab.passengers || []).length ? `<span class="sec-n">${cab.passengers.length}</span>` : ''}</h2>
+    <div class="card">
+      ${cab.flight ? `<div class="bet-state"><span class="st-pill ${cab.flight.boarding ? 'ok' : ''}">${cab.flight.boarding ? 'Embarquement ouvert' : cab.flight.landed ? 'Arrivés' : 'Portes fermées'}</span><span class="muted mono">${esc(cab.flight.dep || '????')} → ${esc(cab.flight.arr || '????')}</span></div>` : '<div class="muted">Aucun vol « À bord » en cours.</div>'}
+      ${(cab.passengers || []).length ? `<div class="pax-list">${cab.passengers.map(p => `<span class="${p.present ? '' : 'away'}">${esc(p.tierIcon || '')} ${esc(p.name)}</span>`).join('')}</div>` : ''}
+      ${cab.nextFlyover ? `<div class="muted" style="margin-top:8px;">Prochain survol : <b>${esc(cab.nextFlyover.city || cab.nextFlyover.name || '')}</b></div>` : ''}
+    </div>` : ''}
+
+    <h2 class="section">Chat du bot</h2>
+    ${(d.log || []).length ? `<div class="card log-list">${d.log.map(e => `<div class="bl ${esc(e.kind)}"><span class="bl-ic">${LOG_IC[e.kind] || '•'}</span><div class="bl-b">${e.user ? `<b>${esc(e.user)}</b> ` : ''}${esc(e.text)}</div><span class="bl-t">${esc(fmtClock(e.at))}</span></div>`).join('')}</div>` : '<div class="empty">Rien pour l’instant : les commandes du chat (!eta, !pari…) et les réponses du bot s’afficheront ici.</div>'}
+
+    ${(d.leaderboard || []).length ? `<h2 class="section">Meilleurs parieurs</h2><div class="card lb-top">${d.leaderboard.map((p, i) => `<div><span class="rk">${i + 1}</span><b>${esc(p.name)}</b><span class="muted">${p.wins} victoire${p.wins > 1 ? 's' : ''} · ${p.bets} pari${p.bets > 1 ? 's' : ''}</span></div>`).join('')}</div>` : ''}
+  `;
+}
+function fmtClock(iso){ try{ return new Date(iso).toLocaleTimeString(FBI18N.locale(), { hour: '2-digit', minute: '2-digit' }); }catch(e){ return ''; } }
+
 /* ---------------- Rendu global ---------------- */
 function renderAll(){
   if(!DATA) return;
@@ -1008,6 +1173,7 @@ function renderAll(){
   renderCareer();
   renderHangar();
   renderProfile();
+  applyStreamerTab();
   // Un écran de détail ouvert est reconstruit avec les nouvelles données.
   if($('sheet').classList.contains('open')) route();
 }

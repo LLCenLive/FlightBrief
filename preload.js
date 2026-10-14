@@ -147,6 +147,7 @@ contextBridge.exposeInMainWorld('tracker', {
   onFlightStart: (cb) => ipcRenderer.on('tracker:flight-start', (_, d) => cb(d)),
   onFlightLanded: (cb) => ipcRenderer.on('tracker:flight-landed', (_, d) => cb(d)),
   onFlightEnd: (cb) => ipcRenderer.on('tracker:flight-end', (_, d) => cb(d)),
+  onFlightRejected: (cb) => ipcRenderer.on('tracker:flight-rejected', (_, d) => cb(d)),
   onProgress: (cb) => ipcRenderer.on('tracker:progress', (_, d) => cb(d)),
   onFastAgl: (cb) => ipcRenderer.on('tracker:fastAgl', (_, d) => cb(d))
 });

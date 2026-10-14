@@ -130,6 +130,7 @@
             <button class="btn small shot-auto" id="shotAutoChip" onclick="FBv15.toggleAutoShots()" title="Captures automatiques au décollage, en croisière et à l'atterrissage"><i></i>Auto</button>
             <button class="btn small shot-gear" onclick="FBv15.openShotsSettings()" title="Réglages des captures (raccourci, captures auto, son)" aria-label="Réglages des captures">⚙</button>
           </div>
+          <div class="hint hidden" id="trkEndHint" style="color:var(--phosphor);"></div>
           <div class="hint hidden" id="trkStopHint">Clôture le vol maintenant (sans attendre la détection automatique du parking) et enregistre directement le PIREP complet dans le logbook, avec tous les champs du briefing.</div>
         </div>
       </div>
@@ -1171,11 +1172,19 @@
 
       <div class="card-panel" id="watchPanel">
         <h3>🔔 Rappel « tracker non lancé »</h3>
-        <p class="hint" style="margin:-4px 0 10px;">Si ton avion roule ou vole dans le simulateur alors que le suivi n'est pas lancé, FlightBrief te prévient par un son et une notification Windows, puis toutes les minutes.</p>
+        <p class="hint" style="margin:-4px 0 10px;">Si ton avion roule ou vole dans le simulateur alors que le suivi n'est pas lancé, FlightBrief te prévient par un son et une notification Windows après 5 minutes de roulage ou de vol, puis toutes les minutes.</p>
         <div class="switch-row"><span>Activer le rappel</span><label class="switch"><input type="checkbox" id="watchEnabled"><span class="slider"></span></label></div>
         <div class="switch-row"><span>Lancer le tracker automatiquement à la place</span><label class="switch"><input type="checkbox" id="watchAutoStart"><span class="slider"></span></label></div>
         <div class="field"><label>Volume de l'alerte <small class="hint">(joue l'alerte quand tu relâches le curseur)</small></label><div class="range-row"><input type="range" id="watchVolume" min="0" max="100" step="5"><span class="val-label" id="watchVolumeVal">70%</span></div></div>
         <div class="btn-row"><button class="btn small" onclick="FBv15.watchTestSound()">▶ Écouter l'alerte</button></div>
+      </div>
+
+      <div class="card-panel" id="noticePanel">
+        <h3>💬 Pop-ups de l'appli</h3>
+        <p class="hint" style="margin:-4px 0 10px;">Les messages importants (vol terminé, PIREP enregistré, vol trop court, erreur du simulateur) s'affichent en bas de la fenêtre avec un petit son.</p>
+        <div class="switch-row"><span>Son des pop-ups</span><label class="switch"><input type="checkbox" id="noticeSound"><span class="slider"></span></label></div>
+        <div class="field"><label>Volume <small class="hint">(joue un exemple quand tu relâches le curseur)</small></label><div class="range-row"><input type="range" id="noticeVolume" min="0" max="100" step="5"><span class="val-label" id="noticeVolumeVal">45%</span></div></div>
+        <div class="btn-row"><button class="btn small" onclick="FBv18.testNotice()">▶ Voir un exemple</button></div>
       </div>
 
       <div class="card-panel" id="planeIconPanel">
@@ -1303,16 +1312,27 @@
           <div class="wr-actions"><select id="wrYear"></select><button class="btn primary" onclick="FBv17.wrappedOpen()">Voir mon année</button></div>
         </div>
 
-        <div class="card-panel">
-          <h3>🗺️ Gratte-pays</h3>
-          <div class="hint" id="scSummary"></div>
-          <div class="scratch-grid" id="scGrid"></div>
+        <!-- v1.8 : records personnels -->
+        <div class="card-panel rec-panel">
+          <div class="rec-head"><h3>🏆 Records personnels</h3><span class="hint" style="margin:0;">Clique sur un record pour revoir le vol.</span></div>
+          <div class="rec-grid" id="pfRecords"></div>
         </div>
 
-        <div class="card-panel">
-          <h3>🏔️ Défis aéroports</h3>
-          <p class="hint">Les terrains les plus redoutés des simmers. Pose-toi dessus pour débloquer le badge ; ton meilleur toucher y est gardé.</p>
-          <div class="chal-grid" id="chGrid"></div>
+        <!-- v1.8 : Gratte-pays et Défis aéroports en tuiles compactes (le détail s'ouvre dans une modale) -->
+        <div class="col-row">
+          <button class="col-tile col-scratch" id="colScratch" onclick="FBv17.scratchOpen()" type="button">
+            <div class="col-eyebrow"><span>🗺️ Gratte-pays</span><span class="col-go">Voir le détail →</span></div>
+            <div class="col-main"><span class="col-big" id="colScN">0</span><span class="col-unit">pays<small id="colScOf"> sur ~195</small></span></div>
+            <div class="col-flags" id="colScFlags"></div>
+            <div class="col-meter"><i id="colScMeter" style="width:0%"></i></div>
+            <div class="col-foot" id="scSummary"></div>
+          </button>
+          <button class="col-tile col-chal" id="colChal" onclick="FBv17.challengesOpen()" type="button">
+            <div class="col-eyebrow"><span>🏔️ Défis aéroports</span><span class="col-go">Voir les défis →</span></div>
+            <div class="col-main"><span class="col-big" id="colChN">0</span><span class="col-unit">relevés<small id="colChOf"> sur 15</small></span></div>
+            <div class="col-pips" id="colChPips"></div>
+            <div class="col-foot" id="colChNext"></div>
+          </button>
         </div>
 
         <div class="card-panel">
@@ -1732,6 +1752,31 @@
   </div>
 </div>
 
+<!-- ================= v1.8 — GRATTE-PAYS / DÉFIS AÉROPORTS (modales) ================= -->
+<div class="modal-overlay hidden" id="scratchModalOverlay" onclick="if(event.target===this) FBv17.scratchClose()">
+  <div class="modal modal-wide col-modal">
+    <div class="modal-head"><h3>🗺️ Gratte-pays</h3><button class="btn small" onclick="FBv17.scratchClose()">Fermer</button></div>
+    <div class="cm-hero" id="scHero"></div>
+    <div class="cm-tools">
+      <input type="search" id="scSearch" placeholder="Chercher un pays ou un aéroport…" autocomplete="off">
+      <div class="cm-seg" id="scSort"><button data-k="n" class="on" type="button">Plus visités</button><button data-k="pct" type="button">Progression</button><button data-k="az" type="button">A → Z</button></div>
+    </div>
+    <div class="sc-list" id="scGrid"></div>
+  </div>
+</div>
+<div class="modal-overlay hidden" id="chalModalOverlay" onclick="if(event.target===this) FBv17.challengesClose()">
+  <div class="modal modal-wide col-modal">
+    <div class="modal-head"><h3>🏔️ Défis aéroports</h3><button class="btn small" onclick="FBv17.challengesClose()">Fermer</button></div>
+    <p class="hint" style="margin:-4px 0 12px;">Les terrains les plus redoutés des simmers. Pose-toi dessus pour débloquer le badge ; ton meilleur toucher y est gardé.</p>
+    <div class="cm-hero" id="chHero"></div>
+    <div class="cm-tools">
+      <div class="cm-seg" id="chStatus"><button data-k="all" class="on" type="button">Tous</button><button data-k="todo" type="button">À relever</button><button data-k="done" type="button">Relevés</button></div>
+      <div class="cm-seg" id="chLevel"><button data-k="0" class="on" type="button">Tous niveaux</button><button data-k="3" type="button">Extrême</button><button data-k="2" type="button">Difficile</button><button data-k="1" type="button">Technique</button></div>
+    </div>
+    <div class="ch-list" id="chGrid"></div>
+  </div>
+</div>
+
 <!-- ================= v1.5 — CARTE D'ATTERRISSAGE + SUCCÈS (dans l'appli) ================= -->
 <div class="fx-stack" id="fxStack"></div>
 
@@ -1762,6 +1807,7 @@
 <script src="logimport.js"></script>
 <script src="copilot.js"></script>
 <script src="v17.js"></script>
+<script src="v18.js"></script>
 <script>
 // v1.7 — choix de la langue (Profil et accueil) : enregistré par l'appli, puis rechargement de l'interface.
 document.querySelectorAll('select.fb-lang').forEach(sel => {
