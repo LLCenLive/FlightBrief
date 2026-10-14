@@ -523,6 +523,7 @@ class FlightTracker extends EventEmitter {
     this._firstMoveTs = null;
     this._hasBeenAirborne = false;
     this._takeoffAt = null;
+    this._leftGround = false; // v1.7.1 : l'avion a-t-il réellement quitté le sol depuis le « décollage » ?
     this._touchdownAt = null;
     this._touchdownPoint = null;
     this._maxAltFt = 0;
@@ -799,6 +800,7 @@ class FlightTracker extends EventEmitter {
           this._phase = 'airborne';
           if (!this._start) { this._start = now; this._firstMoveTs = now; this._simTitle = data.title || null; this.emit('flight-start', { startedAt: now, aircraft: data.title }); }
           this._takeoffAt = now;
+          this._leftGround = !onGround;
           this._hasBeenAirborne = true;
           this._initFuel = data.fuelLbs;
           this._path.push({ ...this._point(data, now), phase: 'liftoff' });
@@ -837,6 +839,28 @@ class FlightTracker extends EventEmitter {
           this._path.push({ ...this._point(data, now), phase: 'air' });
           this._lastPathTs = now;
           pathChanged = true;
+        }
+        if (!onGround) this._leftGround = true;
+        if (onGround && !this._leftGround) {
+          // v1.7.1 — Faux décollage : le seuil de vitesse sol (AIRBORNE_SPEED_KT) a été franchi
+          // AU SOL (roulage rapide, accélération puis arrêt avant la piste…) sans que l'avion
+          // ne quitte jamais le sol. Avant, 90 s plus tard ce « vol » était pris pour un
+          // atterrissage au point de départ : le vrai décollage devenait un rebond, et la
+          // clôture rejetait le vol entier comme « trop court » (moins de 2 min en l'air).
+          // Tant que l'avion n'a pas décollé, on attend ; s'il ralentit nettement, on annule
+          // le décollage et on revient au roulage.
+          if (gs < AIRBORNE_SPEED_KT - 15) {
+            this._phase = 'ground';
+            this._takeoffAt = null;
+            this._hasBeenAirborne = false;
+            this._initFuel = null;
+            this._maxAltFt = 0;
+            this._maxIasKt = 0;
+            this._turns = []; this._inTurn = false; this._turnMaxBank = 0; this._maxBankDeg = 0;
+            this._path.forEach(pt => { if (pt.phase === 'liftoff' || pt.phase === 'air') pt.phase = 'taxi_out'; });
+            pathChanged = true;
+          }
+          break;
         }
         if (onGround) {
           // Contact au sol trop tôt après le décollage : bruit capteur, on l'ignore
