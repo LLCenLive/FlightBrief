@@ -9,6 +9,16 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '1.8.5',
+    date: '2026-10-19',
+    title: "Copilote sur ta sortie audio, bot plus discret",
+    items: [
+      ['new', "Copilote vocal : choix de la sortie audio (casque, enceintes, entrée VoiceMeeter…), sans changer la sortie par défaut de Windows."],
+      ['improved', "Bot plus discret : pause réglable entre deux messages automatiques (À bord → Animations de croisière, 6 min par défaut), vue du hublot et quiz moins fréquents."],
+      ['improved', "Moins de messages inutiles dans le chat : plus de vue du hublot sans ville, ni de réponse de quiz, de fermeture ou de résultat de paris quand personne n'a joué."]
+    ]
+  },
+  {
     version: '1.8.0',
     date: '2026-10-14',
     title: 'Confort, records et télécommande sur le téléphone',

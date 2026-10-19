@@ -30,11 +30,12 @@ const NM_PER_KM = 1 / 1.852;
 
 const DEFAULT_CFG = {
   enabled: true,
-  window: { enabled: true, everyMin: 12 },
+  window: { enabled: true, everyMin: 20 },
   flyover: { enabled: true, radiusKm: 20, warnMin: 5 },
   routeAnnounce: true,
   countries: true,
-  quiz: { enabled: true, everyMin: 15, answerSec: 75 },
+  quiz: { enabled: true, everyMin: 25, answerSec: 75 },
+  chatGapMin: 6,   // v1.9 — pause minimale entre deux messages d'ambiance dans le chat (0 = pas de limite)
   arrivalGuess: true,
   title: { autoPropose: true, template: '✈️ {indicatif} · {depart} → {arrivee} · {avion} | !embarquer pour monter à bord', category: 'Microsoft Flight Simulator 2024' },
   publicUrl: '', publicDir: ''
@@ -78,6 +79,11 @@ class Cabin extends EventEmitter {
     if (now) write(); else this._saveTimer = setTimeout(write, 2000);
   }
   setConfig(c) { this.cfg = mergeCfg(c); this.emit('state'); }
+  // v1.9 — Messages d'ambiance (hublot, pays, préavis de survol, programme, quiz, heure d'arrivée) :
+  // au plus un toutes les chatGapMin minutes dans le chat. L'overlay Alertes les affiche quand même.
+  // Les messages liés à une action (embarquement, survol en direct, résultats, tampons) passent toujours.
+  _ambientOk() { const gap = Math.max(0, +this.cfg.chatGapMin || 0) * 60000; return !gap || Date.now() - (this._lastAmbient || 0) >= gap; }
+  _ambient(text) { if (!this._ambientOk()) return false; this._lastAmbient = Date.now(); this.ctx.say(text); return true; }
   setPlan(p) {
     if (!p || !Array.isArray(p.pts)) { this.plan = null; return; }
     this.plan = { dep: String(p.dep || '').toUpperCase(), arr: String(p.arr || '').toUpperCase(), pts: p.pts.filter(x => Array.isArray(x) && isFinite(x[0]) && isFinite(x[1])).slice(0, 2000) };
@@ -314,7 +320,7 @@ class Cabin extends EventEmitter {
       if (!f.lastWindow) f.lastWindow = now - winEvery + 3 * 60000;   // premier hublot ~3 min après le début de croisière
       if (!f.lastQuiz) f.lastQuiz = now - quizEvery + 8 * 60000;      // premier quiz ~8 min après
       if (this.cfg.window.enabled && now - f.lastWindow > winEvery && now - (f.lastQuizAt || 0) > 90000) { f.lastWindow = now; this._window(d); }
-      else if (this.cfg.quiz.enabled && now - f.lastQuiz > quizEvery && now - f.lastWindow > 120000) { f.lastQuiz = now; this._startQuiz(d, phase); }
+      else if (this.cfg.quiz.enabled && now - f.lastQuiz > quizEvery && now - f.lastWindow > 120000 && this._ambientOk()) { f.lastQuiz = now; this._startQuiz(d, phase); }
     }
     if (this.quiz && now > this.quiz.endsAt) this._closeQuiz(true);
   }
@@ -323,12 +329,12 @@ class Cabin extends EventEmitter {
     const c = geo.notable(d.lat, d.lon, d.headingDeg);
     const alt = d.altFt >= 10000 ? `FL${String(Math.round(d.altFt / 100)).padStart(3, '0')}` : `${fmtNum(d.altFt)} ft`;
     if (!c) {
-      this.ctx.say(`🪟 Vue du hublot : pas une ville à l'horizon, juste ${this.flight.country ? 'la campagne' : 'la mer'} · ${alt} · ${d.gsKt} kt sol`);
+      // Rien à voir : overlay seulement, pas la peine d'occuper le chat.
       this.ctx.alert({ type: 'cabin-window', title: 'Vue du hublot', data: { city: null, country: this.flight.country, alt, gs: d.gsKt } });
       return;
     }
     const where = c.distKm < 8 ? 'juste sous nos ailes' : `à ${Math.round(c.distKm)} km ${sideOf(d.headingDeg, geo.bearingDeg(d.lat, d.lon, c.lat, c.lon))}`;
-    this.ctx.say(`🪟 Vue du hublot : ${c.name} ${geo.flag(c.cc)} ${where} · ${alt} · ${d.gsKt} kt sol`);
+    this._ambient(`🪟 Vue du hublot : ${c.name} ${geo.flag(c.cc)} ${where} · ${alt} · ${d.gsKt} kt sol`);
     this.ctx.alert({ type: 'cabin-window', title: 'Vue du hublot', data: { city: c.name, cc: c.cc, country: geo.countryName(c.cc), flag: geo.flag(c.cc), where, alt, gs: d.gsKt } });
   }
   _checkCountry(d) {
@@ -339,7 +345,7 @@ class Cabin extends EventEmitter {
     f.country = cc; f.countryCand = null;
     if (!f.countries.includes(cc)) f.countries.push(cc);
     if (first) return; // pays de départ : pas d'annonce
-    this.ctx.say(`${geo.flag(cc)} Nouveau pays sous nos ailes : ${geo.countryName(cc)} !`);
+    this._ambient(`${geo.flag(cc)} Nouveau pays sous nos ailes : ${geo.countryName(cc)} !`);
     this.ctx.alert({ type: 'cabin-country', title: 'Nouveau pays', data: { cc, name: geo.countryName(cc), flag: geo.flag(cc) } });
   }
   _viewersWithCity() { return Object.entries(this.data.viewers).filter(([, v]) => v.city); }
@@ -365,7 +371,7 @@ class Cabin extends EventEmitter {
       const etaMin = along / (d.gsKt * 1.852) * 60;
       if (along > 0 && cross <= R && etaMin <= this.cfg.flyover.warnMin && etaMin > 1.5) {
         f.warnDone.add(user);
-        this.ctx.say(`👀 Dans ~${Math.round(etaMin)} min on passe au-dessus de chez ${v.name} (${c.name}). Prépare-toi à faire coucou !`);
+        this._ambient(`👀 Dans ~${Math.round(etaMin)} min on passe au-dessus de chez ${v.name} (${c.name}). Prépare-toi à faire coucou !`);
         this.ctx.alert({ type: 'cabin-flyover-soon', title: 'Survol imminent', data: { name: v.name, city: c.name, flag: geo.flag(c.cc), etaMin: Math.round(etaMin) } });
       }
     }
@@ -393,7 +399,7 @@ class Cabin extends EventEmitter {
     const list = this.plannedFlyovers();
     if (!list.length) return;
     const names = list.slice(0, 6).map(x => `${x.name} (${x.city})`).join(', ') + (list.length > 6 ? ` et ${list.length - 6} autres` : '');
-    this.ctx.say(`🗺️ Au programme de ce vol : on survolera chez ${names}. Ouvrez l'œil !`);
+    this._ambient(`🗺️ Au programme de ce vol : on survolera chez ${names}. Ouvrez l'œil !`);
     this.ctx.alert({ type: 'cabin-route', title: 'Au programme', data: { list: list.slice(0, 8).map(x => ({ name: x.name, city: x.city, flag: geo.flag(x.cc) })), more: Math.max(0, list.length - 8) } });
   }
 
@@ -424,6 +430,7 @@ class Cabin extends EventEmitter {
       q = { kind, numeric: true, text: `À combien de milles nautiques (NM) sommes-nous de ${f.arr} ? Le plus proche gagne.`, target: nm, unit: 'NM' };
     }
     this.quiz = { ...q, endsAt: Date.now() + sec * 1000, guesses: new Map(), winner: null };
+    this._lastAmbient = Date.now();
     this.ctx.say(`🧭 Quiz du hublot (+${BONUS.quiz} miles) : ${q.text} — réponds avec !rep … (${sec} s)`);
     this.ctx.alert({ type: 'cabin-quiz', title: 'Quiz du hublot', data: { text: q.text, sec } });
     this.emit('state');
@@ -431,6 +438,7 @@ class Cabin extends EventEmitter {
   _cmdAnswer(m, rest) {
     const q = this.quiz;
     if (!q || !rest) return;
+    q.tries = (q.tries || 0) + 1;
     if (!this.flight.pax.has(m.user)) this.board(m, true); // jouer fait monter à bord
     if (q.numeric) {
       const v = parseInt(String(rest).replace(/[^\d]/g, ''), 10);
@@ -454,7 +462,7 @@ class Cabin extends EventEmitter {
       txt = `Réponse : ${fmtNum(q.target)} ${q.unit}.` + (w ? ` Bravo ${w.name} (${fmtNum(w.v)}) ! +${BONUS.quiz} miles` : ' Personne n\'a tenté sa chance.');
     } else txt = `Réponse : ${q.answer}.` + (w ? ` Bravo ${w.name}, le plus rapide ! +${BONUS.quiz} miles` : ' Personne n\'a trouvé cette fois.');
     if (w) { this.viewer(w.user, w.name); this.addMiles(w.user, BONUS.quiz, 'quiz'); }
-    this.ctx.say('🧭 ' + txt);
+    if (q.tries) this.ctx.say('🧭 ' + txt); // personne n'a joué : pas de message de réponse dans le chat
     this.ctx.alert({ type: 'cabin-quiz-result', title: 'Quiz du hublot', data: { answer: q.numeric ? `${fmtNum(q.target)} ${q.unit}` : q.answer, winner: w ? w.name : null } });
     this.emit('state');
   }
@@ -463,7 +471,7 @@ class Cabin extends EventEmitter {
   _openArrival() {
     const a = this.flight.arrival;
     a.state = 'open'; a.guesses = new Map();
-    this.ctx.say(`⏱️ À quelle heure va-t-on toucher la piste${this.flight.arr ? ' à ' + this.flight.arr : ''} ? Pronostique jusqu'au début de la descente : !arrivee 21:47 (+${BONUS.arrival} miles au plus proche)`);
+    this._ambient(`⏱️ À quelle heure va-t-on toucher la piste${this.flight.arr ? ' à ' + this.flight.arr : ''} ? Pronostique jusqu'au début de la descente : !arrivee 21:47 (+${BONUS.arrival} miles au plus proche)`);
     this.ctx.alert({ type: 'cabin-arrival-open', title: "Heure d'arrivée", data: { arr: this.flight.arr } });
   }
   _lockArrival() {

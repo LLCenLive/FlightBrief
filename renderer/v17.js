@@ -22,16 +22,56 @@ const CP_GROUPS = [
 function cpCfg(){ const d = FBCopilot.DEFAULTS, c = db.copilot || {}; db.copilot = { ...d, ...c, groups: { ...d.groups, ...(c.groups || {}) } }; return db.copilot; }
 const copilot = FBCopilot.create();
 function voices(){ return window.speechSynthesis ? speechSynthesis.getVoices() : []; }
-function speak(text, force){
-  const c = cpCfg();
-  if((!c.enabled && !force) || !window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(FBI18N.tr(text));
+// v1.9 — sortie audio au choix : la voix Windows est rendue en WAV (tts.js) puis jouée
+// sur le périphérique choisi. Sans choix (ou hors Windows), synthèse Chromium sur la sortie par défaut.
+let ttsOk = false, cpQueue = Promise.resolve();
+const cpWavCache = new Map();
+async function outputDevices(){
+  try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch(e){ return []; }
+}
+// L'identifiant d'un périphérique peut changer (pilote réinstallé) : on retombe sur son nom.
+async function sinkId(c){
+  if(!c.outputDevice) return '';
+  const list = await outputDevices();
+  const d = list.find(x => x.deviceId === c.outputDevice) || (c.outputLabel && list.find(x => x.label === c.outputLabel));
+  return d ? d.deviceId : '';
+}
+async function wavFor(text, c){
+  const key = [text, c.voice, c.rate, FBI18N.lang].join('|');
+  if(cpWavCache.has(key)) return cpWavCache.get(key);
+  const r = await window.tts.speak(text, { voice: c.voice, lang: FBI18N.lang, rate: c.rate || 1 });
+  if(!r || !r.ok) return null;
+  const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(r.wav), ch => ch.charCodeAt(0))], { type: 'audio/wav' }));
+  cpWavCache.set(key, url);
+  if(cpWavCache.size > 80){ const k = cpWavCache.keys().next().value; URL.revokeObjectURL(cpWavCache.get(k)); cpWavCache.delete(k); }
+  return url;
+}
+function speakOnDevice(text, c){
+  const wav = wavFor(text, c); // rendu lancé tout de suite, lecture dans l'ordre d'arrivée
+  cpQueue = cpQueue.then(async () => {
+    const url = await wav;
+    if(!url){ speakDefault(text, c); return; }
+    const a = new Audio(url), id = await sinkId(c);
+    if(id && a.setSinkId) await a.setSinkId(id).catch(() => {});
+    a.volume = Math.max(0, Math.min(1, c.volume / 100));
+    await new Promise(res => { a.onended = a.onerror = res; a.play().catch(res); });
+  }).catch(() => {});
+}
+function speakDefault(text, c){
+  if(!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
   u.lang = FBI18N.locale();
   const vs = voices(), v = vs.find(x => x.name === c.voice) || vs.find(x => (x.lang || '').slice(0, 2) === FBI18N.lang);
   if(v) u.voice = v;
   u.volume = Math.max(0, Math.min(1, c.volume / 100));
   u.rate = Math.max(.5, Math.min(2, c.rate || 1));
   speechSynthesis.speak(u);
+}
+function speak(text, force){
+  const c = cpCfg();
+  if(!c.enabled && !force) return;
+  text = FBI18N.tr(text);
+  if(ttsOk && c.outputDevice) speakOnDevice(text, c); else speakDefault(text, c);
 }
 FBv17.speak = speak;
 const GRADE_WORDS = { butter: 'un vrai beurre', smooth: 'atterrissage doux', firm: 'atterrissage ferme', hard: 'atterrissage dur' };
@@ -56,6 +96,7 @@ FBv17.copilotToggle = on => {
   const c = cpCfg();
   c.enabled = on == null ? !c.enabled : !!on;
   if($('cpEnabled')) $('cpEnabled').checked = c.enabled;
+  if(c.enabled && c.outputDevice && ttsOk) window.tts.warm();
   queueSaveDb();
   if(c.enabled) speak('Copilote vocal activé.');
   return c.enabled;
@@ -72,8 +113,31 @@ function fillVoices(){
   $('cpVoice').innerHTML = `<option value="">${esc(FBI18N.tr('Automatique'))}</option>` + list.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('');
   $('cpVoice').value = list.some(v => v.name === c.voice) ? c.voice : '';
 }
+async function fillOutputs(){
+  const c = cpCfg(), sel = $('cpOutput');
+  if(!sel) return;
+  const list = await outputDevices();
+  sel.innerHTML = `<option value="">${esc(FBI18N.tr('Sortie Windows par défaut'))}</option>` + list.map((d, i) => `<option value="${esc(d.deviceId)}">${esc(d.label || FBI18N.tr('Sortie audio') + ' ' + (i + 1))}</option>`).join('');
+  const cur = list.find(d => d.deviceId === c.outputDevice) || (c.outputLabel && list.find(d => d.label === c.outputLabel));
+  sel.value = cur ? cur.deviceId : '';
+  if(c.outputDevice && !cur) sel.insertAdjacentHTML('beforeend', `<option value="${esc(c.outputDevice)}" selected>${esc((c.outputLabel || FBI18N.tr('Sortie audio')) + ' — ' + FBI18N.tr('débranchée'))}</option>`);
+}
 function bindCopilot(){
   const c = cpCfg();
+  if(window.tts) window.tts.available().then(ok => {
+    ttsOk = !!ok;
+    if($('cpOutputField')) $('cpOutputField').hidden = !ttsOk;
+    if(ttsOk){ fillOutputs(); if(c.enabled && c.outputDevice) window.tts.warm(); }
+  });
+  if(navigator.mediaDevices) navigator.mediaDevices.addEventListener('devicechange', fillOutputs);
+  if($('cpOutput')) $('cpOutput').addEventListener('change', e => {
+    const o = e.target.selectedOptions[0];
+    cpCfg().outputDevice = e.target.value;
+    cpCfg().outputLabel = e.target.value && o ? o.textContent : '';
+    queueSaveDb();
+    if(e.target.value) window.tts.warm();
+    FBv17.copilotTest();
+  });
   $('cpEnabled').checked = c.enabled;
   $('cpGroups').innerHTML = CP_GROUPS.map(([k, t, d]) => `<label class="cp-group"><input type="checkbox" data-g="${k}" ${c.groups[k] ? 'checked' : ''}><span><b>${esc(t)}</b><small>${esc(d)}</small></span></label>`).join('');
   $('cpGroups').querySelectorAll('input[data-g]').forEach(i => i.addEventListener('change', () => { cpCfg().groups[i.dataset.g] = i.checked; queueSaveDb(); }));

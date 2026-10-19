@@ -153,6 +153,13 @@ contextBridge.exposeInMainWorld('tracker', {
 });
 
 // v1.7 — plugin Stream Deck
+// v1.9 — voix du copilote rendue en WAV pour la jouer sur la sortie audio choisie
+contextBridge.exposeInMainWorld('tts', {
+  available: () => ipcRenderer.invoke('tts:available'),
+  speak: (text, opts) => ipcRenderer.invoke('tts:speak', text, opts),
+  warm: () => ipcRenderer.send('tts:warm')
+});
+
 contextBridge.exposeInMainWorld('deck', {
   onAction: (cb) => ipcRenderer.on('deck:action', (_, a) => cb(a)),
   pushUi: (s) => ipcRenderer.send('deck:ui', s),

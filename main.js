@@ -17,6 +17,7 @@ const { Cabin, mergeCfg: mergeCabinCfg } = require('./cabin');
 const { exportPublicLogbook } = require('./public-logbook');
 const { Prediction, SCOPE: PREDICTION_SCOPE } = require('./predictions');
 const { suggest, pickDiverse, bestRunwayFt } = require('./suggest');
+const { Tts } = require('./tts');
 
 const OBS_PORT = 4813;
 const LIVE_OVERLAY_PORT = 4814; // port distinct -> URL OBS différente de celle du briefing
@@ -845,6 +846,12 @@ function deckAction(a) {
   if (mainWindow) mainWindow.webContents.send('deck:action', a); // mêmes fonctions que les boutons de l'appli
   return deckState();
 }
+// v1.9 — copilote vocal sur une sortie audio au choix (casque, VoiceMeeter…) : voir tts.js.
+const tts = new Tts();
+ipcMain.handle('tts:available', () => tts.available());
+ipcMain.handle('tts:speak', (evt, text, opts) => tts.speak(text, opts));
+ipcMain.on('tts:warm', () => tts.warm());
+app.on('will-quit', () => tts.stop());
 ipcMain.on('deck:ui', (evt, s) => { if (s && typeof s === 'object') deckUi = { copilot: !!s.copilot, copilotVol: +s.copilotVol || 0, alertsVol: +s.alertsVol || 0, alertsSound: !!s.alertsSound, stream: !!s.stream }; });
 // Installation en un clic : fichier .streamDeckPlugin (zip du dossier du plugin) avec le code
 // d'appairage, puis ouverture -> le logiciel Stream Deck propose de l'installer.

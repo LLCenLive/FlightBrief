@@ -178,6 +178,7 @@
             <div class="field"><label>Voix</label><select id="cpVoice"></select></div>
             <div class="field"><label>Débit</label><div class="range-row"><input type="range" id="cpRate" min="80" max="130" step="5"><span class="val-label" id="cpRateVal">100 %</span></div></div>
           </div>
+          <div class="field" id="cpOutputField" hidden><label>Sortie audio</label><select id="cpOutput" data-no-i18n></select><small class="hint">Casque, enceintes ou entrée VoiceMeeter : choisis où le copilote parle, sans changer la sortie par défaut de Windows.</small></div>
           <div class="row3">
             <div class="field"><label>Volume</label><div class="range-row"><input type="range" id="cpVolume" min="0" max="100" step="5"><span class="val-label" id="cpVolumeVal">80 %</span></div></div>
             <div class="field"><label>Altitude de transition (ft)</label><input type="number" id="cpTa" min="1000" max="18000" step="500"></div>
@@ -803,6 +804,7 @@
         <div class="hint">L'embarquement s'ouvre tout seul quand tu lances le tracker. Les viewers tapent <code>!embarquer</code> et gagnent 1 mile par NM parcouru tant qu'ils sont actifs dans le chat (20 min après leur dernier message).</div>
 
         <h2>Animations de croisière</h2>
+        <div class="field"><label>Pause minimale entre deux messages automatiques</label><div class="range-row"><input type="range" id="cbChatGap" min="0" max="20" step="1"><span class="val-label" id="cbChatGapVal">6 min</span></div><small class="hint">Hublot, nouveaux pays, préavis de survol, quiz… : au plus un message toutes les X minutes dans le chat (0 = sans limite). L'overlay Alertes les affiche quand même ; les réponses aux commandes et les résultats passent toujours.</small></div>
         <div class="switch-row"><span>🪟 Vue du hublot (ville et pays survolés)</span><label class="switch"><input type="checkbox" id="cbWindow" checked><span class="slider"></span></label></div>
         <div class="field"><label>Toutes les</label><div class="range-row"><input type="range" id="cbWindowEvery" min="4" max="30" step="1"><span class="val-label" id="cbWindowEveryVal">12 min</span></div></div>
         <div class="switch-row"><span>🏠 Survol de chez les viewers (<code>!maville</code>)</span><label class="switch"><input type="checkbox" id="cbFlyover" checked><span class="slider"></span></label></div>

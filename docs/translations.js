@@ -378,4 +378,12 @@ Paris & prédictions	Bets & predictions	Apuestas y predicciones
 Ton chat monte à bord	Your chat comes aboard	Tu chat sube a bordo
 Titre & carnet public	Title & public logbook	Título y diario público
 Pas de live ?	Not streaming?	¿Sin directo?
+v1.8.5 · sortie audio du copilote, bot plus discret →	v1.8.5 · copilot audio output, quieter bot →	v1.8.5 · salida de audio del copiloto, bot más discreto →
+La version 1.8.5, en bref.	Version 1.8.5 at a glance.	La versión 1.8.5, en resumen.
+Sortie audio du copilote	Copilot audio output	Salida de audio del copiloto
+Choisis où parle le copilote vocal (casque, enceintes, entrée VoiceMeeter…) sans changer la sortie par défaut de Windows.	Choose where the voice copilot speaks (headset, speakers, VoiceMeeter input…) without changing the Windows default output.	Elige dónde habla el copiloto de voz (auriculares, altavoces, entrada de VoiceMeeter…) sin cambiar la salida predeterminada de Windows.
+Bot plus discret	Quieter bot	Bot más discreto
+Une pause réglable entre deux messages automatiques dans le chat (6 min par défaut), vue du hublot et quiz moins fréquents.	An adjustable gap between two automatic chat messages (6 min by default), less frequent window views and quizzes.	Una pausa ajustable entre dos mensajes automáticos en el chat (6 min por defecto), vistas desde la ventanilla y quiz menos frecuentes.
+Moins de messages inutiles	Fewer pointless messages	Menos mensajes inútiles
+Plus de vue du hublot sans ville, ni de réponse de quiz ou de résultat de paris quand personne n'a joué.	No more window views with no city, nor quiz answers or bet results when nobody played.	Se acabaron las vistas desde la ventanilla sin ciudad y las respuestas de quiz o resultados de apuestas cuando nadie ha jugado.
 `);

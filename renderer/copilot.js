@@ -8,7 +8,7 @@
    ========================================================= */
 (function (root) {
   const GROUPS = ['takeoff', 'climb', 'approach', 'alerts', 'landing', 'cabin'];
-  const DEFAULTS = { enabled: false, volume: 80, rate: 1, voice: '', ta: 5000, minimums: 200, groups: { takeoff: true, climb: true, approach: true, alerts: true, landing: true, cabin: false } };
+  const DEFAULTS = { enabled: false, volume: 80, rate: 1, voice: '', outputDevice: '', outputLabel: '', ta: 5000, minimums: 200, groups: { takeoff: true, climb: true, approach: true, alerts: true, landing: true, cabin: false } };
   const isStd = mb => mb != null && Math.abs(mb - 1013.25) < 0.6;
   const fl = ft => ft >= 10000 ? `niveau ${Math.round(ft / 100)}` : `${Math.round(ft / 100) * 100} pieds`;
 

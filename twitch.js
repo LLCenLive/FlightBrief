@@ -480,7 +480,7 @@ class FlightBot extends EventEmitter {
     this.bet.state = 'locked'; this.bet.lockedAt = new Date().toISOString();
     const n = this.bet.guesses.size;
     const msg = `🔒 Paris fermés — ${n} pronostic${n > 1 ? 's' : ''}. Réponse au toucher des roues !`;
-    if (this.config.bets.announceInChat) this.chat.say(this.config.prefixMessages ? `[${this.config.botName}] ${msg}` : msg);
+    if (this.config.bets.announceInChat && n) this.chat.say(this.config.prefixMessages ? `[${this.config.botName}] ${msg}` : msg);
     this.emit('alert', { type: 'bet-locked', title: 'Paris fermés', text: `${n} pronostic${n > 1 ? 's' : ''} — verdict au toucher` });
     this._pushLog({ kind: 'bet', text: 'Paris fermés' + (reason ? ` (${reason})` : '') });
     this.emit('bet', 'lock');
@@ -525,7 +525,7 @@ class FlightBot extends EventEmitter {
     const msg = winner
       ? `🎯 Toucher à −${actual} ft/min ! Bravo ${winner.name} (${winner.fpm}, à ${winner.diff} près) sur ${ranked.length} pronostic${ranked.length > 1 ? 's' : ''}.`
       : `Toucher à −${actual} ft/min — personne n'avait parié cette fois.`;
-    if (this.config.bets.announceInChat) this.chat.say(this.config.prefixMessages ? `[${this.config.botName}] ${msg}` : msg);
+    if (this.config.bets.announceInChat && winner) this.chat.say(this.config.prefixMessages ? `[${this.config.botName}] ${msg}` : msg);
     this.emit('alert', { type: 'bet-result', title: winner ? 'Pari gagné !' : 'Atterrissage', text: msg, data: result });
     this._pushLog({ kind: 'bet', text: msg });
     return result;

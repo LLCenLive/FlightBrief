@@ -18,8 +18,8 @@ let st = null, ranking = [], obsUrl = '';
 
 /* ---------- réglages (stockés dans db.cabinCfg, poussés au moteur) ---------- */
 const DEF = {
-  enabled: true, window: { enabled: true, everyMin: 12 }, flyover: { enabled: true, radiusKm: 20, warnMin: 5 }, routeAnnounce: true, countries: true,
-  quiz: { enabled: true, everyMin: 15, answerSec: 75 }, arrivalGuess: true,
+  enabled: true, window: { enabled: true, everyMin: 20 }, flyover: { enabled: true, radiusKm: 20, warnMin: 5 }, routeAnnounce: true, countries: true,
+  quiz: { enabled: true, everyMin: 25, answerSec: 75 }, arrivalGuess: true, chatGapMin: 6,
   title: { autoPropose: true, template: '✈️ {indicatif} · {depart} → {arrivee} · {avion} | !embarquer pour monter à bord', category: 'Microsoft Flight Simulator 2024' },
   publicUrl: '', publicDir: '', publicPilot: '', publicRoutes: true, publicPax: true
 };
@@ -47,6 +47,7 @@ function bindSettings(){
   sw('cbQuiz', () => c.quiz.enabled, v => c.quiz.enabled = v);
   rng('cbQuizEvery', ' min', () => c.quiz.everyMin, v => c.quiz.everyMin = v);
   sw('cbArrival', () => c.arrivalGuess, v => c.arrivalGuess = v);
+  rng('cbChatGap', ' min', () => c.chatGapMin, v => c.chatGapMin = v);
   sw('cbTitleAuto', () => c.title.autoPropose, v => c.title.autoPropose = v);
   txt('cbTitleTpl', () => c.title.template, v => c.title.template = v);
   txt('cbTitleCat', () => c.title.category, v => c.title.category = v);
