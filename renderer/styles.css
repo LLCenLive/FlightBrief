@@ -132,7 +132,7 @@ main{padding:24px 28px 60px;}
 .field label{display:block;font-size:11px;color:var(--text-secondary); margin-bottom:4px; letter-spacing:.03em;}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
-input[type=text], input[type=search], input[type=number], input[type=date], textarea, select{
+input[type=text], input[type=password], input[type=search], input[type=number], input[type=date], textarea, select{
   width:100%; background:var(--cockpit-night); border:1px solid var(--hairline); color:var(--text-primary);
   border-radius:7px; padding:9px 10px; font-family:var(--font-mono); font-size:13px; outline:none;
 }
@@ -872,6 +872,22 @@ input.tool-output{color:var(--phosphor); border-color:color-mix(in srgb, var(--p
 .tw-cmd span{display:flex; flex-direction:column; gap:1px;}
 .tw-cmd code{font-family:var(--font-mono); font-size:12px; color:var(--accent-ifr);}
 .tw-cmd small{font-size:10px; color:var(--text-secondary);}
+.tw-cmd{gap:8px;}
+.tw-cmd > span{flex:1; min-width:0;}
+.tw-cmd .tw-cmd-edit{display:flex; flex-direction:column; gap:4px; flex:none;}
+.tw-cmd-edit input{width:96px; padding:4px 6px; font-family:var(--font-mono); font-size:11px;}
+.tw-cmd-edit input[type=number]{width:58px;}
+.tw-cmd-group{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-secondary); margin:10px 0 2px;}
+.tw-sub{display:block; font-size:10px; color:var(--text-secondary);}
+.lb-filters{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:4px 0 8px;}
+.lb-filters input[type=search]{flex:1 1 240px; min-width:180px;}
+.lb-filters select{flex:0 1 auto; width:auto; max-width:200px;}
+.lb-check{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); white-space:nowrap;}
+.lb-filter-sum{font-size:11.5px; color:var(--text-secondary); margin:0 0 8px; min-height:14px;}
+.cb-title{font-size:10px; color:var(--text-secondary); font-style:italic;}
+.fb-rainbow{background:linear-gradient(90deg,#ff6b6b,#ffd166,#39e88f,#5cc8ff,#a06cf5); -webkit-background-clip:text; background-clip:text; color:transparent;}
+.cb-shop .cb-chips span{font-size:11px;}
+@media (max-width:700px){ .tw-cmd{flex-wrap:wrap;} .tw-cmd-edit{width:100%;} .tw-cmd-edit input{flex:1;} }
 .tw-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
 .tw-grid > .card-panel{margin-bottom:16px;}
 .tw-grid-tight{gap:20px;}
@@ -915,7 +931,29 @@ input.tool-output{color:var(--phosphor); border-color:color-mix(in srgb, var(--p
 .atc-ap-badge span{font-family:var(--font-mono); font-weight:700; font-size:10px; width:15px; height:15px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; color:#0a0d11;}
 .atc-ap-badge .f-ATIS{background:#c7a6ff;} .atc-ap-badge .f-DEL{background:#9aa7b3;} .atc-ap-badge .f-GND{background:#ffd166;}
 .atc-ap-badge .f-TWR{background:#ff7a7a;} .atc-ap-badge .f-APP{background:#54d6e8;}
+/* v1.9 — pendant l'animation de zoom, badges et étiquettes ATC (éléments HTML) sont masqués : les repeindre
+   à chaque image était ce qui faisait saccader la carte. Ils réapparaissent dès la fin du zoom. */
+.leaflet-zoom-anim .leaflet-atcLabels-pane, .leaflet-zoom-anim .leaflet-atcAirports-pane{display:none;}
 .atc-ctr-label{background:none; border:none;}
+/* v1.9 — amis sur la carte */
+.bug-modal{width:min(620px, 100%);}
+.bug-preview summary{font-size:12px; color:var(--text-secondary); cursor:pointer; margin:6px 0;}
+.bug-preview pre{max-height:200px; overflow:auto; font-family:var(--font-mono); font-size:10.5px; white-space:pre-wrap; word-break:break-word; background:var(--cockpit-night); border:1px solid var(--hairline); border-radius:8px; padding:8px; margin:6px 0 10px; color:var(--text-secondary);}
+.fr-mk-wrap{background:none; border:none;}
+.fr-mk{display:flex; align-items:center; gap:4px; transform:translate(-9px, -50%); white-space:nowrap; cursor:pointer;}
+.fr-mk i{display:flex; width:18px; height:18px; color:var(--net); filter:drop-shadow(0 1px 1px #000);}
+.fr-mk i svg{fill:currentColor;}
+.fr-mk span{font-family:var(--font-mono); font-size:10.5px; font-weight:600; color:#fff; background:rgba(10,13,17,.85); border:1px solid var(--net); border-radius:6px; padding:1px 5px; display:flex; flex-direction:column; line-height:1.15;}
+.fr-mk span b{font-weight:500; font-size:9px; color:rgba(231,237,242,.75);}
+.fr-mk.viewer span{border-style:dashed;}
+.atc-far .fr-mk span b{display:none;}
+.fr-add{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0;}
+.fr-add select{width:auto;} .fr-add #frId{width:110px;} .fr-add #frLabel{flex:1; min-width:120px;}
+.fr-row{display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--hairline); font-size:12px;}
+.fr-row small{color:var(--text-secondary); font-family:var(--font-mono); font-size:10.5px;}
+.fr-row .fr-st{margin-left:auto; color:var(--text-secondary); font-size:11px;}
+.fr-row.on .fr-st{color:var(--phosphor);}
+.fr-pop{font-size:12px; line-height:1.5; padding:4px 0;}
 .atc-ctr-label span{display:inline-flex; flex-direction:column; align-items:center; transform:translate(-50%, -50%); font-family:var(--font-mono); font-size:10.5px; font-weight:600; color:var(--net); text-shadow:0 1px 2px #000; white-space:nowrap; line-height:1.15;}
 .atc-ctr-label b{font-weight:500; font-size:9.5px; color:rgba(231,237,242,.75);}
 .atc-zoomed-out .atc-ctr-label b{display:none;}

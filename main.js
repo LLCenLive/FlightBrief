@@ -10,11 +10,13 @@ const { DataStore, writeJsonSafe, readJsonSafe } = require('./backups');
 const I18N = require('./renderer/i18n.js');
 require('./renderer/i18n/translations.js');
 const T = s => I18N.tr(s);
-const { fetchAtc } = require('./atc');
+const { fetchAtc, findPilots } = require('./atc');
 const { TwitchAuth, TwitchChat, FlightBot, mergeConfig: mergeTwitchConfig } = require('./twitch');
+const Commands = require('./commands');
 const { Shots } = require('./shots');
 const { Cabin, mergeCfg: mergeCabinCfg } = require('./cabin');
 const { exportPublicLogbook } = require('./public-logbook');
+const { GitHubPages, checkToken: checkGithubToken } = require('./github-pages');
 const { Prediction, SCOPE: PREDICTION_SCOPE } = require('./predictions');
 const { suggest, pickDiverse, bestRunwayFt } = require('./suggest');
 const { Tts } = require('./tts');
@@ -232,8 +234,9 @@ function startObsServerSafely() {
 function startLiveOverlayServerSafely() {
   try {
     liveOverlayServer = startLiveOverlayServer(LIVE_OVERLAY_PORT, () => liveOverlayState, alertsSince, {
-      getCabin: () => ({ ...cabin.publicState(), style: alertsConfig.style || {} }), postcardDir: postcardDir(),
-      deck: { token: deckToken, state: deckState, action: deckAction }
+      getCabin: () => ({ ...cabin.publicState(), style: alertsConfig.style || {}, cmds: overlayCommandNames() }), postcardDir: postcardDir(),
+      deck: { token: deckToken, state: deckState, action: deckAction },
+      efb: { token: deckToken, lang: () => I18N.lang, state: efbData, action: efbAction }
     });
     liveOverlayServer.on('error', (err) => {
       logFatalError('live-overlay-server', err);
@@ -365,8 +368,12 @@ function isNewerVersion(remote, local) {
   for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] > b[i]; }
   return false;
 }
+// v1.9 — version Microsoft Store (MSIX) : c'est le Store qui installe les mises à jour.
+// On n'annonce rien et on ne télécharge rien depuis GitHub (interdit par les règles du Store).
+const IS_STORE = !!process.windowsStore;
 async function checkForUpdate() {
   const current = app.getVersion();
+  if (IS_STORE) return { ok: true, current, latest: current, available: false, store: true };
   try {
     const res = await net.fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
       headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': `FlightBrief/${current}` }
@@ -387,6 +394,39 @@ async function checkForUpdate() {
   }
 }
 ipcMain.handle('app:getVersion', () => app.getVersion());
+
+/* ---- v1.9 — « Signaler un bug » (voir bugreport.js) : rien n'est envoyé sans le pilote ---- */
+const BugReport = require('./bugreport');
+ipcMain.handle('bug:prepare', (evt, o) => {
+  o = o || {};
+  const ctx = { home: os.homedir(), user: (() => { try { return os.userInfo().username; } catch (e) { return ''; } })() };
+  let crash = '';
+  try { crash = fs.readFileSync(crashLogPath(), 'utf-8').slice(-20000); } catch (e) { /* pas d'erreur enregistrée */ }
+  const ui = (Array.isArray(o.uiErrors) ? o.uiErrors : []).slice(-20).map(String).join('\n');
+  const st = twitchStatus || {};
+  const diag = {
+    'FlightBrief': app.getVersion() + (app.isPackaged ? '' : ' (dev)'),
+    'Windows / système': `${os.type()} ${os.release()} ${process.arch}`,
+    'Electron / Chrome': `${process.versions.electron} / ${process.versions.chrome}`,
+    'Langue': I18N.lang,
+    'Simulateur': liveTrack.connected ? `connecté${liveTrack.sim ? ' (' + liveTrack.sim + ')' : ''}${liveTrack.tracking ? ', vol en cours' : ''}` : 'non connecté',
+    'Bot Twitch': twitchConfig.enabled ? `activé, ${st.state || 'déconnecté'}${st.anonymous ? ' (lecture seule)' : ''}` : 'désactivé',
+    'À bord': cabin.cfg.enabled ? 'activé' : 'désactivé',
+    'Fonctions streaming': o.streamer == null ? null : (o.streamer ? 'oui' : 'non'),
+    'Vols dans le logbook': o.flights,
+    'Écran': o.screen,
+    'Appli ouverte depuis': `${Math.round(process.uptime() / 60)} min`
+  };
+  const logs = BugReport.tailLog(crash, ctx, 30).concat(BugReport.tailLog(ui, ctx, 10).map(l => '[interface] ' + l));
+  return { diag, logs };
+});
+ipcMain.handle('bug:open', (evt, r) => {
+  const { url, truncated } = BugReport.issueUrl(r || {}, (require('./package.json').repository || {}).url);
+  if (!url.startsWith(BugReport.REPO_URL + '/issues/new?')) return { ok: false };
+  shell.openExternal(url);
+  return { ok: true, truncated, text: BugReport.reportMarkdown(r || {}) };
+});
+ipcMain.handle('bug:text', (evt, r) => BugReport.reportMarkdown(r || {}));
 // Notes de la release GitHub d'une version donnée (repli du changelog intégré à l'appli).
 ipcMain.handle('app:releaseNotes', async (evt, version) => {
   const v = String(version || '').replace(/^v/i, '');
@@ -778,6 +818,7 @@ function getAutoUpdater() {
   return autoUpdater;
 }
 ipcMain.handle('update:download', async () => {
+  if (IS_STORE) return { ok: false, error: 'Version Microsoft Store : les mises à jour arrivent par le Store.' };
   if (!app.isPackaged) return { ok: false, error: "Mise à jour automatique indisponible en mode développement (npm start).", fallbackUrl: UPDATE_LANDING_URL };
   try {
     const u = getAutoUpdater();
@@ -846,6 +887,91 @@ function deckAction(a) {
   if (mainWindow) mainWindow.webContents.send('deck:action', a); // mêmes fonctions que les boutons de l'appli
   return deckState();
 }
+/* ---- v1.9 — appli FlightBrief dans l'EFB de MSFS 2024 (dossier efb/, page renderer/efb-sim) ---- */
+const EfbPackage = require('./efb-package');
+const efbSrc = () => path.join(__dirname, 'efb');
+ipcMain.handle('efb:status', () => {
+  const f = EfbPackage.findCommunity();
+  return { found: !!f, community: f ? f.community : null, edition: f ? f.edition : null, installed: f ? EfbPackage.installedVersion(f.community) : null, current: app.getVersion(),
+    blocked: !!(f && IS_STORE && EfbPackage.underAppData(f.community)) };
+});
+// Dépose le paquet dans le dossier Community. Version Store de FlightBrief + Community dans AppData :
+// l'écriture resterait privée (virtualisation MSIX), on prépare donc le paquet dans Téléchargements.
+ipcMain.handle('efb:install', () => {
+  try {
+    const f = EfbPackage.findCommunity();
+    if (f && !(IS_STORE && EfbPackage.underAppData(f.community))) {
+      fs.mkdirSync(f.community, { recursive: true });
+      const r = EfbPackage.writePackage(efbSrc(), path.join(f.community, EfbPackage.PACKAGE), app.getVersion());
+      return { ok: true, installed: true, dest: r.dest };
+    }
+    const dest = path.join(app.getPath('downloads'), 'FlightBrief', EfbPackage.PACKAGE);
+    EfbPackage.writePackage(efbSrc(), dest, app.getVersion());
+    shell.showItemInFolder(dest);
+    return { ok: true, installed: false, dest, reason: f ? 'store' : 'notfound' };
+  } catch (e) { return { ok: false, error: e.message || String(e) }; }
+});
+// Réseau lent (VATSIM, IVAO, METAR) : l'EFB reçoit quand même le vol au bout de 4 s, le reste suivra.
+const efbWithin = (p, ms) => Promise.race([Promise.resolve(p).catch(() => null), new Promise(r => setTimeout(() => r(null), ms))]);
+// Rubrique demandée par l'EFB : 'state' (briefing + vol + live, toutes les 3 s), 'logbook', 'careers', 'ofp' (voir efb-data.js).
+const EfbData = require('./efb-data');
+function efbData(part) {
+  if (part === 'logbook') return EfbData.logbook(readDb(), lookupAirport);
+  if (part === 'careers') return EfbData.careers(readDb());
+  if (part === 'ofp') return EfbData.ofpText(readDb());
+  return efbState();
+}
+async function efbState() {
+  const t = lastTelemetry || {}, ot = liveOverlayState.telemetry || {};
+  const dep = String(ot.dep || liveState.dep || (liveTrack.depGuess && liveTrack.depGuess.icao) || '').toUpperCase() || null;
+  const arr = String(ot.arr || liveState.arr || '').toUpperCase() || null;
+  const atcOpts = { cacheDir: path.join(app.getPath('userData'), 'atc-data'), lookupAirport };
+  const dbNow = readDb() || {}, atcCfg = Object.assign({ vatsim: true, ivao: true, friends: [], viewers: true }, dbNow.atcMap || {});
+  const [mDep, mArr, atc, friends] = await Promise.all([
+    dep ? efbWithin(fetchMetar(dep), 4000) : null, arr && arr !== dep ? efbWithin(fetchMetar(arr), 4000) : null,
+    (atcCfg.vatsim || atcCfg.ivao) ? efbWithin(fetchAtc((u, o) => net.fetch(u, o), { ...atcOpts, networks: { vatsim: !!atcCfg.vatsim, ivao: !!atcCfg.ivao } }), 4000) : null,
+    efbWithin(findPilots((u, o) => net.fetch(u, o), atcOpts, (atcCfg.friends || []).concat(atcCfg.viewers !== false ? cabin.netIds() : [])), 4000)
+  ]);
+  const stations = [];
+  ['vatsim', 'ivao'].forEach(n => ((atc && atc[n] && atc[n].ok) ? atc[n].stations : []).forEach(s => {
+    if (s.ap && (s.ap.icao === dep || s.ap.icao === arr)) stations.push({ network: n, icao: s.ap.icao, callsign: s.callsign, facility: s.facility, frequency: s.frequency, atisCode: s.atisCode || null });
+  }));
+  const bet = flightBot.betState(), cs = cabin.publicState ? cabin.publicState() : {}, st = twitchStatus || {};
+  return {
+    ok: true, lang: I18N.lang, connected: !!liveTrack.connected, sim: liveTrack.sim || null, phase: currentDetailedPhase(),
+    callsign: ot.callsign || liveState.callsign || null, aircraft: liveState.aircraft || liveTrack.aircraft || null, route: liveState.route || null, dep, arr,
+    briefing: { rules: liveState.rules || null, depName: liveState.depName || null, arrName: liveState.arrName || null, altitude: liveState.altitude || null, duration: liveState.duration || null,
+      approach: liveState.approach || null, weather: liveState.weather || null, notes: liveState.notes || null, hasOfp: !!((readDb() || {}).ofp || {}).planHtml },
+    progressPct: ot.progressPct != null ? ot.progressPct : null,
+    altFt: t.altFt != null ? t.altFt : null, gsKt: t.gsKt != null ? t.gsKt : null, vsFpm: t.vsFpm != null ? t.vsFpm : null, hdg: t.headingDeg != null ? t.headingDeg : null,
+    etaIso: ot.etaIso || null, etaMin: ot.etaMin != null ? ot.etaMin : null, remainingNm: ot.remainingNm != null ? Math.round(ot.remainingNm) : null, todMin: ot.todMin != null ? ot.todMin : null,
+    metar: { dep: mDep || null, arr: mArr || null },
+    atc: stations, friends: (friends && friends.pilots) || [],
+    stream: {
+      enabled: !!twitchConfig.enabled, state: st.state || 'disconnected', canSpeak: twitchChat.canSpeak(), channel: st.channel || twitchConfig.channel || '',
+      botName: (twitchConfig.botName || 'FlightBot').trim(),
+      bets: { state: bet.state, count: bet.count, guesses: bet.guesses.slice(-10).reverse().map(g => ({ name: g.name, fpm: g.fpm })),
+        result: bet.result ? { actual: bet.result.actual, winner: bet.result.winner ? { name: bet.result.winner.name, fpm: bet.result.winner.fpm, diff: bet.result.winner.diff } : null } : null },
+      prediction: !!twitchConfig.bets.prediction,
+      leaderboard: flightBot.leaderboard(5).map(p => ({ name: p.name || p.user, wins: p.wins || 0, bets: p.bets || 0 })),
+      cabin: cs.enabled ? { boarding: !!(cs.flight && cs.flight.boarding), pax: (cs.passengers || []).length, turbulence: cs.turbulence || null, turbOn: !!cabin.cfg.turbulence.enabled,
+        passengers: (cs.passengers || []).slice().sort((a, b) => b.miles - a.miles).slice(0, 40).map(p => ({ name: p.name, miles: p.miles, tierIcon: p.tierIcon, tier: p.tier, present: p.present, leg: p.leg, look: p.look || null })),
+        nextFlyover: cs.nextFlyover || null, quiz: cs.quiz ? { text: cs.quiz.text } : null,
+        ranking: cabin.ranking(10).map(r => ({ name: r.name, miles: r.miles, tierIcon: r.tier.icon, flights: r.flights, look: r.look || null })) } : null,
+      log: flightBot.log.slice(0, 15).map(e => ({ kind: e.kind, user: e.user || null, text: String(e.text || '').slice(0, 200) }))
+    }
+  };
+}
+const EFB_ACTIONS = {
+  'bets-open': () => flightBot.openBets('EFB'), 'bets-lock': () => flightBot.lockBets('EFB'), 'bets-cancel': () => flightBot.cancelBets(),
+  'boarding-open': () => cabin.openBoarding(true), 'boarding-close': () => cabin.closeBoarding(),
+  'turbulence': () => cabin.startTurbulence('manual'), 'shot': () => deckAction('shot')
+};
+function efbAction(a) {
+  const fn = EFB_ACTIONS[a];
+  if (!fn) return { ok: false, error: 'action' };
+  try { const r = fn(); sendTwitchState(); return { ok: r !== false }; } catch (e) { return { ok: false, error: e.message }; }
+}
 // v1.9 — copilote vocal sur une sortie audio au choix (casque, VoiceMeeter…) : voir tts.js.
 const tts = new Tts();
 ipcMain.handle('tts:available', () => tts.available());
@@ -864,7 +990,9 @@ ipcMain.handle('deck:install', async () => {
     });
     walk('');
     files.push({ name: PLUGIN + '/config.js', data: Buffer.from(`window.FB_DECK = ${JSON.stringify({ port: LIVE_OVERLAY_PORT, token: deckToken(), lang: I18N.lang })};\n`) });
-    const outDir = path.join(app.getPath('userData'), 'streamdeck');
+    // Version Store : ce qui est écrit dans AppData reste privé à l'appli (virtualisation MSIX) et le
+    // logiciel Stream Deck ne le verrait pas. Le fichier va donc dans Téléchargements.
+    const outDir = IS_STORE ? path.join(app.getPath('downloads'), 'FlightBrief') : path.join(app.getPath('userData'), 'streamdeck');
     fs.mkdirSync(outDir, { recursive: true });
     const out = path.join(outDir, 'FlightBrief.streamDeckPlugin');
     fs.writeFileSync(out, require('./zip').zip(files));
@@ -957,6 +1085,13 @@ ipcMain.handle('atc:get', (evt, opts) => fetchAtc((url, o) => net.fetch(url, o),
   networks: (opts && opts.networks) || { vatsim: true, ivao: false }, force: !!(opts && opts.force),
   cacheDir: path.join(app.getPath('userData'), 'atc-data'), lookupAirport
 }));
+// v1.9 — amis sur la carte du Briefing : ceux du pilote (réglage) + les viewers inscrits avec !vatsim / !ivao.
+ipcMain.handle('atc:friends', (evt, o) => {
+  o = o || {};
+  const friends = (Array.isArray(o.friends) ? o.friends : []).slice(0, 50).map(f => ({ network: f.network, id: String(f.id || ''), label: f.label || '' }));
+  const viewers = o.viewers === false ? [] : cabin.netIds();
+  return findPilots((url, op) => net.fetch(url, op), { cacheDir: path.join(app.getPath('userData'), 'atc-data'), lookupAirport }, friends.concat(viewers));
+});
 
 /* =========================================================
    v1.5 — Alertes à l'écran (source OBS http://localhost:4814/alerts)
@@ -969,13 +1104,24 @@ let alertSeq = 0;
 let alertsQueue = [];
 let alertsConfig = { durationSec: 9, position: 'top-right', scale: 100, accent: '#39e88f', types: { landing: true, achievement: true, bet: true, chat: true } };
 function pushAlert(a) {
+  // v1.9 — commandes renommées : le texte est traduit ici pour pouvoir y remplacer les noms d'origine.
+  try {
+    if (a && a.text && Object.keys(twitchConfig.cmdNames || {}).length) {
+      const tr = T(a.text), rn = Commands.renameInText(tr, twitchConfig);
+      if (rn !== tr) a = { ...a, text: rn };
+    }
+  } catch (e) { /* config du bot pas encore chargée */ }
   const ev = { id: ++alertSeq, ts: Date.now(), ...a };
   alertsQueue.push(ev);
   alertsQueue = alertsQueue.filter(x => Date.now() - x.ts < 5 * 60000).slice(-40);
   return ev;
 }
 function alertsSince(sinceId) {
-  return { config: alertsConfig, lastId: alertSeq, events: alertsQueue.filter(e => e.id > (sinceId || 0)) };
+  return { config: alertsConfig, cmds: overlayCommandNames(), lastId: alertSeq, events: alertsQueue.filter(e => e.id > (sinceId || 0)) };
+}
+// v1.9 — noms des commandes (langue de l'appli + noms choisis) pour les overlays, qui les affichent en <code>.
+function overlayCommandNames() {
+  try { return Object.fromEntries(Commands.CATALOG.map(c => [c.key, Commands.displayName(c.key, twitchConfig, I18N.lang)])); } catch (e) { return {}; }
 }
 ipcMain.on('alerts:push', (evt, a) => { if (a && a.type) pushAlert(a); });
 ipcMain.on('alerts:config', (evt, c) => { alertsConfig = { ...alertsConfig, ...(c || {}), types: { ...alertsConfig.types, ...((c && c.types) || {}) }, style: { ...((c && c.style) || alertsConfig.style || {}) } }; });
@@ -994,7 +1140,8 @@ function getTwitchAuth() {
   return twitchAuth;
 }
 const twitchChat = new TwitchChat();
-twitchChat.translate = T; // messages du bot dans la langue de l'appli
+// Messages du bot dans la langue de l'appli, avec les noms de commandes choisis par le streamer (v1.9).
+twitchChat.translate = s => Commands.renameInText(T(s), twitchConfig);
 let twitchStatus = { state: 'disconnected' };
 let twitchConfig = mergeTwitchConfig(null);
 let lastLanding = null; // { fpm, icao, gForce, grade, bounces, at }
@@ -1024,6 +1171,7 @@ function currentDetailedPhase() {
 const flightBot = new FlightBot(twitchChat, {
   statsFile: path.join(app.getPath('userData'), 'twitch-bets.json'),
   fetchMetar,
+  cabinOn: () => cabin.cfg.enabled,
   getContext: () => {
     const t = { ...(liveOverlayState.telemetry || {}) };
     if (liveTrack.pos) { t.gsKt = liveTrack.pos.gsKt; if (t.altFt == null) t.altFt = liveTrack.pos.altFt; }
@@ -1041,7 +1189,8 @@ function twitchPublicState() {
   return {
     status: twitchStatus, config: twitchConfig, auth: getTwitchAuth().publicInfo(),
     bet: flightBot.betState(), prediction: prediction.publicState(), leaderboard: flightBot.leaderboard(10), log: flightBot.log.slice(0, 25),
-    betsResolved: (flightBot.stats.history || []).length
+    betsResolved: (flightBot.stats.history || []).length,
+    cmdConflicts: Commands.conflicts(twitchConfig)
   };
 }
 const sendTwitchState = (() => {
@@ -1129,8 +1278,12 @@ tracker.on('flight-start', () => flightBot.onFlightStart());
 tracker.on('telemetry', d => {
   if (!twitchConfig.enabled) return;
   if (d.phase === 'airborne') flightBot.onFlightTick(currentDetailedPhase(), d.aglFt, d.vsFpm);
+  flightBot.onTaxiTick(d);
 });
+// v1.9 — nouveau METAR à destination : vérifié toutes les 2 min pendant le vol (cache METAR de 5 min).
+setInterval(() => { if (twitchConfig.enabled) flightBot.checkArrivalMetar().catch(() => {}); }, 2 * 60000);
 tracker.on('flight-landed', d => {
+  flightBot.onLanded();
   lastLanding = { fpm: d.landingRate, icao: d.arr && d.arr.icao, gForce: d.gForce, bounces: d.bounceCount || 0, at: Date.now() };
   if (twitchConfig.enabled) flightBot.resolveBets({ fpm: d.landingRate, icao: d.arr && d.arr.icao });
 });
@@ -1149,7 +1302,8 @@ const cabin = new Cabin({
   alert: a => { if (twitchConfig.enabled) pushAlert(a); },
   lookupAirport: icao => lookupAirport(icao),
   getBriefing: () => ({ dep: liveState.dep, arr: liveState.arr, callsign: liveState.callsign, aircraft: liveState.aircraft }),
-  getPhase: () => currentDetailedPhase()
+  getPhase: () => currentDetailedPhase(),
+  getCommandConfig: () => twitchConfig
 });
 const cabinOn = () => twitchConfig.enabled && cabin.cfg.enabled;
 const sendCabinState = (() => {
@@ -1180,6 +1334,8 @@ tracker.on('flight-end', () => cabin.onFlightEnd());
 ipcMain.handle('cabin:getState', () => cabin.publicState());
 ipcMain.handle('cabin:setConfig', (evt, c) => { cabin.setConfig(c); return cabin.publicState(); });
 ipcMain.on('cabin:setPlan', (evt, p) => cabin.setPlan(p));
+ipcMain.handle('cabin:shop', () => require('./dutyfree').ITEMS.map(it => ({ code: it.code, cat: it.cat, name: it.name, icon: it.icon, color: it.color || null, price: require('./dutyfree').priceOf(it, cabin.cfg.dutyFree.priceMult) })));
+ipcMain.handle('cabin:turbulence', () => ({ ok: cabin.startTurbulence('manual'), state: cabin.publicState() })); // v1.9 — bouton « Turbulences ! »
 ipcMain.handle('cabin:boarding', (evt, action) => {
   if (action === 'open') cabin.openBoarding(true);
   else if (action === 'close') cabin.closeBoarding();
@@ -1243,7 +1399,7 @@ function buildTitleSuggestion() {
     indicatif: (ls.callsign || '').trim(), dep: (ls.dep || '').toUpperCase(), arr: (ls.arr || '').toUpperCase(),
     depart: ls.dep ? city(ls.dep, ls.depName) : '', arrivee: ls.arr ? city(ls.arr, ls.arrName) : '', avion: (ls.aircraft || '').trim()
   };
-  const t = fillTitleTemplate(T(cabin.cfg.title.template || ''), vals); // modèle par défaut traduit, modèle perso inchangé
+  const t = Commands.renameInText(fillTitleTemplate(T(cabin.cfg.title.template || ''), vals), twitchConfig); // modèle par défaut traduit, modèle perso inchangé ; commandes renommées
   return { title: t.slice(0, 140), category: cabin.cfg.title.category || '', channel: twitchConfig.channel || '', auth: getBroadcasterAuth().publicInfo() };
 }
 ipcMain.handle('cabin:titleSuggest', () => buildTitleSuggestion());
@@ -1302,6 +1458,44 @@ ipcMain.handle('cabin:exportPublic', async (evt, opts) => {
   } catch (e) { return { ok: false, error: e.message || String(e) }; }
 });
 ipcMain.handle('cabin:openDir', (evt, dir) => { if (dir && fs.existsSync(dir)) shell.openPath(dir); return true; });
+
+/* ---- v1.9 — publication du carnet public sur GitHub Pages (voir github-pages.js) ---- */
+const githubPages = new GitHubPages((u, o) => net.fetch(u, o));
+const githubTokenFile = () => path.join(app.getPath('userData'), 'github-token.bin');
+function readGithubToken() {
+  try { const raw = fs.readFileSync(githubTokenFile()); return twitchCrypt.decrypt(raw); } catch (e) { return ''; }
+}
+function githubInfo() {
+  const t = readGithubToken();
+  return { hasToken: !!t, tokenMasked: t ? t.slice(0, 15) + '…' + t.slice(-4) : null };
+}
+ipcMain.handle('publish:info', () => githubInfo());
+ipcMain.handle('publish:setToken', (evt, token) => {
+  const c = checkGithubToken(token);
+  if (!c.ok) return c;
+  try { fs.writeFileSync(githubTokenFile(), twitchCrypt.encrypt(c.token)); } catch (e) { return { ok: false, error: e.message }; }
+  return { ok: true, ...githubInfo() };
+});
+ipcMain.handle('publish:clearToken', () => { try { fs.unlinkSync(githubTokenFile()); } catch (e) { /* déjà absent */ } return githubInfo(); });
+ipcMain.handle('publish:check', (evt, o) => githubPages.check({ token: readGithubToken(), repo: o && o.repo }));
+// Génère le site dans son dossier (celui de l'export manuel, sinon un dossier de l'appli) puis l'envoie sur GitHub.
+ipcMain.handle('publish:run', async (evt, o) => {
+  o = o || {};
+  const token = readGithubToken();
+  if (!token) return { ok: false, error: "Enregistre d'abord ton jeton GitHub." };
+  try {
+    const dir = String(o.dir || '') || path.join(app.getPath('userData'), 'carnet-public');
+    fs.mkdirSync(dir, { recursive: true });
+    const res = exportPublicLogbook({
+      dir, rendererDir: path.join(__dirname, 'renderer'), db: readDb() || {}, cabin: cabin.publicExport(), postcardDir: postcardDir(),
+      options: o.options || {}, version: app.getVersion()
+    });
+    const last = (cabin.data.flights || [])[0];
+    const message = `FlightBrief : carnet de vol mis à jour (${res.flights} vols${last && last.dep && last.arr ? `, dernier ${last.dep} → ${last.arr}` : ''})`;
+    const pub = await githubPages.publish({ token, repo: o.repo, branch: o.branch, dir, message });
+    return pub.ok ? { ...pub, flights: res.flights, viewers: res.viewers, postcards: res.postcards } : pub;
+  } catch (e) { return { ok: false, error: e.message || String(e) }; }
+});
 
 /* =========================================================
    v1.6 — Captures d'écran des vols (voir shots.js)

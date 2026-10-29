@@ -858,7 +858,7 @@ const FAC_ORDER = { ATIS: 0, DEL: 1, GND: 2, TWR: 3, DEP: 4, APP: 5, CTR: 6, FSS
 const FAC_LETTER = { ATIS: 'i', DEL: 'D', GND: 'G', TWR: 'T', APP: 'A', DEP: 'A' };
 const APP_RADIUS_NM = 35;
 function atcCfg(){
-  db.atcMap = Object.assign({ vatsim: true, ivao: true, map: true }, db.atcMap || {});
+  db.atcMap = Object.assign({ vatsim: true, ivao: true, map: true, friendsOn: true, viewers: true, friends: [] }, db.atcMap || {});
   return db.atcMap;
 }
 function atcStations(){
@@ -987,6 +987,7 @@ function renderAtcMapChips(){
   box.innerHTML = `<button class="atc-chip ${c.map ? 'on' : ''}" onclick="FBv15.atcToggle('map')" title="Afficher les contrôleurs sur la carte">📡 ATC</button>`
     + ['vatsim', 'ivao'].map(n => { const k = count(n); const err = atcData && atcData[n] && !atcData[n].ok;
       return `<button class="atc-chip net ${c[n] ? 'on' : ''}" style="--net:${NET[n].color}" onclick="FBv15.atcToggle('${n}')" title="${err ? esc(NET[n].label + ' injoignable : ' + atcData[n].error) : 'Afficher / masquer ' + NET[n].label}"><i></i>${NET[n].label}${c[n] && k != null ? ` <small>${k}</small>` : ''}${err && c[n] ? ' ⚠' : ''}</button>`; }).join('')
+    + `<button class="atc-chip ${c.friendsOn ? 'on' : ''}" onclick="FBv15.friendsToggle('friendsOn')" title="Afficher les amis et les viewers qui volent en ligne">👥 Amis${c.friendsOn && friendsOnline.length ? ` <small>${friendsOnline.length}</small>` : ''}</button>`
     + `<button class="atc-chip atc-help" onclick="FBv15.toggleAtcLegend()" title="Légende">?</button>`;
 }
 FBv15.atcToggle = function(k){
@@ -1041,10 +1042,84 @@ FBv15.refreshAtc = async function(force){
   renderAtc();
   renderAtcMap();
 };
+/* ---- v1.9 — amis sur la carte (CID VATSIM / VID IVAO, et viewers inscrits avec !vatsim / !ivao) ---- */
+let friendsOnline = [], friendLayer = null, friendsBusy = false;
+const FR_PLANE = '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2c.8 0 1.3.8 1.3 1.8v5.4l7.7 4.6v2.1l-7.7-2.3v4.6l2.2 1.7v1.7L12 20.6l-3.5 1v-1.7l2.2-1.7v-4.6l-7.7 2.3v-2.1l7.7-4.6V3.8C10.7 2.8 11.2 2 12 2z"/></svg>';
+function ensureFriendLayer(){
+  if(friendLayer || !ensureAtcLayer()) return friendLayer;
+  friendLayer = L.layerGroup().addTo(trackMap);
+  return friendLayer;
+}
+function friendFl(p){ return p.altFt == null ? '—' : p.altFt >= 10000 ? 'FL' + String(Math.round(p.altFt / 100)).padStart(3, '0') : nfmt(Math.round(p.altFt)) + ' ft'; }
+function nfmt(n){ return Number(n).toLocaleString(FBI18N.locale()); }
+function friendPopup(p){
+  return `<div class="atc-pop"><div class="atc-pop-h">${esc(p.label || p.callsign)} · ${NET[p.network].label}${p.viewer ? ' · viewer' : ''}</div>
+    <div class="fr-pop"><b>${esc(p.callsign)}</b>${p.aircraft ? ' · ' + esc(p.aircraft) : ''}<br>${esc(p.dep || '????')} → ${esc(p.arr || '????')}<br>${esc(friendFl(p))} · ${p.gsKt != null ? esc(p.gsKt) + ' kt' : '—'}</div></div>`;
+}
+function renderFriends(){
+  const c = atcCfg();
+  if(ensureFriendLayer()){
+    friendLayer.clearLayers();
+    if(c.friendsOn) friendsOnline.forEach(p => {
+      L.marker([p.lat, p.lon], { pane: 'atcAirports', zIndexOffset: 500, keyboard: false, icon: L.divIcon({ className: 'fr-mk-wrap', iconSize: null,
+        html: `<div class="fr-mk${p.viewer ? ' viewer' : ''}" style="--net:${NET[p.network].color}"><i style="transform:rotate(${Math.round(p.hdg || 0)}deg)">${FR_PLANE}</i><span>${esc(p.label || p.callsign)}${p.label ? `<b>${esc(p.callsign)}</b>` : ''}</span></div>` }) })
+        .bindPopup(() => friendPopup(p), { className: 'atc-popup', maxWidth: 300 })
+        .bindTooltip(`${esc(p.callsign)} · ${esc(friendFl(p))}`, { className: 'atc-tip', direction: 'top', offset: [0, -12] })
+        .addTo(friendLayer);
+    });
+  }
+  renderAtcMapChips();
+  renderFriendList();
+}
+function renderFriendList(){
+  const box = $('frList'); if(!box) return;
+  const c = atcCfg(), on = new Map(friendsOnline.map(p => [p.network + ':' + p.id, p]));
+  $('frViewers').checked = c.viewers !== false;
+  const viewersOn = friendsOnline.filter(p => p.viewer);
+  $('frCount').textContent = `(${friendsOnline.length} en ligne)`;
+  box.innerHTML = (c.friends.length ? c.friends.map((f, i) => { const p = on.get(f.network + ':' + f.id);
+    return `<div class="fr-row${p ? ' on' : ''}"><i class="net-dot" style="background:${NET[f.network].color}"></i><b>${esc(f.label || f.id)}</b><small>${NET[f.network].label} ${esc(f.id)}</small>
+      <span class="fr-st">${p ? `${esc(p.callsign)} · ${esc(friendFl(p))} <a href="#" onclick="FBv15.centerFriend('${esc(f.network)}','${esc(f.id)}'); return false;">voir</a>` : 'hors ligne'}</span>
+      <button class="icon-btn" onclick="FBv15.removeFriend(${i})" title="Retirer">×</button></div>`; }).join('') : '<div class="hint">Aucun ami pour l\'instant.</div>')
+    + (viewersOn.length ? `<div class="cb-sub">Viewers en vol</div>` + viewersOn.map(p => `<div class="fr-row on viewer"><i class="net-dot" style="background:${NET[p.network].color}"></i><b>${esc(p.label)}</b><small>${NET[p.network].label}</small><span class="fr-st">${esc(p.callsign)} · ${esc(friendFl(p))} <a href="#" onclick="FBv15.centerFriend('${esc(p.network)}','${esc(p.id)}'); return false;">voir</a></span></div>`).join('') : '');
+}
+FBv15.refreshFriends = async function(){
+  if(!window.atc || !window.atc.friends || friendsBusy) return;
+  const c = atcCfg();
+  if(!c.friendsOn){ friendsOnline = []; renderFriends(); return; }
+  friendsBusy = true;
+  try{ const r = await window.atc.friends({ friends: c.friends, viewers: c.viewers !== false }); friendsOnline = (r && r.pilots) || []; }
+  catch(e){ /* réseau injoignable : on garde les dernières positions */ }
+  friendsBusy = false;
+  renderFriends();
+};
+FBv15.friendsToggle = function(k, v){
+  const c = atcCfg();
+  c[k] = v === undefined ? !c[k] : !!v;
+  queueSaveDb();
+  FBv15.refreshFriends();
+};
+FBv15.addFriend = function(){
+  const c = atcCfg(), m = $('frMsg');
+  const network = $('frNet').value, id = $('frId').value.replace(/\D/g, ''), label = $('frLabel').value.trim().slice(0, 40);
+  if(!/^\d{3,9}$/.test(id)){ m.className = 'status-msg err'; m.textContent = network === 'vatsim' ? 'CID VATSIM invalide : 3 à 9 chiffres (ex : 1234567).' : 'VID IVAO invalide : 3 à 9 chiffres (ex : 123456).'; return; }
+  if(c.friends.some(f => f.network === network && f.id === id)){ m.className = 'status-msg err'; m.textContent = 'Déjà dans ta liste.'; return; }
+  c.friends.push({ network, id, label });
+  $('frId').value = ''; $('frLabel').value = ''; m.className = 'status-msg'; m.textContent = '';
+  queueSaveDb();
+  FBv15.refreshFriends();
+};
+FBv15.removeFriend = function(i){ const c = atcCfg(); c.friends.splice(i, 1); queueSaveDb(); FBv15.refreshFriends(); };
+FBv15.centerFriend = function(network, id){
+  const p = friendsOnline.find(x => x.network === network && x.id === id);
+  if(p && trackMap){ trackMap.setView([p.lat, p.lon], Math.max(trackMap.getZoom(), 7)); }
+};
+
 function startAtcPolling(){
   stopAtcPolling();
   FBv15.refreshAtc(false);
-  atcTimer = setInterval(() => { if(!document.hidden) FBv15.refreshAtc(false); }, 45000);
+  FBv15.refreshFriends();
+  atcTimer = setInterval(() => { if(!document.hidden){ FBv15.refreshAtc(false); FBv15.refreshFriends(); } }, 45000);
 }
 function stopAtcPolling(){ if(atcTimer){ clearInterval(atcTimer); atcTimer = null; } }
 
@@ -1720,24 +1795,43 @@ function initUpdater(){
 /* =========================================================
    8. BOT TWITCH + OVERLAY ALERTES
    ========================================================= */
+// [clé, nom d'origine, exemple d'argument, description, groupe, délai par défaut (s) ou null = délai général]
+// Même catalogue que commands.js (processus principal).
 const TW_COMMANDS = [
-  ['eta', '!eta', "heure d'arrivée, distance restante, début de descente"],
-  ['route', '!route', 'départ, arrivée et route du plan de vol'],
-  ['metar', '!metar', 'météo de l\'arrivée (ou !metar LFPG)'],
-  ['avion', '!avion', 'appareil du vol'],
-  ['alt', '!alt', 'altitude, vitesse sol et phase de vol'],
-  ['landing', '!landing', 'dernier atterrissage : taux, G, note'],
-  ['pari', '!pari 180', 'pronostic sur le taux de toucher'],
-  ['top', '!top', 'classement des meilleurs parieurs'],
-  ['fb', '!fb', 'liste des commandes actives']
+  ['eta', 'eta', '', "heure d'arrivée, distance restante, début de descente", 'bot', null],
+  ['route', 'route', '', 'départ, arrivée et route du plan de vol', 'bot', null],
+  ['metar', 'metar', '', 'météo de l\'arrivée (ou !metar LFPG)', 'bot', null],
+  ['avion', 'avion', '', 'appareil du vol', 'bot', null],
+  ['alt', 'alt', '', 'altitude, vitesse sol et phase de vol', 'bot', null],
+  ['landing', 'landing', '', 'dernier atterrissage : taux, G, note', 'bot', null],
+  ['pari', 'pari', ' 180', 'pronostic sur le taux de toucher', 'bot', 0],
+  ['top', 'top', '', 'classement des meilleurs parieurs', 'bot', null],
+  ['fb', 'fb', '', 'liste des commandes actives', 'bot', null],
+  ['board', 'embarquer', '', 'monter à bord du vol', 'cabin', 0],
+  ['miles', 'miles', '', 'miles, statut et classement du viewer', 'cabin', 30],
+  ['passport', 'passeport', '', 'tampons et pays visités', 'cabin', 30],
+  ['city', 'maville', ' Lyon', 'ville du viewer, saluée au survol', 'cabin', 30],
+  ['trip', 'voyage', '', 'correspondances enchaînées', 'cabin', 30],
+  ['pax', 'passagers', '', 'liste des passagers à bord', 'cabin', 20],
+  ['answer', 'rep', ' Paris', 'réponse au quiz du hublot', 'cabin', 0],
+  ['arrival', 'arrivee', ' 21:47', "pronostic de l'heure d'arrivée", 'cabin', 0],
+  ['seatbelt', 'ceinture', '', 'boucler sa ceinture pendant les turbulences', 'cabin', 0],
+  ['dutyfree', 'dutyfree', '', 'catalogue du duty free et solde de miles', 'cabin', 30],
+  ['buy', 'acheter', ' canard', 'acheter (ou remettre) un article du duty free', 'cabin', 5],
+  ['vatsim', 'vatsim', ' 1234567', 'apparaître sur la carte du Briefing quand le viewer vole sur VATSIM', 'cabin', 10],
+  ['ivao', 'ivao', ' 123456', 'apparaître sur la carte du Briefing quand le viewer vole sur IVAO', 'cabin', 10],
+  ['help', 'cabine', '', 'aide des commandes À bord', 'cabin', 60]
 ];
+const twCleanName = v => String(v || '').replace(/^!+/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 25);
 let twState = null;
 function twCfg(){
   const d = { enabled: false, channel: '', botName: 'FlightBot', prefixMessages: true, clientId: '', cooldownSec: 15, replyOnOverlay: false,
-    commands: { eta: true, route: true, metar: true, avion: true, alt: true, landing: true, pari: true, top: true, fb: true },
+    commands: Object.fromEntries(TW_COMMANDS.map(x => [x[0], true])), cmdNames: {}, cmdCooldowns: {},
+    alerts: { metar: false, taxiSpeed: false, taxiSpeedKt: 30 },
     bets: { autoOpen: true, autoLock: true, lockAglFt: 1000, announceInChat: true, prediction: false } };
   const c = db.twitch || {};
-  db.twitch = { ...d, ...c, commands: { ...d.commands, ...(c.commands || {}) }, bets: { ...d.bets, ...(c.bets || {}) } };
+  db.twitch = { ...d, ...c, commands: { ...d.commands, ...(c.commands || {}) }, cmdNames: { ...(c.cmdNames || {}) }, cmdCooldowns: { ...(c.cmdCooldowns || {}) },
+    alerts: { ...d.alerts, ...(c.alerts || {}) }, bets: { ...d.bets, ...(c.bets || {}) } };
   if(!db.twitch.channel && db.userProfile && db.userProfile.twitchHandle) db.twitch.channel = db.userProfile.twitchHandle.replace(/^@/, '').toLowerCase();
   return db.twitch;
 }
@@ -1765,8 +1859,33 @@ function bindTwitch(){
   $('twBetLockAgl').value = c.bets.lockAglFt; $('twBetLockAglVal').textContent = c.bets.lockAglFt + ' ft'; updateRangeFill($('twBetLockAgl'));
   $('twBetAnnounce').checked = c.bets.announceInChat;
   $('twBetPrediction').checked = !!c.bets.prediction;
-  $('twCommands').innerHTML = TW_COMMANDS.map(([k, cmd, d]) => `<div class="switch-row tw-cmd"><span><code>${esc(cmd)}</code><small>${esc(d)}</small></span><label class="switch"><input type="checkbox" data-cmd="${k}" ${c.commands[k] ? 'checked' : ''}><span class="slider"></span></label></div>`).join('');
+  $('twAlertMetar').checked = !!c.alerts.metar;
+  $('twAlertTaxi').checked = !!c.alerts.taxiSpeed;
+  $('twAlertTaxiKt').value = c.alerts.taxiSpeedKt; $('twAlertTaxiKtVal').textContent = c.alerts.taxiSpeedKt + ' kt'; updateRangeFill($('twAlertTaxiKt'));
+  const cmdRow = ([k, name, arg, d, , cd]) => {
+    const cur = c.cmdNames[k] || name, cdv = c.cmdCooldowns[k];
+    return `<div class="switch-row tw-cmd"><span><code data-cmd-label="${k}" data-arg="${esc(arg)}">!${esc(cur)}${esc(arg)}</code><small>${esc(d)}</small></span>
+      <span class="tw-cmd-edit"><input type="text" data-cmd-name="${k}" value="${esc(c.cmdNames[k] || '')}" placeholder="!${esc(name)}" maxlength="26" title="Nouveau nom de la commande (vide = !${esc(name)})" data-no-i18n>
+      <input type="number" data-cmd-cd="${k}" value="${cdv != null ? cdv : ''}" placeholder="${cd != null ? cd : c.cooldownSec} s" min="0" max="3600" step="5" title="Délai anti-spam en secondes (vide = par défaut)"></span>
+      <label class="switch"><input type="checkbox" data-cmd="${k}" ${c.commands[k] !== false ? 'checked' : ''}><span class="slider"></span></label></div>`;
+  };
+  $('twCommands').innerHTML = '<div class="tw-cmd-group">Vol et paris</div>' + TW_COMMANDS.filter(x => x[4] === 'bot').map(cmdRow).join('')
+    + '<div class="tw-cmd-group">À bord (miles, passeport…)</div>' + TW_COMMANDS.filter(x => x[4] === 'cabin').map(cmdRow).join('');
   $('twCommands').querySelectorAll('input[data-cmd]').forEach(i => i.addEventListener('change', () => { twCfg().commands[i.dataset.cmd] = i.checked; pushTwitchCfg(); }));
+  $('twCommands').querySelectorAll('input[data-cmd-name]').forEach(i => i.addEventListener('change', () => {
+    const k = i.dataset.cmdName, v = twCleanName(i.value), def = TW_COMMANDS.find(x => x[0] === k)[1];
+    if (v && v !== def) twCfg().cmdNames[k] = v; else delete twCfg().cmdNames[k];
+    i.value = twCfg().cmdNames[k] || '';
+    const lab = $('twCommands').querySelector(`[data-cmd-label="${k}"]`);
+    if (lab) lab.textContent = '!' + (twCfg().cmdNames[k] || def) + lab.dataset.arg;
+    pushTwitchCfg();
+  }));
+  $('twCommands').querySelectorAll('input[data-cmd-cd]').forEach(i => i.addEventListener('change', () => {
+    const k = i.dataset.cmdCd, v = i.value.trim();
+    if (v === '' || !isFinite(v)) delete twCfg().cmdCooldowns[k]; else twCfg().cmdCooldowns[k] = Math.max(0, Math.min(3600, Math.round(+v)));
+    i.value = twCfg().cmdCooldowns[k] != null ? twCfg().cmdCooldowns[k] : '';
+    pushTwitchCfg();
+  }));
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
   on('twEnabled', 'change', e => { twCfg().enabled = e.target.checked; pushTwitchCfg(); });
   on('twChannel', 'change', e => { twCfg().channel = e.target.value.trim().replace(/^.*twitch\.tv\//i, '').replace(/^[#@]/, '').toLowerCase(); e.target.value = twCfg().channel; pushTwitchCfg(); });
@@ -1779,11 +1898,17 @@ function bindTwitch(){
   on('twBetLockAgl', 'input', e => { twCfg().bets.lockAglFt = +e.target.value; $('twBetLockAglVal').textContent = e.target.value + ' ft'; updateRangeFill(e.target); pushTwitchCfg(); });
   on('twBetAnnounce', 'change', e => { twCfg().bets.announceInChat = e.target.checked; pushTwitchCfg(); });
   on('twBetPrediction', 'change', e => { twCfg().bets.prediction = e.target.checked; pushTwitchCfg(); });
+  on('twAlertMetar', 'change', e => { twCfg().alerts.metar = e.target.checked; pushTwitchCfg(); });
+  on('twAlertTaxi', 'change', e => { twCfg().alerts.taxiSpeed = e.target.checked; pushTwitchCfg(); });
+  on('twAlertTaxiKt', 'input', e => { twCfg().alerts.taxiSpeedKt = +e.target.value; $('twAlertTaxiKtVal').textContent = e.target.value + ' kt'; updateRangeFill(e.target); pushTwitchCfg(); });
 }
 function renderTwitch(){
   const s = twState;
   if(!s || !$('twStatusText')) return;
   const st = s.status || {}, c = twCfg();
+  const cf = s.cmdConflicts || {}, cfEl = $('twCmdConflicts');
+  const cfList = Object.entries(cf).map(([n, keys]) => `!${n} (${keys.map(k => '!' + (TW_COMMANDS.find(x => x[0] === k) || [k, k])[1]).join(', ')})`).join(' · ');
+  if(cfEl) cfEl.textContent = cfList ? `Même nom pour plusieurs commandes : ${cfList} — une seule y répondra.` : '';
   const pr = s.prediction || {}, prEl = $('twPredStatus');
   if(prEl){
     const PR = { active: 'Prédiction en cours sur Twitch', locked: 'Prédiction verrouillée — en attente du toucher', resolved: 'Prédiction terminée ✓', canceled: 'Prédiction annulée (points remboursés)' };

@@ -568,6 +568,25 @@ FBv17.deckInstall = async () => {
   m.className = 'status-msg ' + (r.ok ? 'ok' : 'err');
   m.textContent = r.ok ? "Plugin prêt ✓ — le Stream Deck propose de l'installer. Sinon, double-clique sur le fichier dans le dossier qui s'est ouvert." : (r.error || 'Installation impossible.');
 };
+/* ---- v1.9 — appli EFB de MSFS 2024 ---- */
+FBv17.efbStatus = async () => {
+  const m = $('efbPkgStatus'); if(!m || !window.efbPkg) return;
+  const s = await window.efbPkg.status();
+  m.className = 'status-msg';
+  m.textContent = !s.found ? "Dossier Community de MSFS 2024 introuvable : le bouton préparera le paquet dans Téléchargements, à glisser toi-même dans Community."
+    : s.installed ? (s.installed === s.current ? `Installée (v${s.installed}) dans ${s.community}` : `Installée (v${s.installed}) : réinstalle pour passer à la v${s.current}.`)
+    : `Pas encore installée. Dossier Community trouvé : ${s.community}`;
+};
+FBv17.efbInstall = async () => {
+  const m = $('efbPkgStatus');
+  m.className = 'status-msg'; m.textContent = 'Installation…';
+  const r = await window.efbPkg.install();
+  if(!r.ok){ m.className = 'status-msg err'; m.textContent = r.error || 'Installation impossible.'; return; }
+  m.className = 'status-msg ok';
+  m.textContent = r.installed ? "Appli EFB installée ✓ Relance MSFS 2024 : « FlightBrief » apparaît dans les applis de la tablette."
+    : r.reason === 'store' ? "Paquet prêt dans le dossier FlightBrief de tes Téléchargements ✓ La version Microsoft Store de FlightBrief ne peut pas écrire dans le dossier du simulateur : glisse le dossier llcenlive-efb-flightbrief dans ton dossier Community."
+    : "Paquet prêt dans le dossier FlightBrief de tes Téléchargements ✓ Glisse le dossier llcenlive-efb-flightbrief dans le dossier Community de MSFS 2024, puis relance le simulateur.";
+};
 FBv17.deckNewToken = async () => {
   if(!confirm("Créer un nouveau code ? Le plugin déjà installé ne pourra plus piloter FlightBrief : il faudra le réinstaller.")) return;
   await window.deck.newToken();
@@ -582,6 +601,7 @@ FBv17.init = async () => {
   $('chartLinks').addEventListener('click', e => { const a = e.target.closest('a[data-url]'); if(a) window.api.openExternal(a.dataset.url); });
   flyDefaults();
   document.querySelector('.tabs [data-view="tools"]').addEventListener('click', flyDefaults);
+  document.querySelector('.tabs [data-view="profil"]').addEventListener('click', () => FBv17.efbStatus().catch(() => {})); // v1.9
   document.querySelector('.tabs [data-view="profil"]').addEventListener('click', renderProfileExtras);
   renderProfileExtras();
   if(window.tracker){

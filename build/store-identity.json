@@ -1,0 +1,6 @@
+{
+  "_comment": "Identité du produit dans le Microsoft Store. Recopie ces 3 valeurs depuis Partner Center : ton appli → Product management → Product identity. Tant qu'elles valent A_REMPLIR, « npm run dist:store » refuse de construire.",
+  "identityName": "A_REMPLIR (Package/Identity/Name, ex : 12345LLCenLive.FlightBrief)",
+  "publisher": "A_REMPLIR (Package/Identity/Publisher, ex : CN=1A2B3C4D-…)",
+  "publisherDisplayName": "A_REMPLIR (Package/Properties/PublisherDisplayName, ex : LLCenLive)"
+}

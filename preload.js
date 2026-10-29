@@ -44,7 +44,8 @@ contextBridge.exposeInMainWorld('updater', {
 
 // v1.5 — contrôleurs en ligne (VATSIM + IVAO)
 contextBridge.exposeInMainWorld('atc', {
-  get: (opts) => ipcRenderer.invoke('atc:get', opts || {})
+  get: (opts) => ipcRenderer.invoke('atc:get', opts || {}),
+  friends: (opts) => ipcRenderer.invoke('atc:friends', opts || {})
 });
 
 // v1.5 — overlay d'alertes (OBS) et bot Twitch
@@ -87,6 +88,14 @@ contextBridge.exposeInMainWorld('cabin', {
   setConfig: (c) => ipcRenderer.invoke('cabin:setConfig', c),
   setPlan: (p) => ipcRenderer.send('cabin:setPlan', p),
   boarding: (action) => ipcRenderer.invoke('cabin:boarding', action),
+  turbulence: () => ipcRenderer.invoke('cabin:turbulence'),
+  shop: () => ipcRenderer.invoke('cabin:shop'),
+  // v1.9 — publication GitHub Pages du carnet public (le jeton ne revient jamais vers l'interface)
+  publishInfo: () => ipcRenderer.invoke('publish:info'),
+  publishSetToken: (t) => ipcRenderer.invoke('publish:setToken', t),
+  publishClearToken: () => ipcRenderer.invoke('publish:clearToken'),
+  publishCheck: (o) => ipcRenderer.invoke('publish:check', o),
+  publishRun: (o) => ipcRenderer.invoke('publish:run', o),
   ranking: () => ipcRenderer.invoke('cabin:ranking'),
   viewer: (user) => ipcRenderer.invoke('cabin:viewer', user),
   removeViewer: (user) => ipcRenderer.invoke('cabin:removeViewer', user),
@@ -160,6 +169,12 @@ contextBridge.exposeInMainWorld('tts', {
   warm: () => ipcRenderer.send('tts:warm')
 });
 
+// v1.9 — appli FlightBrief dans l'EFB de MSFS 2024 (paquet du dossier Community)
+contextBridge.exposeInMainWorld('efbPkg', {
+  status: () => ipcRenderer.invoke('efb:status'),
+  install: () => ipcRenderer.invoke('efb:install')
+});
+
 contextBridge.exposeInMainWorld('deck', {
   onAction: (cb) => ipcRenderer.on('deck:action', (_, a) => cb(a)),
   pushUi: (s) => ipcRenderer.send('deck:ui', s),
@@ -168,5 +183,11 @@ contextBridge.exposeInMainWorld('deck', {
 });
 
 // v1.7 — « Où voler aujourd'hui ? »
+// v1.9 — « Signaler un bug » : prépare le rapport, ouvre l'issue GitHub pré-remplie (le pilote l'envoie lui-même).
+contextBridge.exposeInMainWorld('bugReport', {
+  prepare: (o) => ipcRenderer.invoke('bug:prepare', o || {}),
+  open: (r) => ipcRenderer.invoke('bug:open', r),
+  text: (r) => ipcRenderer.invoke('bug:text', r)
+});
 contextBridge.exposeInMainWorld('fly', { suggest: (o) => ipcRenderer.invoke('fly:suggest', o), countries: (icaos) => ipcRenderer.invoke('geo:countries', icaos) });
 

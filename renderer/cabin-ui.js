@@ -20,8 +20,11 @@ let st = null, ranking = [], obsUrl = '';
 const DEF = {
   enabled: true, window: { enabled: true, everyMin: 20 }, flyover: { enabled: true, radiusKm: 20, warnMin: 5 }, routeAnnounce: true, countries: true,
   quiz: { enabled: true, everyMin: 25, answerSec: 75 }, arrivalGuess: true, chatGapMin: 6,
+  turbulence: { enabled: false, auto: true, random: false, everyMin: 45, answerSec: 60, penalty: 50, sensitivity: 'medium' },
+  dutyFree: { enabled: true, priceMult: 1 },
   title: { autoPropose: true, template: '✈️ {indicatif} · {depart} → {arrivee} · {avion} | !embarquer pour monter à bord', category: 'Microsoft Flight Simulator 2024' },
-  publicUrl: '', publicDir: '', publicPilot: '', publicRoutes: true, publicPax: true
+  publicUrl: '', publicDir: '', publicPilot: '', publicRoutes: true, publicPax: true,
+  publish: { repo: '', branch: 'main', mode: 'off' } // v1.9 — GitHub Pages (le jeton est gardé, chiffré, par le processus principal)
 };
 function cfg(){
   // Complète en place (les champs du formulaire gardent une référence vers ces objets).
@@ -48,6 +51,16 @@ function bindSettings(){
   rng('cbQuizEvery', ' min', () => c.quiz.everyMin, v => c.quiz.everyMin = v);
   sw('cbArrival', () => c.arrivalGuess, v => c.arrivalGuess = v);
   rng('cbChatGap', ' min', () => c.chatGapMin, v => c.chatGapMin = v);
+  sw('cbTurb', () => c.turbulence.enabled, v => c.turbulence.enabled = v);
+  sw('cbTurbAuto', () => c.turbulence.auto, v => c.turbulence.auto = v);
+  sw('cbTurbRandom', () => c.turbulence.random, v => c.turbulence.random = v);
+  rng('cbTurbEvery', ' min', () => c.turbulence.everyMin, v => c.turbulence.everyMin = v);
+  rng('cbTurbSec', ' s', () => c.turbulence.answerSec, v => c.turbulence.answerSec = v);
+  rng('cbTurbPenalty', ' miles', () => c.turbulence.penalty, v => c.turbulence.penalty = v);
+  const sens = $('cbTurbSens'); sens.value = c.turbulence.sensitivity; sens.addEventListener('change', () => { c.turbulence.sensitivity = sens.value; push(); });
+  sw('cbDuty', () => c.dutyFree.enabled, v => c.dutyFree.enabled = v);
+  const dm = $('cbDutyMult'), dmv = $('cbDutyMultVal'); dm.value = c.dutyFree.priceMult; dmv.textContent = '×' + c.dutyFree.priceMult; updateRangeFill(dm);
+  dm.addEventListener('input', () => { c.dutyFree.priceMult = +dm.value; dmv.textContent = '×' + dm.value; updateRangeFill(dm); push(); setTimeout(renderShop, 400); });
   sw('cbTitleAuto', () => c.title.autoPropose, v => c.title.autoPropose = v);
   txt('cbTitleTpl', () => c.title.template, v => c.title.template = v);
   txt('cbTitleCat', () => c.title.category, v => c.title.category = v);
@@ -56,8 +69,31 @@ function bindSettings(){
   sw('cbPubRoutes', () => c.publicRoutes, v => c.publicRoutes = v);
   sw('cbPubPax', () => c.publicPax, v => c.publicPax = v);
   $('cbPubDir').value = c.publicDir || '';
+  txt('cbGhRepo', () => c.publish.repo, v => c.publish.repo = v.trim());
+  txt('cbGhBranch', () => c.publish.branch, v => c.publish.branch = v.trim() || 'main');
+  const gm = $('cbGhMode'); gm.value = c.publish.mode; gm.addEventListener('change', () => { c.publish.mode = gm.value; push(); });
+  renderGhToken();
   $('cbSearch').addEventListener('input', debounce(renderRanking, 120));
 }
+
+/* ---------- v1.9 — cosmétiques du duty free ---------- */
+// Pseudo avec badge et couleur achetés au duty free.
+const decoName = (name, lk) => {
+  lk = lk || {};
+  const style = lk.color && lk.color !== 'rainbow' ? ` style="color:${esc(lk.color)}"` : '';
+  return `${lk.badge ? esc(lk.badge) + ' ' : ''}<b class="${lk.color === 'rainbow' ? 'fb-rainbow' : ''}"${style}>${esc(name)}</b>${lk.title ? ` <small class="cb-title">${esc(lk.title)}</small>` : ''}`;
+};
+async function renderShop(){
+  const box = $('cbShop'); if(!box || !window.cabin || !window.cabin.shop) return;
+  const items = await window.cabin.shop(), cats = { badge: 'Badges', title: 'Titres', color: 'Couleurs' };
+  box.innerHTML = Object.entries(cats).map(([k, label]) => `<div class="cb-sub">${label}</div><div class="cb-chips">${items.filter(it => it.cat === k).map(it => `<span title="!acheter ${esc(it.code)}"${it.color && it.color !== 'rainbow' ? ` style="color:${esc(it.color)}"` : ''}>${esc(it.icon)} <b>${esc(it.name)}</b> ${nf(it.price)}</span>`).join('')}</div>`).join('');
+}
+FBCabin.turbulence = async () => {
+  const r = await window.cabin.turbulence(), m = $('cbTurbMsg');
+  st = r.state; renderState();
+  m.className = 'status-msg ' + (r.ok ? 'ok' : 'err');
+  m.textContent = r.ok ? 'Signal ceinture allumé ✓' : !cfg().turbulence.enabled ? "Active d'abord l'alerte turbulences (réglages à gauche)." : "Impossible maintenant : il faut un vol en cours, pas d'alerte déjà en cours, et au moins un passager actif dans le chat.";
+};
 
 /* ---------- état en direct ---------- */
 function renderState(){
@@ -70,12 +106,13 @@ function renderState(){
   $('cbFlightState').className = 'bet-state' + (f && f.boarding ? ' open' : f ? ' locked' : '');
   $('cbFlight').innerHTML = f ? `<div class="cb-route"><b>${esc(f.dep || '????')} → ${esc(f.arr || '????')}</b>${f.callsign ? ' · ' + esc(f.callsign) : ''}${f.country ? ` · ${esc(f.country.flag)} ${esc(f.country.name)}` : ''}${f.distanceNm ? ` · ${nf(f.distanceNm)} NM` : ''}</div>`
     + (s.quiz ? `<div class="cb-live">🧭 Quiz en cours : ${esc(s.quiz.text)} <small>(${s.quiz.count} réponse${s.quiz.count > 1 ? 's' : ''})</small></div>` : '')
+    + (s.turbulence ? `<div class="cb-live">⚠️ Turbulences : ${s.turbulence.safe}/${s.turbulence.atRisk} ceintures bouclées</div>` : '')
     + (f.arrival && f.arrival.state !== 'closed' ? `<div class="cb-live">⏱️ Heure d'arrivée : ${f.arrival.count} pronostic${f.arrival.count > 1 ? 's' : ''}${f.arrival.state === 'locked' ? ' (fermé)' : ''}</div>` : '')
     : '<div class="hint">Lance le tracker (ou « Ouvrir l\'embarquement ») pour démarrer un vol avec le chat.</div>';
   const pax = (s.passengers || []).slice().sort((a, b) => b.miles - a.miles);
   $('cbPax').innerHTML = pax.length ? `<div class="cb-pax-head"><span>${pax.length} passager${pax.length > 1 ? 's' : ''} à bord</span><span>miles ce vol</span></div>` + pax.map(p => `
     <div class="cb-pax-row${p.present ? '' : ' away'}" title="${p.present ? 'Actif dans le chat' : 'Inactif depuis plus de 20 min : ne gagne plus de miles'}">
-      <span class="tier-ic">${esc(p.tierIcon)}</span><b>${esc(p.name)}</b>${p.first ? '<span class="cb-tag">1er vol</span>' : ''}${p.leg > 1 ? `<span class="cb-tag leg">correspondance ×${p.leg}</span>` : ''}<span class="cb-mi">${nf(p.miles)}</span>
+      <span class="tier-ic">${esc(p.tierIcon)}</span>${decoName(p.name, p.look)}${p.first ? '<span class="cb-tag">1er vol</span>' : ''}${p.leg > 1 ? `<span class="cb-tag leg">correspondance ×${p.leg}</span>` : ''}<span class="cb-mi">${nf(p.miles)}</span>
     </div>`).join('') : (f ? '<div class="hint">Personne à bord pour l\'instant.</div>' : '');
   const pl = s.planned || [];
   $('cbPlanned').innerHTML = pl.length ? `<div class="cb-sub">🏠 Survols prévus sur la route</div><div class="cb-chips">${pl.map(x => `<span>${esc(x.flag)} <b>${esc(x.name)}</b> ${esc(x.city)}</span>`).join('')}</div>`
@@ -86,7 +123,7 @@ async function renderRanking(){
   const q = ($('cbSearch').value || '').trim().toLowerCase();
   const list = ranking.filter(r => !q || r.name.toLowerCase().includes(q)).slice(0, 60);
   box.innerHTML = list.length ? list.map((r, i) => `<button class="cb-rank-row" onclick="FBCabin.openViewer('${esc(r.user).replace(/'/g, '&#39;')}')">
-      <span class="rk">${ranking.indexOf(r) + 1}</span><span class="nm">${esc(r.tier.icon)} ${esc(r.name)}${r.hidden ? ' <small title="Masqué du site public">🙈</small>' : ''}${r.hasCity ? ' <small title="A donné sa ville">📍</small>' : ''}</span>
+      <span class="rk">${ranking.indexOf(r) + 1}</span><span class="nm">${esc(r.tier.icon)} ${decoName(r.name, r.look)}${r.hidden ? ' <small title="Masqué du site public">🙈</small>' : ''}${r.hasCity ? ' <small title="A donné sa ville">📍</small>' : ''}</span>
       <span class="mi">${nf(r.miles)}</span><span class="fl">${r.flights} vol${r.flights > 1 ? 's' : ''} · ${r.stamps} 🛂</span></button>`).join('')
     : `<div class="hint">${ranking.length ? 'Aucun résultat.' : 'Les passagers apparaîtront ici après leur premier !embarquer.'}</div>`;
 }
@@ -103,9 +140,11 @@ FBCabin.openViewer = async user => {
   if(!v) return;
   const stamps = Object.entries(v.stamps || {}).sort((a, b) => String(a[1].first).localeCompare(String(b[1].first)));
   $('cbViewerBody').innerHTML = `
-    <div class="modal-head"><h3>${esc(v.tier.icon)} ${esc(v.name)}</h3><button class="btn small" onclick="FBCabin.closeViewer()">Fermer</button></div>
+    <div class="modal-head"><h3>${esc(v.tier.icon)} ${decoName(v.name, v.look)}</h3><button class="btn small" onclick="FBCabin.closeViewer()">Fermer</button></div>
     <div class="cb-v-kpis"><div><b>${esc(v.tier.name)}</b><span>statut</span></div><div><b>${nf(v.miles)}</b><span>miles</span></div><div><b>${v.flights || 0}</b><span>vols</span></div><div><b>${v.bestTrip || 0}</b><span>record d'affilée</span></div></div>
     ${v.next ? `<div class="hint">Encore ${nf(v.next.min - v.miles)} miles pour ${esc(v.next.icon)} ${esc(v.next.name)}.</div>` : ''}
+    <div class="cb-sub">Duty free · solde ${nf(v.balance)} miles${v.spent ? ` (${nf(v.spent)} dépensés)` : ''}</div>
+    <div class="cb-chips">${(v.ownedItems || []).map(it => `<span>${esc(it.icon)} ${esc(it.name)}${it.equipped ? ' ✓' : ''}</span>`).join('') || '<span class="hint">Aucun achat.</span>'}</div>
     <div class="cb-sub">Tampons (${stamps.length}) ${v.countriesNamed.map(c => esc(c.flag)).join(' ')}</div>
     <div class="cb-stamps">${stamps.map(([icao, s]) => `<span title="${esc(s.name || '')}"><b>${esc(icao)}</b>${esc(s.city || '')}${s.count > 1 ? ` ×${s.count}` : ''}</span>`).join('') || '<span class="hint">Aucun pour l\'instant.</span>'}</div>
     <div class="cb-sub">Ville</div>
@@ -148,6 +187,56 @@ FBCabin.exportPublic = async () => {
   const r = await window.cabin.exportPublic({ dir: c.publicDir, options: { pilot: c.publicPilot, showRoutes: c.publicRoutes, showPassengers: c.publicPax } });
   m.className = 'status-msg ' + (r.ok ? 'ok' : 'err');
   m.textContent = r.ok ? `Site généré ✓ ${r.flights} vols, ${r.viewers} passagers, ${r.postcards} cartes postales. Ouvre index.html pour le vérifier, puis envoie le contenu du dossier sur GitHub.` : r.error;
+};
+
+/* ---------- v1.9 — publication GitHub Pages ---------- */
+async function renderGhToken(){
+  if(!window.cabin.publishInfo) return;
+  const i = await window.cabin.publishInfo(), s = $('cbGhTokenState');
+  s.innerHTML = i.hasToken ? `Jeton enregistré (${esc(i.tokenMasked)}) · <a href="#" onclick="FBCabin.ghClearToken(); return false;">supprimer</a>` : 'Aucun jeton enregistré.';
+}
+const ghMsg = (cls, ...parts) => { const m = $('cbGhMsg'); m.className = 'status-msg ' + cls; m.innerHTML = parts.filter(Boolean).map(p => `<span>${esc(p)}</span>`).join(' '); };
+FBCabin.ghSaveToken = async () => {
+  const inp = $('cbGhToken'), r = await window.cabin.publishSetToken(inp.value);
+  if(!r.ok) return ghMsg('err', r.error);
+  inp.value = ''; ghMsg('ok', 'Jeton enregistré et chiffré ✓'); renderGhToken();
+};
+FBCabin.ghClearToken = async () => { await window.cabin.publishClearToken(); renderGhToken(); ghMsg('', 'Jeton supprimé de ce PC. Pense à le révoquer aussi sur GitHub.'); };
+FBCabin.ghCheck = async () => {
+  ghMsg('', 'Vérification…');
+  const r = await window.cabin.publishCheck({ repo: cfg().publish.repo });
+  if(!r.ok) return ghMsg('err', r.error);
+  ghMsg('ok', `Accès en écriture à ${r.repo} ✓`, r.private ? 'Dépôt privé : GitHub Pages demande un dépôt public avec un compte gratuit.' : '');
+};
+let ghBusy = false;
+FBCabin.ghPublish = async (auto) => {
+  if(ghBusy) return;
+  const c = cfg();
+  ghBusy = true; ghMsg('', 'Publication sur GitHub…');
+  await saveDbNow();
+  const r = await window.cabin.publishRun({ repo: c.publish.repo, branch: c.publish.branch, dir: c.publicDir, options: { pilot: c.publicPilot, showRoutes: c.publicRoutes, showPassengers: c.publicPax } });
+  ghBusy = false;
+  if(!r.ok){
+    ghMsg('err', r.error);
+    if(auto && window.FBv15 && FBv15.fx) FBv15.fx(`<div class="lc-eyebrow">Carnet de vol public</div><div class="hint" style="margin:2px 0 0;">Publication impossible : ${esc(r.error)}</div>`, 'fx-warn', 9000);
+    return r;
+  }
+  if(r.url && !c.publicUrl){ c.publicUrl = r.url; $('cbPubUrl').value = r.url; push(); } // donnée par !passeport
+  const txt = r.changed ? `Carnet publié ✓ ${r.flights} vols, ${r.viewers} passagers, ${r.changed} fichiers mis à jour.` : 'Déjà à jour sur GitHub ✓';
+  ghMsg('ok', txt, r.url, r.pagesEnabled ? '' : 'Active GitHub Pages dans les réglages du dépôt (Settings → Pages → Branch : main / root).');
+  if(auto && r.changed && window.FBv15 && FBv15.fx) FBv15.fx(`<div class="lc-eyebrow">Carnet de vol public</div><div class="hint" style="margin:2px 0 0;">${esc(txt)}</div>`, 'fx-landing', 6000);
+  return r;
+};
+// Appelé après l'enregistrement d'un vol tracké dans le logbook. On attend la fin du toast « Annuler »
+// (v1.8, 10 s) pour ne pas publier un vol que le pilote retire aussitôt.
+FBCabin.afterFlightSaved = flightId => {
+  const c = cfg();
+  if(!streamFeaturesOn() || !c.publish.repo || c.publish.mode === 'off') return;
+  setTimeout(async () => {
+    if(flightId && !db.logbook.some(f => f.id === flightId)) return; // vol annulé entre-temps
+    if(c.publish.mode === 'auto') return FBCabin.ghPublish(true);
+    if(window.FBv15 && FBv15.fx) FBv15.fx(`<div class="lc-eyebrow">Carnet de vol public</div><div class="hint" style="margin:2px 0 8px;">Nouveau vol enregistré. Publier le carnet sur GitHub Pages ?</div><div class="btn-row"><button class="btn small primary" onclick="FBCabin.ghPublish(true); this.closest('.fx-card').querySelector('.fx-close').click();">Publier</button></div>`, 'fx-landing', 60000);
+  }, 15000);
 };
 
 /* ---------- compte de la chaîne + titre du stream ---------- */
@@ -374,7 +463,7 @@ async function init(){
   try{ const port = await window.alerts.getPort(); obsUrl = `http://localhost:${port}/cabin`; $('cbObsLink').value = obsUrl; }catch(e){ /* ignoré */ }
   // Prolonge la navigation d'onglets de v1.5 sans la modifier.
   if(window.FBv15){ const prev = FBv15.onViewChange; FBv15.onViewChange = name => { prev && prev(name); FBCabin.onViewChange(name); }; }
-  st = await window.cabin.getState(); renderState();
+  st = await window.cabin.getState(); renderState(); renderShop();
 }
 if(window.__fbAppReady) init(); else window.addEventListener('fb:ready', init, { once: true });
 FBCabin.init = init;

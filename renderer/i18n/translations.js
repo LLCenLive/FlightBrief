@@ -1700,7 +1700,7 @@ FlightBrief — Overlay Live	FlightBrief — Live overlay	FlightBrief — Overla
 Atterrissage · {0} · piste {1}	Landing · {0} · runway {1}	Aterrizaje · {0} · pista {1}
 Atterrissage · {0}	Landing · {0}	Aterrizaje · {0}
 Prédiction Twitch (points de chaîne)	Twitch prediction (channel points)	Predicción de Twitch (puntos de canal)
-Les viewers misent leurs points de chaîne sur une tranche de taux de toucher, dans l'interface de Twitch : ouverte et fermée avec les paris, résultat au toucher, remboursée si le vol est interrompu. Demande une chaîne Affiliée ou Partenaire et le compte de ta chaîne connecté (onglet À bord).	Viewers bet their channel points on a touchdown-rate range, in Twitch's own interface: opened and closed with the bets, resolved at touchdown, refunded if the flight is interrupted. Requires an Affiliate or Partner channel and your channel account connected (On board tab).	Los viewers apuestan sus puntos de canal a un rango de tasa de toma, en la interfaz de Twitch: se abre y se cierra con las apuestas, se resuelve en la toma y se reembolsa si el vuelo se interrumpe. Requiere un canal Afiliado o Partner y la cuenta de tu canal conectada (pestaña A bordo).
+Les viewers misent leurs points de chaîne sur une tranche de taux de toucher, dans l'interface de Twitch : ouverte et fermée avec les paris, résultat au toucher, remboursée si le vol est interrompu. Demande une chaîne Affiliée ou Partenaire et le compte de ta chaîne connecté (onglet À bord) : Twitch n'autorise que le compte de la chaîne à lancer une prédiction, pas un compte modérateur comme le bot.	Viewers bet their channel points on a touchdown-rate range, in Twitch's own interface: opened and closed with the bets, resolved at touchdown, refunded if the flight is interrupted. Requires an Affiliate or Partner channel and your channel account connected (On board tab): Twitch only lets the channel account start a prediction, not a moderator account like the bot.	Los viewers apuestan sus puntos de canal a un rango de tasa de toma, en la interfaz de Twitch: se abre y se cierra con las apuestas, se resuelve en la toma y se reembolsa si el vuelo se interrumpe. Requiere un canal Afiliado o Partner y la cuenta de tu canal conectada (pestaña A bordo): Twitch solo permite que la cuenta del canal lance una predicción, no una cuenta de moderador como el bot.
 Prédiction en cours sur Twitch	Prediction running on Twitch	Predicción en curso en Twitch
 Prédiction verrouillée — en attente du toucher	Prediction locked — waiting for touchdown	Predicción bloqueada — esperando la toma
 Prédiction terminée ✓	Prediction completed ✓	Predicción terminada ✓
@@ -2116,4 +2116,235 @@ Copilote sur ta sortie audio, bot plus discret	Copilot on your audio output, qui
 Copilote vocal : choix de la sortie audio (casque, enceintes, entrée VoiceMeeter…), sans changer la sortie par défaut de Windows.	Voice copilot: choose the audio output (headset, speakers, VoiceMeeter input…) without changing the Windows default output.	Copiloto de voz: elige la salida de audio (auriculares, altavoces, entrada de VoiceMeeter…) sin cambiar la salida predeterminada de Windows.
 Bot plus discret : pause réglable entre deux messages automatiques (À bord → Animations de croisière, 6 min par défaut), vue du hublot et quiz moins fréquents.	Quieter bot: adjustable gap between two automatic messages (On board → Cruise animations, 6 min by default), less frequent window views and quizzes.	Bot más discreto: pausa ajustable entre dos mensajes automáticos (A bordo → Animaciones de crucero, 6 min por defecto), vistas desde la ventanilla y quiz menos frecuentes.
 Moins de messages inutiles dans le chat : plus de vue du hublot sans ville, ni de réponse de quiz, de fermeture ou de résultat de paris quand personne n'a joué.	Fewer pointless chat messages: no more window views with no city, nor quiz answers, bet closing or bet results when nobody played.	Menos mensajes inútiles en el chat: se acabaron las vistas desde la ventanilla sin ciudad, las respuestas de quiz y el cierre o resultado de apuestas cuando nadie ha jugado.
+Délai anti-spam par défaut (commandes du vol)	Default anti-spam delay (flight commands)	Retardo antispam por defecto (comandos del vuelo)
+Délai anti-spam en secondes (vide = par défaut)	Anti-spam delay in seconds (empty = default)	Retardo antispam en segundos (vacío = por defecto)
+Nouveau nom de la commande (vide = !{0})	New command name (empty = !{0})	Nuevo nombre del comando (vacío = !{0})
+Renomme une commande (ex.	Rename a command (e.g.	Cambia el nombre de un comando (p. ej.
+déjà pris par un autre bot) ou change son délai anti-spam. Une commande renommée ne répond plus à son nom d'origine. Champs vides = réglages d'origine.	already used by another bot) or change its anti-spam delay. A renamed command no longer answers to its original name. Empty fields = original settings.	ya usado por otro bot) o cambia su retardo antispam. Un comando renombrado ya no responde a su nombre original. Campos vacíos = ajustes originales.
+Même nom pour plusieurs commandes : {0} — une seule y répondra.	Same name for several commands: {0} — only one will answer.	Mismo nombre para varios comandos: {0} — solo uno responderá.
+Vol et paris	Flight and bets	Vuelo y apuestas
+À bord (miles, passeport…)	On board (miles, passport…)	A bordo (millas, pasaporte…)
+miles, statut et classement du viewer	viewer's miles, status and ranking	millas, estatus y clasificación del viewer
+tampons et pays visités	stamps and countries visited	sellos y países visitados
+ville du viewer, saluée au survol	viewer's city, greeted when flying over	ciudad del viewer, saludada al sobrevolarla
+correspondances enchaînées	chained connections	conexiones encadenadas
+liste des passagers à bord	list of passengers on board	lista de pasajeros a bordo
+réponse au quiz du hublot	answer to the window quiz	respuesta al quiz de la ventanilla
+pronostic de l'heure d'arrivée	arrival time guess	pronóstico de la hora de llegada
+aide des commandes À bord	help for the On board commands	ayuda de los comandos A bordo
+Alertes dans le chat	Chat alerts	Alertas en el chat
+Nouveau METAR à destination	New METAR at destination	Nuevo METAR en destino
+Annoncé dans le chat seulement, pendant le vol	Announced in chat only, during the flight	Anunciado solo en el chat, durante el vuelo
+Excès de vitesse au roulage	Taxi speeding	Exceso de velocidad en rodaje
+Au-dessus de la limite pendant 10 s, au sol	Above the limit for 10 s, on the ground	Por encima del límite durante 10 s, en tierra
+Limite de vitesse au roulage	Taxi speed limit	Límite de velocidad en rodaje
+Commandes du vol : {0}	Flight commands: {0}	Comandos del vuelo: {0}
+Commandes du vol : {0} · À bord : {1}	Flight commands: {0} · On board: {1}	Comandos del vuelo: {0} · A bordo: {1}
+🌦️ Nouveau METAR à {0} : {1}	🌦️ New METAR at {0}: {1}	🌦️ Nuevo METAR en {0}: {1}
+🚨 Excès de vitesse au roulage : {0} kt (limite {1} kt) !	🚨 Taxi speeding: {0} kt (limit {1} kt)!	🚨 Exceso de velocidad en rodaje: {0} kt (límite {1} kt)!
+({0} dépensés)	({0} spent)	({0} gastadas)
+: tapez	: type	: escribid
+Tapez	Type	Escribid
+@{0} article inconnu au duty free. Catalogue : !dutyfree badges, titres ou couleurs.	@{0} unknown duty free item. Catalogue: !dutyfree badges, titles or colors.	@{0} artículo desconocido en el duty free. Catálogo: !dutyfree insignias, títulos o colores.
+@{0} c'est retiré (tu le gardes, !acheter pour le remettre).	@{0} removed (you keep it, !buy to wear it again).	@{0} retirado (lo conservas, !comprar para volver a ponértelo).
+@{0} précise ce que tu retires : !acheter retirer badge, titre ou couleur.	@{0} say what to remove: !buy remove badge, title or color.	@{0} indica qué quitas: !comprar quitar insignia, título o color.
+@{0} {1} {2} coûte {3} miles, ton solde est de {4}. Encore quelques vols !	@{0} {1} {2} costs {3} miles, your balance is {4}. A few more flights!	@{0} {1} {2} cuesta {3} millas, tu saldo es de {4}. ¡Unos vuelos más!
+@{0} {1} {2} remis (déjà acheté).	@{0} {1} {2} back on (already bought).	@{0} {1} {2} puesto de nuevo (ya comprado).
+Accélération verticale, en montée, croisière et descente	Vertical acceleration, in climb, cruise and descent	Aceleración vertical, en ascenso, crucero y descenso
+Active d'abord l'alerte turbulences (réglages à gauche).	Turn on the turbulence alert first (settings on the left).	Activa primero la alerta de turbulencias (ajustes a la izquierda).
+Allume le signal ceinture maintenant (alerte turbulences activée, passagers à bord)	Turn the seatbelt sign on now (turbulence alert on, passengers on board)	Enciende la señal de cinturón ahora (alerta de turbulencias activada, pasajeros a bordo)
+Attachez vos ceintures !	Fasten your seatbelts!	¡Abróchense los cinturones!
+Au plus une alerte automatique toutes les 10 min. Un viewer ne perd jamais les miles qu'il a déjà dépensés au duty free.	At most one automatic alert every 10 min. A viewer never loses miles already spent at the duty free.	Como mucho una alerta automática cada 10 min. Un viewer nunca pierde las millas ya gastadas en el duty free.
+Aucun achat.	No purchases.	Ninguna compra.
+Badges	Badges	Insignias
+Titres	Titles	Títulos
+Duty free	Duty free	Duty free
+En moyenne toutes les	On average every	De media cada
+Faible (fortes secousses seulement)	Low (strong bumps only)	Baja (solo sacudidas fuertes)
+Moyenne	Medium	Media
+Forte (la moindre secousse)	High (the slightest bump)	Alta (la mínima sacudida)
+Impossible maintenant : il faut un vol en cours, pas d'alerte déjà en cours, et au moins un passager actif dans le chat.	Not possible now: you need a flight in progress, no alert already running, and at least one active passenger in chat.	No es posible ahora: hace falta un vuelo en curso, ninguna alerta ya en marcha y al menos un pasajero activo en el chat.
+Les achats se paient sur le solde (miles gagnés − miles dépensés) : le statut et le classement ne baissent pas. Les cosmétiques apparaissent dans le chat, sur les overlays et sur le carnet de vol public.	Purchases are paid from the balance (miles earned − miles spent): status and ranking don't drop. Cosmetics show in chat, on the overlays and on the public logbook.	Las compras se pagan con el saldo (millas ganadas − millas gastadas): el estatus y la clasificación no bajan. Los cosméticos aparecen en el chat, en los overlays y en el diario de vuelo público.
+Les passagers actifs dans le chat bouclent leur ceinture à temps, sinon ils perdent des miles	Active passengers in chat buckle up in time, or they lose miles	Los pasajeros activos en el chat se abrochan a tiempo, o pierden millas
+Les viewers dépensent leurs miles en badges, titres et couleurs de pseudo	Viewers spend their miles on badges, titles and name colors	Los viewers gastan sus millas en insignias, títulos y colores de nombre
+Miles perdus sans ceinture	Miles lost without seatbelt	Millas perdidas sin cinturón
+Même sans secousses, pour animer le chat	Even without bumps, to liven up the chat	Incluso sin sacudidas, para animar el chat
+Prix	Prices	Precios
+Sans ceinture : {0}{1}	No seatbelt: {0}{1}	Sin cinturón: {0}{1}
+Secousses réelles du simulateur	Real bumps from the simulator	Sacudidas reales del simulador
+Sensibilité	Sensitivity	Sensibilidad
+Signal ceinture allumé ✓	Seatbelt sign on ✓	Señal de cinturón encendida ✓
+Signal ceinture éteint	Seatbelt sign off	Señal de cinturón apagada
+Temps pour boucler sa ceinture	Time to buckle up	Tiempo para abrocharse
+Tout le monde était attaché, bravo !	Everyone was buckled up, well done!	¡Todos llevaban el cinturón, bravo!
+Turbulences	Turbulence	Turbulencias
+Turbulences surprises en croisière	Surprise turbulence in cruise	Turbulencias sorpresa en crucero
+acheter (ou remettre) un article du duty free	buy (or wear again) a duty free item	comprar (o volver a ponerse) un artículo del duty free
+boucler sa ceinture pendant les turbulences	buckle up during turbulence	abrocharse durante las turbulencias
+catalogue du duty free et solde de miles	duty free catalogue and miles balance	catálogo del duty free y saldo de millas
+dans les {0} s	within {0} s	en {0} s
+pas encore de miles (!embarquer au prochain vol)	no miles yet (!board on the next flight)	aún sin millas (!embarcar en el próximo vuelo)
+ton solde : {0} miles	your balance: {0} miles	tu saldo: {0} millas
+⚠️ Turbulences ! Le signal ceinture s'allume : tapez !ceinture dans les {0} s !	⚠️ Turbulence! The seatbelt sign is on: type !seatbelt within {0} s!	⚠️ ¡Turbulencias! Se enciende la señal de cinturón: ¡escribid !cinturon en {0} s!
+⚠️ Turbulences ! Le signal ceinture s'allume : tapez !ceinture dans les {0} s, sinon {1} miles s'envolent !	⚠️ Turbulence! The seatbelt sign is on: type !seatbelt within {0} s, or {1} miles fly away!	⚠️ ¡Turbulencias! Se enciende la señal de cinturón: escribid !cinturon en {0} s, ¡o volarán {1} millas!
+⚠️ Turbulences : {0}/{1} ceintures bouclées	⚠️ Turbulence: {0}/{1} seatbelts fastened	⚠️ Turbulencias: {0}/{1} cinturones abrochados
+✅ Signal ceinture éteint. Ceintures bouclées : {0}. Tout le monde était attaché, bravo !	✅ Seatbelt sign off. Buckled up: {0}. Everyone was buckled up, well done!	✅ Señal de cinturón apagada. Con cinturón: {0}. ¡Todos llevaban el cinturón, bravo!
+✅ Signal ceinture éteint. Ceintures bouclées : {0}. 😵 Sans ceinture (−{1} miles) : {2}.	✅ Seatbelt sign off. Buckled up: {0}. 😵 No seatbelt (−{1} miles): {2}.	✅ Señal de cinturón apagada. Con cinturón: {0}. 😵 Sin cinturón (−{1} millas): {2}.
+✅ Signal ceinture éteint. 😵 Sans ceinture (−{0} miles) : {1}.	✅ Seatbelt sign off. 😵 No seatbelt (−{0} miles): {1}.	✅ Señal de cinturón apagada. 😵 Sin cinturón (−{0} millas): {1}.
+🛍️ Duty free · @{0} {1} · rayons : !dutyfree badges (dès {2}) · !dutyfree titres (dès {3}) · !dutyfree couleurs (dès {4}) · achat : !acheter + nom de l'article	🛍️ Duty free · @{0} {1} · aisles: !dutyfree badges (from {2}) · !dutyfree titles (from {3}) · !dutyfree colors (from {4}) · buy: !buy + item name	🛍️ Duty free · @{0} {1} · secciones: !dutyfree insignias (desde {2}) · !dutyfree títulos (desde {3}) · !dutyfree colores (desde {4}) · compra: !comprar + nombre del artículo
+🛍️ {0} : {1} · {2} · achat : !acheter + nom de l'article	🛍️ {0}: {1} · {2} · buy: !buy + item name	🛍️ {0}: {1} · {2} · compra: !comprar + nombre del artículo
+🛍️ {0} s'offre {1} {2} au duty free (−{3} miles, solde {4}) !	🛍️ {0} treats themself to {1} {2} at the duty free (−{3} miles, balance {4})!	🛍️ ¡{0} se regala {1} {2} en el duty free (−{3} millas, saldo {4})!
+{0} s'offre {1}	{0} treats themself to {1}	{0} se regala {1}
+Avion de tourisme	Light aircraft	Avioneta
+Hélico	Chopper	Helicóptero
+Café du cockpit	Cockpit coffee	Café de cabina
+Parachute	Parachute	Paracaídas
+Canard en plastique	Rubber duck	Patito de goma
+Globe-trotteur	Globetrotter	Trotamundos
+OVNI	UFO	OVNI
+Dragon	Dragon	Dragón
+Diamant	Diamond	Diamante
+Passager clandestin	Stowaway	Polizón
+Spotteur	Spotter	Spotter
+Personnel de cabine	Cabin crew	Tripulante de cabina
+Chef de cabine	Purser	Sobrecargo
+Contrôleur aérien	Air traffic controller	Controlador aéreo
+As du manche	Flying ace	As del pilotaje
+Bleu ciel	Sky blue	Azul cielo
+Vert radar	Radar green	Verde radar
+Orange balise	Beacon orange	Naranja baliza
+Rose aurore	Dawn pink	Rosa aurora
+Or	Gold	Oro
+Arc-en-ciel	Rainbow	Arcoíris
+!acheter canard	!buy duck	!comprar pato
+Après chaque vol	After each flight	Después de cada vuelo
+Aucun vol ne correspond à ces filtres.	No flight matches these filters.	Ningún vuelo coincide con estos filtros.
+Avec tracé	With track	Con trazado
+Branche	Branch	Rama
+Comment le mettre en ligne à la main (GitHub Pages)	How to put it online by hand (GitHub Pages)	Cómo publicarlo a mano (GitHub Pages)
+Créer le jeton GitHub (2 min)	Create the GitHub token (2 min)	Crear el token de GitHub (2 min)
+Crée le dépôt public du carnet sur GitHub (par exemple	Create the public logbook repository on GitHub (for example	Crea el repositorio público del diario en GitHub (por ejemplo
+). Il peut être vide.	). It can be empty.	). Puede estar vacío.
+Repository access :	Repository access:	Repository access:
+→ choisis	→ pick	→ elige
+uniquement	only	solo
+le dépôt du carnet.	the logbook repository.	el repositorio del diario.
+Permissions → Repository permissions :	Permissions → Repository permissions:	Permissions → Repository permissions:
+. Ajoute	. Add	. Añade
+si tu veux que FlightBrief active le site tout seul.	if you want FlightBrief to turn the site on by itself.	si quieres que FlightBrief active el sitio solo.
+Copie le jeton (il commence par	Copy the token (it starts with	Copia el token (empieza por
+) et colle-le ici. Il est chiffré sur ton PC et ne donne accès à aucun autre dépôt.	) and paste it here. It is encrypted on your PC and gives access to no other repository.	) y pégalo aquí. Se cifra en tu PC y no da acceso a ningún otro repositorio.
+→ « Generate new token ».	→ “Generate new token”.	→ «Generate new token».
+Dépôt GitHub	GitHub repository	Repositorio de GitHub
+Enregistre d'abord ton jeton GitHub.	Save your GitHub token first.	Guarda primero tu token de GitHub.
+FlightBrief : carnet de vol mis à jour ({0} vols{1})	FlightBrief: logbook updated ({0} flights{1})	FlightBrief: diario actualizado ({0} vuelos{1})
+Jeton GitHub (fine-grained, limité à ce dépôt)	GitHub token (fine-grained, limited to this repository)	Token de GitHub (fine-grained, limitado a este repositorio)
+Me demander avant de publier	Ask me before publishing	Preguntarme antes de publicar
+Ne rien publier	Don't publish	No publicar
+Ouvrir la page des jetons GitHub	Open the GitHub tokens page	Abrir la página de tokens de GitHub
+Publication automatique sur GitHub Pages	Automatic publishing to GitHub Pages	Publicación automática en GitHub Pages
+Publier automatiquement	Publish automatically	Publicar automáticamente
+Publier maintenant	Publish now	Publicar ahora
+Publier	Publish	Publicar
+Rechercher : indicatif, OACI, appareil, remarque…	Search: callsign, ICAO, aircraft, remark…	Buscar: indicativo, OACI, avión, observación…
+Réinitialiser	Reset	Restablecer
+Tous les PIREP	All PIREPs	Todos los PIREP
+Tous les appareils	All aircraft	Todos los aviones
+Toutes les années	All years	Todos los años
+Toutes les carrières	All careers	Todas las carreras
+VFR et IFR	VFR and IFR	VFR e IFR
+Vérifier l'accès	Check access	Comprobar el acceso
+{0} vol{1} sur {2} · {3}	{0} flight(s) of {2} · {3}	{0} vuelo(s) de {2} · {3}
+Publication sur GitHub…	Publishing to GitHub…	Publicando en GitHub…
+Accès en écriture à {0} ✓	Write access to {0} ✓	Acceso de escritura a {0} ✓
+Dépôt privé : GitHub Pages demande un dépôt public avec un compte gratuit.	Private repository: GitHub Pages needs a public repository on a free account.	Repositorio privado: GitHub Pages necesita un repositorio público con una cuenta gratuita.
+Carnet publié ✓ {0} vols, {1} passagers, {2} fichiers mis à jour.	Logbook published ✓ {0} flights, {1} passengers, {2} files updated.	Diario publicado ✓ {0} vuelos, {1} pasajeros, {2} archivos actualizados.
+Déjà à jour sur GitHub ✓	Already up to date on GitHub ✓	Ya actualizado en GitHub ✓
+Active GitHub Pages dans les réglages du dépôt (Settings → Pages → Branch : main / root).	Turn GitHub Pages on in the repository settings (Settings → Pages → Branch: main / root).	Activa GitHub Pages en los ajustes del repositorio (Settings → Pages → Branch: main / root).
+Jeton enregistré et chiffré ✓	Token saved and encrypted ✓	Token guardado y cifrado ✓
+Jeton supprimé de ce PC. Pense à le révoquer aussi sur GitHub.	Token removed from this PC. Remember to revoke it on GitHub too.	Token borrado de este PC. Recuerda revocarlo también en GitHub.
+Aucun jeton enregistré.	No token saved.	Ningún token guardado.
+Jeton enregistré ({0}) ·	Token saved ({0}) ·	Token guardado ({0}) ·
+supprimer	remove	borrar
+Nouveau vol enregistré. Publier le carnet sur GitHub Pages ?	New flight saved. Publish the logbook to GitHub Pages?	Nuevo vuelo guardado. ¿Publicar el diario en GitHub Pages?
+Publication impossible : {0}	Publishing failed: {0}	No se pudo publicar: {0}
+Ce jeton est un jeton « classique » : il donne accès à tous tes dépôts. Crée plutôt un jeton « fine-grained » limité au seul dépôt du carnet.	This is a “classic” token: it gives access to all your repositories. Create a “fine-grained” token limited to the logbook repository instead.	Este es un token «clásico»: da acceso a todos tus repositorios. Crea mejor un token «fine-grained» limitado al repositorio del diario.
+Jeton non reconnu : un jeton « fine-grained » commence par github_pat_.	Token not recognised: a “fine-grained” token starts with github_pat_.	Token no reconocido: un token «fine-grained» empieza por github_pat_.
+Indique le dépôt sous la forme compte/dépôt (ex : LLCenLive/carnet).	Enter the repository as account/repository (e.g. LLCenLive/carnet).	Indica el repositorio como cuenta/repositorio (p. ej. LLCenLive/carnet).
+Jeton refusé par GitHub (expiré ou révoqué ?). Crée-en un nouveau.	Token rejected by GitHub (expired or revoked?). Create a new one.	Token rechazado por GitHub (¿caducado o revocado?). Crea uno nuevo.
+Le jeton n'a pas le droit d'écrire dans {0} : donne-lui « Contents : Read and write » sur ce dépôt.	The token may not write to {0}: give it “Contents: Read and write” on this repository.	El token no puede escribir en {0}: dale «Contents: Read and write» en este repositorio.
+Dépôt {0} introuvable avec ce jeton : vérifie le nom (compte/dépôt) et que le jeton a bien accès à ce dépôt.	Repository {0} not found with this token: check the name (account/repository) and that the token has access to it.	Repositorio {0} no encontrado con este token: comprueba el nombre (cuenta/repositorio) y que el token tenga acceso.
+Ton compte ne peut pas écrire dans {0}.	Your account cannot write to {0}.	Tu cuenta no puede escribir en {0}.
+Publication déjà en cours.	Publishing already in progress.	Publicación ya en curso.
+Le site n'a pas été généré (index.html manquant).	The site was not generated (index.html missing).	El sitio no se generó (falta index.html).
+({0} en ligne)	({0} online)	({0} en línea)
+@{0} donne ton {1} {2} pour apparaître sur la carte quand tu voles : !{3} {4}	@{0} give your {2} {1} to show up on the map when you fly: !{3} {4}	@{0} da tu {1} de {2} para aparecer en el mapa cuando vueles: !{3} {4}
+@{0} ton {1} {2} : {3} (!{4} retirer pour l'effacer)	@{0} your {2} {1}: {3} (!{4} remove to delete it)	@{0} tu {1} de {2}: {3} (!{4} quitar para borrarlo)
+@{0} ton {1} {2} est effacé : tu n'apparais plus sur la carte.	@{0} your {2} {1} is deleted: you no longer show up on the map.	@{0} tu {1} de {2} está borrado: ya no apareces en el mapa.
+@{0} un {1} {2} fait de 3 à 9 chiffres : !{3} {4}	@{0} a {2} {1} is 3 to 9 digits: !{3} {4}	@{0} un {1} de {2} tiene de 3 a 9 cifras: !{3} {4}
+Afficher les amis et les viewers qui volent en ligne	Show friends and viewers flying online	Mostrar amigos y viewers que vuelan en línea
+Afficher les viewers inscrits depuis le chat	Show viewers registered from chat	Mostrar los viewers inscritos desde el chat
+Aucun ami pour l'instant.	No friends yet.	Aún no hay amigos.
+CID VATSIM invalide : 3 à 9 chiffres (ex : 1234567).	Invalid VATSIM CID: 3 to 9 digits (e.g. 1234567).	CID de VATSIM no válido: de 3 a 9 cifras (p. ej. 1234567).
+VID IVAO invalide : 3 à 9 chiffres (ex : 123456).	Invalid IVAO VID: 3 to 9 digits (e.g. 123456).	VID de IVAO no válido: de 3 a 9 cifras (p. ej. 123456).
+Déjà dans ta liste.	Already in your list.	Ya está en tu lista.
+Nom (facultatif)	Name (optional)	Nombre (opcional)
+Tes amis apparaissent sur la carte quand ils volent sur VATSIM ou IVAO. Les viewers peuvent s'ajouter eux-mêmes depuis le chat avec	Your friends show up on the map when they fly on VATSIM or IVAO. Viewers can add themselves from chat with	Tus amigos aparecen en el mapa cuando vuelan en VATSIM o IVAO. Los viewers pueden añadirse ellos mismos desde el chat con
+Viewers en vol	Viewers in flight	Viewers en vuelo
+apparaître sur la carte du Briefing quand le viewer vole sur IVAO	show up on the Briefing map when the viewer flies on IVAO	aparecer en el mapa del Briefing cuando el viewer vuela en IVAO
+apparaître sur la carte du Briefing quand le viewer vole sur VATSIM	show up on the Briefing map when the viewer flies on VATSIM	aparecer en el mapa del Briefing cuando el viewer vuela en VATSIM
+hors ligne	offline	desconectado
+✈️ @{0} {1} {2} {3} enregistré : tu apparaîtras sur la carte du stream quand tu voles sur {4}.	✈️ @{0} {2} {1} {3} saved: you will show up on the stream map when you fly on {4}.	✈️ @{0} {1} de {2} {3} guardado: aparecerás en el mapa del stream cuando vueles en {4}.
+👥 Amis sur la carte	👥 Friends on the map	👥 Amigos en el mapa
+voir	show	ver
+Bug	Bug	Error
+Signaler un bug	Report a bug	Informar de un error
+🐞 Signaler un bug	🐞 Report a bug	🐞 Informar de un error
+Résumé	Summary	Resumen
+ex : le bot ne répond plus après un atterrissage	e.g. the bot stops answering after a landing	p. ej.: el bot deja de responder tras un aterrizaje
+Ce qui se passe	What happens	Qué pasa
+Pour le reproduire	To reproduce it	Para reproducirlo
+1. Lancer le tracker 2. …	1. Start the tracker 2. …	1. Iniciar el tracker 2. …
+Ce que tu attendais	What you expected	Qué esperabas
+Joindre les infos techniques	Attach technical info	Adjuntar la información técnica
+Versions, système, états (simulateur, bot…) : aucune donnée de vol ni de compte	Versions, system, states (simulator, bot…): no flight or account data	Versiones, sistema, estados (simulador, bot…): ningún dato de vuelo ni de cuenta
+Joindre les dernières erreurs	Attach the latest errors	Adjuntar los últimos errores
+Chemins du PC, nom de session, jetons et e-mails retirés	PC paths, session name, tokens and e-mails removed	Rutas del PC, nombre de sesión, tokens y e-mails eliminados
+Voir exactement ce qui sera joint	See exactly what will be attached	Ver exactamente qué se adjuntará
+Ouvrir le rapport sur GitHub	Open the report on GitHub	Abrir el informe en GitHub
+Copier le rapport	Copy the report	Copiar el informe
+GitHub s'ouvre avec le rapport déjà rempli : connecte-toi puis clique « Submit new issue ». Pas de compte GitHub ? « Copier le rapport » et colle-le où tu veux (Discord, e-mail…).	GitHub opens with the report already filled in: sign in, then click “Submit new issue”. No GitHub account? “Copy the report” and paste it wherever you like (Discord, e-mail…).	GitHub se abre con el informe ya rellenado: inicia sesión y pulsa «Submit new issue». ¿Sin cuenta de GitHub? «Copiar el informe» y pégalo donde quieras (Discord, e-mail…).
+Donne au moins un résumé et ce qui se passe.	Give at least a summary and what happens.	Indica al menos un resumen y qué pasa.
+Décris d'abord ce qui se passe.	Describe what happens first.	Describe primero qué pasa.
+Impossible d'ouvrir GitHub.	Could not open GitHub.	No se pudo abrir GitHub.
+GitHub est ouvert. Le rapport est trop long pour l'adresse : il est copié, colle-le dans l'issue (Ctrl+V).	GitHub is open. The report is too long for the address: it has been copied, paste it into the issue (Ctrl+V).	GitHub está abierto. El informe es demasiado largo para la dirección: se ha copiado, pégalo en la issue (Ctrl+V).
+GitHub est ouvert avec ton rapport : vérifie-le, puis « Submit new issue ». Merci !	GitHub is open with your report: check it, then “Submit new issue”. Thank you!	GitHub está abierto con tu informe: revísalo y pulsa «Submit new issue». ¡Gracias!
+Rapport copié ✓ Colle-le où tu veux (Discord, e-mail…).	Report copied ✓ Paste it wherever you like (Discord, e-mail…).	Informe copiado ✓ Pégalo donde quieras (Discord, e-mail…).
+🛫 EFB de MSFS 2024	🛫 MSFS 2024 EFB	🛫 EFB de MSFS 2024
+Installer l'appli EFB	Install the EFB app	Instalar la app EFB
+Installation…	Installing…	Instalando…
+Appli EFB installée ✓ Relance MSFS 2024 : « FlightBrief » apparaît dans les applis de la tablette.	EFB app installed ✓ Restart MSFS 2024: “FlightBrief” shows up in the tablet apps.	App EFB instalada ✓ Reinicia MSFS 2024: «FlightBrief» aparece en las apps de la tableta.
+Dossier Community de MSFS 2024 introuvable : le bouton préparera le paquet dans Téléchargements, à glisser toi-même dans Community.	MSFS 2024 Community folder not found: the button will prepare the package in Downloads, to drag into Community yourself.	Carpeta Community de MSFS 2024 no encontrada: el botón preparará el paquete en Descargas, para que lo arrastres tú a Community.
+Installée (v{0}) : réinstalle pour passer à la v{1}.	Installed (v{0}): reinstall to move to v{1}.	Instalada (v{0}): reinstala para pasar a la v{1}.
+Installée (v{0}) dans {1}	Installed (v{0}) in {1}	Instalada (v{0}) en {1}
+Pas encore installée. Dossier Community trouvé : {0}	Not installed yet. Community folder found: {0}	Aún no instalada. Carpeta Community encontrada: {0}
+Paquet prêt dans le dossier FlightBrief de tes Téléchargements ✓ Glisse le dossier llcenlive-efb-flightbrief dans le dossier Community de MSFS 2024, puis relance le simulateur.	Package ready in the FlightBrief folder of your Downloads ✓ Drag the llcenlive-efb-flightbrief folder into the MSFS 2024 Community folder, then restart the simulator.	Paquete listo en la carpeta FlightBrief de tus Descargas ✓ Arrastra la carpeta llcenlive-efb-flightbrief a la carpeta Community de MSFS 2024 y reinicia el simulador.
+Paquet prêt dans le dossier FlightBrief de tes Téléchargements ✓ La version Microsoft Store de FlightBrief ne peut pas écrire dans le dossier du simulateur : glisse le dossier llcenlive-efb-flightbrief dans ton dossier Community.	Package ready in the FlightBrief folder of your Downloads ✓ The Microsoft Store version of FlightBrief can't write to the simulator's folder: drag the llcenlive-efb-flightbrief folder into your Community folder.	Paquete listo en la carpeta FlightBrief de tus Descargas ✓ La versión Microsoft Store de FlightBrief no puede escribir en la carpeta del simulador: arrastra la carpeta llcenlive-efb-flightbrief a tu carpeta Community.
+Version Microsoft Store (v{0}) : les mises à jour arrivent par le Store.	Microsoft Store version (v{0}): updates come through the Store.	Versión Microsoft Store (v{0}): las actualizaciones llegan por la Store.
+Version Microsoft Store : les mises à jour arrivent par le Store.	Microsoft Store version: updates come through the Store.	Versión Microsoft Store: las actualizaciones llegan por la Store.
+Ajoute FlightBrief à la tablette (EFB) de tous les avions de MSFS 2024, avec les mêmes rubriques que l'appli : Briefing (vol, météo, ATC, amis, OFP), Logbook, Carrière et Live (bot, paris, passagers, classement, chat). FlightBrief doit tourner sur ce PC pendant le vol. Relance le simulateur après l'installation.	Adds FlightBrief to the tablet (EFB) of every MSFS 2024 aircraft, with the same sections as the app: Briefing (flight, weather, ATC, friends, OFP), Logbook, Career and Live (bot, bets, passengers, ranking, chat). FlightBrief must be running on this PC during the flight. Restart the simulator after installing.	Añade FlightBrief a la tableta (EFB) de todos los aviones de MSFS 2024, con las mismas secciones que la app: Briefing (vuelo, meteo, ATC, amigos, OFP), Logbook, Carrera y Live (bot, apuestas, pasajeros, clasificación, chat). FlightBrief debe estar abierto en este PC durante el vuelo. Reinicia el simulador tras la instalación.
+Commandes du chat à ta main, duty free, EFB dans MSFS 2024	Your own chat commands, duty free, EFB in MSFS 2024	Tus propios comandos del chat, duty free, EFB en MSFS 2024
+Appli FlightBrief dans la tablette (EFB) de MSFS 2024 : Briefing, Logbook, Carrière et Live (bot, paris, passagers, classement, chat). Installation en un clic depuis le Profil.	FlightBrief app on the MSFS 2024 tablet (EFB): Briefing, Logbook, Career and Live (bot, bets, passengers, ranking, chat). One-click install from the Profile.	App FlightBrief en la tableta (EFB) de MSFS 2024: Briefing, Logbook, Carrera y Live (bot, apuestas, pasajeros, clasificación, chat). Instalación con un clic desde el Perfil.
+Commandes du chat personnalisables (onglet Twitch) : renomme chaque commande et règle son délai anti-spam. Une commande renommée ne répond plus à son ancien nom.	Customisable chat commands (Twitch tab): rename each command and set its anti-spam delay. A renamed command no longer answers to its old name.	Comandos del chat personalizables (pestaña Twitch): cambia el nombre de cada comando y ajusta su retardo antispam. Un comando renombrado ya no responde a su nombre anterior.
+Turbulences : le chat doit taper !ceinture à temps, sinon il perd des miles. Secousses réelles du simulateur, turbulences surprises ou bouton.	Turbulence: chat must type !seatbelt in time or lose miles. Real simulator bumps, surprise turbulence or a button.	Turbulencias: el chat debe escribir !cinturon a tiempo o pierde millas. Sacudidas reales del simulador, turbulencias sorpresa o un botón.
+Duty free : les viewers dépensent leurs miles en badges, titres et couleurs de pseudo (!dutyfree, !acheter), visibles dans le chat, sur les overlays et le carnet public.	Duty free: viewers spend their miles on badges, titles and name colors (!dutyfree, !buy), shown in chat, on the overlays and the public logbook.	Duty free: los viewers gastan sus millas en insignias, títulos y colores de nombre (!dutyfree, !comprar), visibles en el chat, en los overlays y en el diario público.
+Alertes dans le chat (au choix) : nouveau METAR à destination et excès de vitesse au roulage.	Chat alerts (optional): new METAR at destination and taxi speeding.	Alertas en el chat (opcionales): nuevo METAR en destino y exceso de velocidad en rodaje.
+Amis sur la carte du Briefing grâce à leur CID VATSIM / VID IVAO, et les viewers s'y ajoutent eux-mêmes avec !vatsim ou !ivao.	Friends on the Briefing map from their VATSIM CID / IVAO VID, and viewers add themselves with !vatsim or !ivao.	Amigos en el mapa del Briefing gracias a su CID de VATSIM / VID de IVAO, y los viewers se añaden ellos mismos con !vatsim o !ivao.
+Carnet de vol public publié automatiquement sur GitHub Pages (jeton limité au dépôt), après chaque vol ou en le demandant.	Public logbook published automatically to GitHub Pages (token limited to the repository), after each flight or on request.	Diario de vuelo público publicado automáticamente en GitHub Pages (token limitado al repositorio), tras cada vuelo o bajo petición.
+Recherche et filtres dans le logbook : texte libre, année, réseau, appareil, règles, PIREP, carrière, vols tracés.	Logbook search and filters: free text, year, network, aircraft, rules, PIREP, career, tracked flights.	Búsqueda y filtros en el logbook: texto libre, año, red, avión, reglas, PIREP, carrera, vuelos con trazado.
+Bouton « Signaler un bug » : rapport prérempli sur GitHub ou à copier, infos techniques nettoyées de toute donnée personnelle.	“Report a bug” button: report prefilled on GitHub or to copy, technical info cleaned of any personal data.	Botón «Informar de un error»: informe prerrellenado en GitHub o para copiar, información técnica sin datos personales.
+Carte du Briefing plus fluide au zoom quand les ATC sont affichés.	Smoother Briefing map zoom when ATC is shown.	Mapa del Briefing más fluido al hacer zoom con el ATC visible.
+Version Microsoft Store en préparation (paquet MSIX) : les mises à jour y passeront par le Store.	Microsoft Store version in preparation (MSIX package): updates there will come through the Store.	Versión Microsoft Store en preparación (paquete MSIX): allí las actualizaciones llegarán por la Store.
+L'onglet À bord se charge à nouveau correctement : réglages appliqués au bot, vol en cours, classement et cartes postales.	The On board tab loads correctly again: settings applied to the bot, current flight, ranking and postcards.	La pestaña A bordo vuelve a cargarse bien: ajustes aplicados al bot, vuelo en curso, clasificación y postales.
+Les overlays affichent les bons noms de commandes, dans la langue de l'appli.	Overlays show the right command names, in the app language.	Los overlays muestran los nombres de comandos correctos, en el idioma de la app.
 `);

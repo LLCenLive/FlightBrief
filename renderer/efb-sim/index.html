@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<!-- FlightBrief dans l'EFB de MSFS 2024 (v2.0) : servie par FlightBrief sur http://127.0.0.1:4814/efb,
+     affichée par l'appli EFB du dossier efb/. Le navigateur du simulateur (Coherent GT) est ancien :
+     JavaScript ES5 et CSS simple (pas de variables CSS, de grid, de gap ni de calc). -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlightBrief</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/efb/efb.css">
+<script>window.FB_EFB = { token: '{{FB_TOKEN}}', lang: '{{FB_LANG}}' };</script>
+</head>
+<body>
+<div id="top">
+  <div class="brand"><img src="/efb/icon.png" alt=""><b>FlightBrief</b></div>
+  <div class="tabs">
+    <a href="#" data-tab="briefing" class="on" data-t="Briefing">Briefing</a>
+    <a href="#" data-tab="logbook" data-t="Logbook">Logbook</a>
+    <a href="#" data-tab="career" data-t="Carrière">Carrière</a>
+    <a href="#" data-tab="live" data-t="Live">Live</a>
+  </div>
+  <div id="conn" class="conn"></div>
+</div>
+<div id="page-briefing" class="page on"></div>
+<div id="page-logbook" class="page"></div>
+<div id="page-career" class="page"></div>
+<div id="page-live" class="page"></div>
+<div id="sheet" class="sheet hidden"><div class="sheet-box"><div class="sheet-head"><b id="sheetTitle"></b><a href="#" class="btn small" data-action="sheet-close" data-t="Fermer">Fermer</a></div><div id="sheetBody" class="sheet-body"></div></div></div>
+<div id="toast" class="toast hidden"></div>
+<script src="/efb/efb.js"></script>
+</body>
+</html>

@@ -12,6 +12,9 @@
        ap: {icao, lat, lon} | null,   // stations d'aéroport (DEL/GND/TWR/APP/DEP/ATIS)
        poly: [[[lat, lon], …], …] | null,  // contours des centres (CTR/FSS)
        pos: [lat, lon] | null }
+   v1.9 — Amis sur la carte : les mêmes fichiers donnent la position des pilotes. Ils sont indexés
+   par CID (VATSIM) / VID (IVAO) côté processus principal, et seuls les pilotes demandés (amis,
+   viewers inscrits avec !vatsim / !ivao) partent vers l'interface : jamais toute la liste.
    ========================================================= */
 const fs = require('fs');
 const path = require('path');
@@ -192,7 +195,7 @@ async function fetchVatsim(fetchFn, cacheDir, lookupAirport, force) {
       (raw.controllers || []).filter(c => c.facility > 0 && c.frequency && c.frequency !== '199.998').forEach(c => push(c, false));
       (raw.atis || []).forEach(c => push(c, true));
       const data = { ok: true, network: 'vatsim', updatedAt: (raw.general && raw.general.update_timestamp) || new Date().toISOString(), stations, pilots: Array.isArray(raw.pilots) ? raw.pilots.length : null, sectors: !!vatspy };
-      vatsimCache = { at: Date.now(), data };
+      vatsimCache = { at: Date.now(), data, pilots: indexVatsimPilots(raw.pilots) };
       return data;
     } catch (e) {
       if (vatsimCache) return { ...vatsimCache.data, stale: true, error: e.message || String(e) };
@@ -252,7 +255,7 @@ async function fetchIvao(fetchFn, lookupAirport, force) {
         return st;
       });
       const data = { ok: true, network: 'ivao', updatedAt: raw.updatedAt || new Date().toISOString(), stations, pilots: raw.clients && Array.isArray(raw.clients.pilots) ? raw.clients.pilots.length : null };
-      ivaoCache = { at: Date.now(), data };
+      ivaoCache = { at: Date.now(), data, pilots: indexIvaoPilots(raw.clients && raw.clients.pilots) };
       return data;
     } catch (e) {
       if (ivaoCache) return { ...ivaoCache.data, stale: true, error: e.message || String(e) };
@@ -260,6 +263,51 @@ async function fetchIvao(fetchFn, lookupAirport, force) {
     } finally { ivaoInflight = null; }
   })();
   return ivaoInflight;
+}
+
+/* ---------------- Pilotes (amis sur la carte) ---------------- */
+const num = v => { const n = +v; return Number.isFinite(n) ? n : null; };
+const up = s => String(s || '').trim().toUpperCase();
+function indexVatsimPilots(list) {
+  const m = new Map();
+  (Array.isArray(list) ? list : []).forEach(p => {
+    const lat = num(p.latitude), lon = num(p.longitude);
+    if (p.cid == null || lat == null || lon == null) return;
+    const fp = p.flight_plan || {};
+    m.set(String(p.cid), { network: 'vatsim', id: String(p.cid), callsign: up(p.callsign), lat, lon, altFt: num(p.altitude), gsKt: num(p.groundspeed), hdg: num(p.heading),
+      dep: up(fp.departure), arr: up(fp.arrival), aircraft: up(fp.aircraft_short || fp.aircraft || '').slice(0, 12) });
+  });
+  return m;
+}
+function indexIvaoPilots(list) {
+  const m = new Map();
+  (Array.isArray(list) ? list : []).forEach(p => {
+    const lat = num(pick(p, 'lastTrack.latitude', 'latitude')), lon = num(pick(p, 'lastTrack.longitude', 'longitude'));
+    const id = pick(p, 'userId', 'vid');
+    if (id == null || lat == null || lon == null) return;
+    m.set(String(id), { network: 'ivao', id: String(id), callsign: up(p.callsign), lat, lon, altFt: num(pick(p, 'lastTrack.altitude', 'altitude')), gsKt: num(pick(p, 'lastTrack.groundSpeed', 'groundSpeed')), hdg: num(pick(p, 'lastTrack.heading', 'heading')),
+      dep: up(pick(p, 'flightPlan.departureId')), arr: up(pick(p, 'flightPlan.arrivalId')), aircraft: up(pick(p, 'flightPlan.aircraftId', 'flightPlan.aircraft.icaoCode')).slice(0, 12) });
+  });
+  return m;
+}
+// wanted : [{ network: 'vatsim' | 'ivao', id: '1234567', label?, viewer? }] -> pilots en ligne parmi eux.
+async function findPilots(fetchFn, opts, wanted) {
+  wanted = (Array.isArray(wanted) ? wanted : []).filter(w => w && (w.network === 'vatsim' || w.network === 'ivao') && /^\d{3,9}$/.test(String(w.id || '')));
+  const nets = { vatsim: wanted.some(w => w.network === 'vatsim'), ivao: wanted.some(w => w.network === 'ivao') };
+  await Promise.all([
+    nets.vatsim ? fetchVatsim(fetchFn, opts.cacheDir, opts.lookupAirport, false) : null,
+    nets.ivao ? fetchIvao(fetchFn, opts.lookupAirport, false) : null
+  ]);
+  const idx = { vatsim: vatsimCache && vatsimCache.pilots, ivao: ivaoCache && ivaoCache.pilots };
+  const out = [], seen = new Set();
+  for (const w of wanted) {
+    const k = w.network + ':' + w.id;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const p = idx[w.network] && idx[w.network].get(String(w.id));
+    if (p) out.push({ ...p, label: String(w.label || '').slice(0, 40), viewer: !!w.viewer });
+  }
+  return { ok: true, pilots: out, checked: wanted.length };
 }
 
 async function fetchAtc(fetchFn, opts) {
@@ -271,4 +319,4 @@ async function fetchAtc(fetchFn, opts) {
   return { vatsim, ivao };
 }
 
-module.exports = { fetchAtc, parseVatspyDat, parseBoundaries, facilityOf, _test: { vatspyCenterPoly, setVatspy: v => { vatspy = v; geoCache.clear(); } } };
+module.exports = { fetchAtc, findPilots, indexVatsimPilots, indexIvaoPilots, parseVatspyDat, parseBoundaries, facilityOf, _test: { vatspyCenterPoly, setVatspy: v => { vatspy = v; geoCache.clear(); } } };

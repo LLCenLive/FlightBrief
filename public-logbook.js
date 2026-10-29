@@ -17,6 +17,12 @@ const path = require('path');
 const SAFE_FILE = /^[A-Za-z0-9_-]{1,64}\.jpg$/;
 const str = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, '').slice(0, n || 80);
 
+// Cosmétiques du duty free : seulement un emoji, un texte court et une couleur #rrggbb (ou « rainbow »).
+function safeLook(l) {
+  l = l || {};
+  const color = /^#[0-9a-f]{6}$/i.test(l.color || '') || l.color === 'rainbow' ? l.color : null;
+  return { badge: l.badge ? str(l.badge, 12) : null, title: l.title ? str(l.title, 30) : null, color };
+}
 function simplifyPath(p, max) {
   if (!Array.isArray(p) || p.length < 2) return null;
   const pts = p.filter(x => x && isFinite(x.lat) && isFinite(x.lon));
@@ -67,7 +73,8 @@ function exportPublicLogbook({ dir, rendererDir, db, cabin, postcardDir, options
     id: str(v.id, 40), name: str(v.name, 30), miles: Math.round(v.miles || 0), flights: v.flights || 0, tier: str(v.tier, 20), tierIcon: str(v.tierIcon, 4), bestTrip: v.bestTrip || 0,
     countries: (v.countries || []).map(c => ({ cc: str(c.cc, 2), name: str(c.name, 40), flag: str(c.flag, 8) })),
     stamps: (v.stamps || []).map(s => ({ icao: str(s.icao, 4), name: str(s.name, 60), city: str(s.city, 40), cc: str(s.cc, 2), count: s.count || 1, first: str(s.first, 25) })),
-    postcards: (v.postcards || []).map(n => copyCard(n)).filter(Boolean)
+    postcards: (v.postcards || []).map(n => copyCard(n)).filter(Boolean),
+    look: safeLook(v.look) // v1.9 — cosmétiques du duty free
   })).sort((a, b) => b.miles - a.miles) : [];
 
   // Aéroports utilisés (coordonnées pour la carte), depuis l'index local.

@@ -529,7 +529,7 @@ async function checkForAppUpdate(manual){
   const info = await window.api.checkUpdate();
   if(statusEl){
     if(!info || !info.ok){ statusEl.textContent = 'Vérification impossible (hors ligne ?).'; statusEl.classList.add('err'); return; }
-    statusEl.textContent = info.available ? `Nouvelle version disponible : v${info.latest}` : `Tu es à jour (v${info.current}) ✓`;
+    statusEl.textContent = info.store ? `Version Microsoft Store (v${info.current}) : les mises à jour arrivent par le Store.` : info.available ? `Nouvelle version disponible : v${info.latest}` : `Tu es à jour (v${info.current}) ✓`;
     statusEl.classList.add(info.available ? 'err' : 'ok');
   }
   if(!info || !info.ok || !info.available) return;
@@ -1173,9 +1173,61 @@ function setLogbookDistanceTracked(nm){
 
 const pirepLabels = { none:['Aucun','pending'], pending:['En attente','pending'], ok:['Validé','ok'], rejected:['Refusé','rejected'] };
 
+/* ---- v1.9 — recherche et filtres de l'historique (gardés le temps de la session) ---- */
+const LB_FILTER_DEF = { q: '', year: '', network: '', aircraft: '', rules: '', pirep: '', career: '', tracked: false };
+let lbFilter = { ...LB_FILTER_DEF };
+const lbNorm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function setLogbookFilter(k, v){ lbFilter[k] = v; renderLogbook(); }
+function resetLogbookFilters(){
+  lbFilter = { ...LB_FILTER_DEF };
+  el('lbfQuery').value = ''; el('lbfTracked').checked = false;
+  ['lbfYear','lbfNetwork','lbfAircraft','lbfRules','lbfPirep','lbfCareer'].forEach(id => el(id).value = '');
+  renderLogbook();
+}
+// Le vol correspond-il aux filtres ? Recherche : tous les mots, dans l'indicatif, les OACI, l'appareil,
+// le réseau, la carrière, les remarques et les noms des passagers du chat (sans tenir compte des accents).
+function logbookMatches(f, F){
+  F = F || lbFilter;
+  if(F.year && String(f.date || '').slice(0, 4) !== F.year) return false;
+  if(F.network && (f.network || '') !== F.network) return false;
+  if(F.aircraft && (f.aircraft || '') !== F.aircraft) return false;
+  if(F.rules && (f.rules || '') !== F.rules) return false;
+  if(F.pirep && (f.pirep || 'none') !== F.pirep) return false;
+  if(F.career && (f.careerId || '') !== F.career) return false;
+  if(F.tracked && !f.trackData) return false;
+  const words = lbNorm(F.q).split(/\s+/).filter(Boolean);
+  if(!words.length) return true;
+  const career = db.careers.find(c => c.id === f.careerId);
+  const hay = lbNorm([f.callsign, f.dep, f.arr, `${f.dep || ''}-${f.arr || ''}`, f.aircraft, f.network, f.remarks, f.date, career && career.name, ...((f.trackData && f.trackData.passengers) || [])].filter(Boolean).join(' '));
+  return words.every(w => hay.includes(w));
+}
+// Listes déroulantes remplies avec les valeurs présentes dans le logbook (la valeur choisie est gardée).
+function fillLogbookFilterOptions(){
+  const fillSel = (id, values, label) => {
+    const s = el(id); if(!s) return;
+    const cur = s.value, first = s.options[0] ? s.options[0].outerHTML : '';
+    s.innerHTML = first + values.map(([v, t]) => `<option value="${escapeHtml(v)}">${escapeHtml(t)}</option>`).join('');
+    s.value = values.some(([v]) => v === cur) ? cur : '';
+    if(s.value !== cur) lbFilter[label] = '';
+  };
+  const uniq = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+  fillSel('lbfYear', uniq(db.logbook.map(f => String(f.date || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y))).reverse().map(y => [y, y]), 'year');
+  fillSel('lbfNetwork', uniq(db.logbook.map(f => f.network)).map(v => [v, v]), 'network');
+  fillSel('lbfAircraft', uniq(db.logbook.map(f => f.aircraft)).map(v => [v, v]), 'aircraft');
+  fillSel('lbfCareer', db.careers.filter(c => db.logbook.some(f => f.careerId === c.id)).map(c => [c.id, c.name]), 'career');
+}
+
 function renderLogbook(){
   const rows = el('logbookRows');
-  const sorted = [...db.logbook].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  if(el('lbFilters')) fillLogbookFilterOptions();
+  const all = [...db.logbook].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const sorted = all.filter(f => logbookMatches(f));
+  const filtering = JSON.stringify(lbFilter) !== JSON.stringify(LB_FILTER_DEF);
+  if(el('lbfSummary')){
+    const min = sorted.reduce((s, f) => s + (f.durationMin || 0), 0);
+    el('lbfSummary').textContent = filtering ? `${sorted.length} vol${sorted.length > 1 ? 's' : ''} sur ${all.length} · ${minToHhmm(min)}` : '';
+    el('lbfReset').disabled = !filtering;
+  }
   rows.innerHTML = sorted.map(f => {
     const career = db.careers.find(c => c.id === f.careerId);
     const [pLabel, pClass] = pirepLabels[f.pirep] || pirepLabels.none;
@@ -1199,12 +1251,13 @@ function renderLogbook(){
       </div></td>
     </tr>`;
   }).join('');
-  el('logbookEmpty').style.display = sorted.length ? 'none' : 'block';
+  el('logbookEmpty').style.display = all.length ? 'none' : 'block';
+  if(el('logbookNoMatch')) el('logbookNoMatch').classList.toggle('hidden', !all.length || !!sorted.length);
 
   const totalMin = db.logbook.reduce((s,f) => s + f.durationMin, 0);
   el('statFlights').textContent = db.logbook.length;
   el('statHours').textContent = minToHhmm(totalMin);
-  el('statLast').textContent = sorted.length ? sorted[0].date : '—';
+  el('statLast').textContent = all.length ? all[0].date : '—';
 }
 
 function sendBriefingToLogbook(){
@@ -2484,9 +2537,12 @@ async function applyTrackedFlightToLogbook(switchToLogbook){
   populateLogbookFieldsFromTrackedFlight(data);
   if(window.FBv15) await FBv15.attachFlightShots(data);
   if(window.FBCabin) await FBCabin.attachToTrack(data);
+  const idsBefore = new Set(db.logbook.map(f => f.id));
   await saveLogbookEntry();
   dismissTrackedFlight();
   if(v18ctx) FBv18.afterPirep(v18ctx);
+  const saved = db.logbook.find(f => !idsBefore.has(f.id));
+  if(saved && window.FBCabin && FBCabin.afterFlightSaved) FBCabin.afterFlightSaved(saved.id); // v1.9 — publication GitHub Pages
   if(switchToLogbook !== false) switchView('logbook');
 }
 
@@ -4519,6 +4575,7 @@ async function endTour(){
   }
   initMobilePanel();
   window.__fbAppReady = true;
+  window.dispatchEvent(new Event('fb:ready')); // v1.9 — cabin-ui.js (onglet À bord) attend ce signal pour s'initialiser
   if(window.FBv15) await FBv15.init();
   if(window.FBv17) await FBv17.init().catch(e => console.warn('[v1.7]', e));
   if(window.FBv18) await FBv18.init().catch(e => console.warn('[v1.8]', e));

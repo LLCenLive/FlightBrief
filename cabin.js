@@ -11,10 +11,15 @@
      • Programme du vol : au décollage, la liste des viewers qu'on survolera ;
      • Quiz du hublot : ville sous nos ailes, pays, altitude, distance restante (!rep) ;
      • Heure d'arrivée : le chat devine l'heure du toucher (!arrivee 21:47).
+     • Turbulences (v1.9) : le signal ceinture s'allume, les passagers présents tapent
+       !ceinture à temps ou perdent des miles (secousses réelles, aléatoires ou bouton) ;
+     • Duty free (v1.9) : les miles se dépensent en badges, titres et couleurs (dutyfree.js).
    Tout est local : fichier cabin.json dans le dossier de l'appli.
    ========================================================= */
 const { EventEmitter } = require('events');
 const geo = require('./cabin-geo');
+const Commands = require('./commands');
+const DutyFree = require('./dutyfree');
 const { writeJsonSafe, readJsonSafe } = require('./backups');
 
 const TIERS = [
@@ -37,14 +42,22 @@ const DEFAULT_CFG = {
   quiz: { enabled: true, everyMin: 25, answerSec: 75 },
   chatGapMin: 6,   // v1.9 — pause minimale entre deux messages d'ambiance dans le chat (0 = pas de limite)
   arrivalGuess: true,
+  // v1.9 — turbulences : secousses réelles (accélération verticale), aléatoires en croisière ou bouton.
+  turbulence: { enabled: false, auto: true, random: false, everyMin: 45, answerSec: 60, penalty: 50, sensitivity: 'medium' },
+  dutyFree: { enabled: true, priceMult: 1 }, // v1.9
   title: { autoPropose: true, template: '✈️ {indicatif} · {depart} → {arrivee} · {avion} | !embarquer pour monter à bord', category: 'Microsoft Flight Simulator 2024' },
   publicUrl: '', publicDir: ''
 };
 function mergeCfg(c) {
   c = c || {};
   return { ...DEFAULT_CFG, ...c, window: { ...DEFAULT_CFG.window, ...(c.window || {}) }, flyover: { ...DEFAULT_CFG.flyover, ...(c.flyover || {}) },
-    quiz: { ...DEFAULT_CFG.quiz, ...(c.quiz || {}) }, title: { ...DEFAULT_CFG.title, ...(c.title || {}) } };
+    quiz: { ...DEFAULT_CFG.quiz, ...(c.quiz || {}) }, title: { ...DEFAULT_CFG.title, ...(c.title || {}) },
+    turbulence: { ...DEFAULT_CFG.turbulence, ...(c.turbulence || {}) }, dutyFree: { ...DEFAULT_CFG.dutyFree, ...(c.dutyFree || {}) } };
 }
+// Écart d'accélération verticale (G autour de 1) qui signale des turbulences, selon la sensibilité.
+const TURB_G = { low: 0.5, medium: 0.35, high: 0.25 };
+const TURB_GAP_MS = 10 * 60000; // au moins 10 min entre deux alertes automatiques
+const TURB_PHASES = ['initial_climb', 'climb', 'cruise', 'descent'];
 const tierOf = miles => TIERS.slice().reverse().find(t => miles >= t.min) || TIERS[0];
 const nextTier = miles => TIERS.find(t => t.min > miles) || null;
 const I18N = require('./renderer/i18n.js');
@@ -52,7 +65,8 @@ const fmtNum = n => Math.round(n || 0).toLocaleString(I18N.locale());
 const clean = s => String(s || '').replace(/[\u0000-\u001f<>]/g, '').slice(0, 40);
 
 class Cabin extends EventEmitter {
-  // ctx : { file, rendererDir, say(text), reply(text, user), alert(a), lookupAirport(icao), getBriefing(), getPhase(), now() }
+  // ctx : { file, rendererDir, say(text), reply(text, user), alert(a), lookupAirport(icao), getBriefing(), getPhase(), now(),
+  //         getCommandConfig?() -> config du bot Twitch (noms et délais des commandes, v1.9) }
   constructor(ctx) {
     super();
     this.ctx = ctx;
@@ -61,6 +75,7 @@ class Cabin extends EventEmitter {
     this.flight = null;        // session de vol en cours (voir _newFlight)
     this.plan = null;          // { dep, arr, pts:[[lat,lon]] } envoyé par l'interface (route prévue)
     this.quiz = null;
+    this.turb = null;          // alerte turbulences en cours (voir startTurbulence)
     this.welcomeQueue = [];
     this.welcomeTimer = null;
     this.cooldowns = new Map();
@@ -141,6 +156,7 @@ class Cabin extends EventEmitter {
     if (!this.flight) return;
     if (!this.flight.landedAt && this.flight.pax.size) this.ctx.say('Vol interrompu : les miles gagnés sont conservés, mais pas de tampon cette fois.');
     this._closeQuiz(false);
+    this.endTurbulence(true);
     this.flight = null; this.emit('state'); this._save(true);
   }
 
@@ -172,11 +188,11 @@ class Cabin extends EventEmitter {
     if (!list.length || !this.flight) return;
     const names = list.map(p => p.name);
     const conn = list.filter(p => p.leg > 1);
-    const shown = names.slice(0, 8).join(', ') + (names.length > 8 ? ` et ${names.length - 8} autres` : '');
+    const shown = list.slice(0, 8).map(p => DutyFree.deco(this.data.viewers[p.user], p.name)).join(', ') + (names.length > 8 ? ` et ${names.length - 8} autres` : '');
     let msg = `🎫 Bienvenue à bord ${shown} ! (${this.flight.pax.size} passager${this.flight.pax.size > 1 ? 's' : ''})`;
     if (conn.length) msg += ' · Correspondance validée pour ' + conn.slice(0, 4).map(p => `${p.name} (${p.leg}e vol d'affilée)`).join(', ');
     this.ctx.say(msg);
-    this.ctx.alert({ type: 'cabin-boarding', title: 'Embarquement', data: { names: names.slice(0, 12), more: Math.max(0, names.length - 12), total: this.flight.pax.size, connections: conn.map(p => ({ name: p.name, leg: p.leg })) } });
+    this.ctx.alert({ type: 'cabin-boarding', title: 'Embarquement', data: { looks: list.slice(0, 12).map(p => DutyFree.look(this.data.viewers[p.user])), names: names.slice(0, 12), more: Math.max(0, names.length - 12), total: this.flight.pax.size, connections: conn.map(p => ({ name: p.name, leg: p.leg })) } });
   }
   _replyOnce(m, kind, text) {
     const k = m.user + '|' + kind, now = Date.now();
@@ -190,24 +206,10 @@ class Cabin extends EventEmitter {
     if (!this.cfg.enabled) return;
     const f = this.flight;
     if (f && f.pax.has(m.user)) f.pax.get(m.user).lastSeen = Date.now();
-    const text = String(m.text || '').trim();
-    if (!text.startsWith('!')) return;
-    const [raw, ...args] = text.slice(1).split(/\s+/);
-    const cmd = geo.norm(raw).replace(/\s/g, '');
-    const rest = args.join(' ').trim();
-    const C = {
-      embarquer: 'board', board: 'board', monter: 'board', abord: 'board', boarding: 'board', embarcar: 'board', abordar: 'board',
-      miles: 'miles', statut: 'miles', status: 'miles', millas: 'miles', estatus: 'miles',
-      passeport: 'passport', passport: 'passport', pasaporte: 'passport',
-      maville: 'city', ville: 'city', mycity: 'city', city: 'city', miciudad: 'city', ciudad: 'city',
-      voyage: 'trip', correspondance: 'trip', trip: 'trip', viaje: 'trip',
-      passagers: 'pax', manifeste: 'pax', passengers: 'pax', pasajeros: 'pax',
-      rep: 'answer', reponse: 'answer', answer: 'answer', resp: 'answer', respuesta: 'answer',
-      arrivee: 'arrival', arrival: 'arrival', llegada: 'arrival',
-      cabine: 'help', abords: 'help', cabin: 'help', cabina: 'help'
-    }[cmd];
-    if (!C) return;
-    switch (C) {
+    const r = Commands.resolve(m.text, this._cmdCfg(), 'cabin');
+    if (!r) return;
+    const rest = r.rest;
+    switch (r.key) {
       case 'board': return this.board(m);
       case 'miles': return this._cmdMiles(m);
       case 'passport': return this._cmdPassport(m, rest);
@@ -216,10 +218,146 @@ class Cabin extends EventEmitter {
       case 'pax': return this._cmdPax(m);
       case 'answer': return this._cmdAnswer(m, rest);
       case 'arrival': return this._cmdArrival(m, rest);
-      case 'help': return this._replyOnce(m, 'help', 'À bord : !embarquer · !miles · !passeport · !maville <ta ville> · !voyage · !passagers · en croisière : !rep <réponse> et !arrivee <hh:mm>');
+      case 'seatbelt': return this._cmdSeatbelt(m);
+      case 'dutyfree': return this._cmdDutyFree(m, rest);
+      case 'buy': return this._cmdBuy(m, rest);
+      case 'vatsim': case 'ivao': return this._cmdNetId(m, rest, r.key);
+      case 'help': if (!this._cool(m, 'help', 60)) return; return this.ctx.reply('À bord : !embarquer · !miles · !passeport · !maville <ta ville> · !voyage · !passagers · en croisière : !rep <réponse> et !arrivee <hh:mm>' + (this.cfg.dutyFree.enabled ? ' · duty free : !dutyfree' : ''), m.displayName);
     }
   }
+
+  /* ---------- v1.9 — !vatsim <CID> / !ivao <VID> : le viewer apparaît sur la carte du Briefing ---------- */
+  _cmdNetId(m, rest, network) {
+    if (!this._cool(m, network, 10)) return;
+    const label = network === 'vatsim' ? 'VATSIM' : 'IVAO', idName = network === 'vatsim' ? 'CID' : 'VID';
+    const a = geo.norm(rest);
+    const v = this.viewer(m.user, m.displayName);
+    v.net = v.net || {};
+    if (['retirer', 'supprimer', 'effacer', 'oublier', 'remove', 'delete', 'forget', 'quitar', 'borrar', 'olvidar'].includes(a)) {
+      delete v.net[network]; this._save(); this.emit('state');
+      return this.ctx.reply(`@${m.displayName} ton ${idName} ${label} est effacé : tu n'apparais plus sur la carte.`, m.displayName);
+    }
+    const id = String(rest || '').replace(/\D/g, '');
+    if (!rest) return this.ctx.reply(v.net[network] ? `@${m.displayName} ton ${idName} ${label} : ${v.net[network]} (!${network} retirer pour l'effacer)` : `@${m.displayName} donne ton ${idName} ${label} pour apparaître sur la carte quand tu voles : !${network} ${network === 'vatsim' ? '1234567' : '123456'}`, m.displayName);
+    if (!/^\d{3,9}$/.test(id)) return this.ctx.reply(`@${m.displayName} un ${idName} ${label} fait de 3 à 9 chiffres : !${network} ${network === 'vatsim' ? '1234567' : '123456'}`, m.displayName);
+    v.net[network] = id; this._save(); this.emit('state');
+    this.ctx.reply(`✈️ @${m.displayName} ${idName} ${label} ${id} enregistré : tu apparaîtras sur la carte du stream quand tu voles sur ${label}.`, m.displayName);
+  }
+  // Viewers inscrits sur la carte : [{ network, id, label, viewer: true }]
+  netIds() {
+    const out = [];
+    for (const v of Object.values(this.data.viewers)) for (const n of ['vatsim', 'ivao']) if (v.net && v.net[n]) out.push({ network: n, id: v.net[n], label: v.name, viewer: true });
+    return out;
+  }
+
+  /* ---------- v1.9 — duty free ---------- */
+  _cmdDutyFree(m, rest) {
+    if (!this.cfg.dutyFree.enabled || !this._cool(m, 'dutyfree', 30)) return;
+    const v = this.data.viewers[m.user], mult = this.cfg.dutyFree.priceMult;
+    const cat = DutyFree.catOf(rest);
+    const solde = v ? `ton solde : ${fmtNum(DutyFree.balance(v))} miles` : 'pas encore de miles (!embarquer au prochain vol)';
+    if (!cat) {
+      const cheapest = k => Math.min(...DutyFree.ITEMS.filter(it => it.cat === k).map(it => DutyFree.priceOf(it, mult)));
+      return this.ctx.reply(`🛍️ Duty free · @${m.displayName} ${solde} · rayons : !dutyfree badges (dès ${fmtNum(cheapest('badge'))}) · !dutyfree titres (dès ${fmtNum(cheapest('title'))}) · !dutyfree couleurs (dès ${fmtNum(cheapest('color'))}) · achat : !acheter + nom de l'article`, m.displayName);
+    }
+    const owned = new Set((v && v.owned) || []);
+    const list = DutyFree.ITEMS.filter(it => it.cat === cat).map(it => `${it.icon} ${it.code} ${owned.has(it.code) ? '✓' : fmtNum(DutyFree.priceOf(it, mult))}`).join(' · ');
+    this.ctx.reply(`🛍️ ${DutyFree.CATS[cat].label} : ${list} · ${solde} · achat : !acheter + nom de l'article`, m.displayName);
+  }
+  _cmdBuy(m, rest) {
+    if (!this.cfg.dutyFree.enabled) return;
+    const [w1, w2] = String(rest || '').split(/\s+/);
+    if (!w1) return this._cmdDutyFree(m, '');
+    if (!this._cool(m, 'buy', 5)) return;
+    const v = this.data.viewers[m.user];
+    if (DutyFree.UNEQUIP.includes(DutyFree.norm(w1))) {
+      const cat = v && DutyFree.unequip(v, w2);
+      if (!cat) return this.ctx.reply(`@${m.displayName} précise ce que tu retires : !acheter retirer badge, titre ou couleur.`, m.displayName);
+      this._save(); this.emit('state');
+      return this.ctx.reply(`@${m.displayName} c'est retiré (tu le gardes, !acheter pour le remettre).`, m.displayName);
+    }
+    if (!v) return this.ctx.reply(`@${m.displayName} pas encore de miles : tape !embarquer au prochain vol pour commencer.`, m.displayName);
+    const r = DutyFree.buy(v, w1, this.cfg.dutyFree.priceMult);
+    if (!r.ok && r.error === 'unknown') return this.ctx.reply(`@${m.displayName} article inconnu au duty free. Catalogue : !dutyfree badges, titres ou couleurs.`, m.displayName);
+    if (!r.ok) return this.ctx.reply(`@${m.displayName} ${r.item.icon} ${r.item.name} coûte ${fmtNum(r.price)} miles, ton solde est de ${fmtNum(r.balance)}. Encore quelques vols !`, m.displayName);
+    this._save(); this.emit('state');
+    if (r.kind === 'equip') return this.ctx.reply(`@${m.displayName} ${r.item.icon} ${r.item.name} remis (déjà acheté).`, m.displayName);
+    this.ctx.reply(`🛍️ ${v.name} s'offre ${r.item.icon} ${r.item.name} au duty free (−${fmtNum(r.price)} miles, solde ${fmtNum(r.balance)}) !`, m.displayName);
+    this.ctx.alert({ type: 'cabin-dutyfree', title: 'Duty free', data: { name: v.name, item: r.item.name, icon: r.item.icon, cat: r.item.cat, look: DutyFree.look(v) } });
+  }
+
+  /* ---------- v1.9 — turbulences ---------- */
+  // reason : 'auto' (secousses mesurées), 'random' (animation en croisière) ou 'manual' (bouton).
+  startTurbulence(reason) {
+    const f = this.flight, c = this.cfg.turbulence;
+    if (!this.cfg.enabled || !c.enabled || !f || this.turb || f.landedAt) return false;
+    const atRisk = [...f.pax.values()].filter(p => this.isPresent(p)).map(p => p.user);
+    if (!atRisk.length) return false; // personne dans le chat : pas la peine d'allumer le signal
+    const sec = Math.max(15, Math.min(300, +c.answerSec || 60)), penalty = Math.max(0, Math.round(+c.penalty || 0));
+    f.lastTurb = Date.now();
+    this.turb = { reason, endsAt: Date.now() + sec * 1000, atRisk: new Set(atRisk), safe: new Map(), penalty };
+    this.turb.timer = setTimeout(() => this.endTurbulence(), sec * 1000);
+    this.ctx.say(penalty ? `⚠️ Turbulences ! Le signal ceinture s'allume : tapez !ceinture dans les ${sec} s, sinon ${fmtNum(penalty)} miles s'envolent !`
+      : `⚠️ Turbulences ! Le signal ceinture s'allume : tapez !ceinture dans les ${sec} s !`);
+    this.ctx.alert({ type: 'cabin-turbulence', title: 'Turbulences', data: { sec, penalty, count: atRisk.length } });
+    this.emit('state');
+    return true;
+  }
+  _cmdSeatbelt(m) {
+    const t = this.turb;
+    if (!t || Date.now() > t.endsAt || !t.atRisk.has(m.user) || t.safe.has(m.user)) return;
+    t.safe.set(m.user, m.displayName);
+    this.emit('state');
+  }
+  // cancel : vol interrompu, pas de pénalité.
+  endTurbulence(cancel) {
+    const t = this.turb;
+    if (!t) return null;
+    clearTimeout(t.timer);
+    this.turb = null;
+    if (cancel) { this.emit('state'); return null; }
+    const hit = [];
+    for (const user of t.atRisk) {
+      if (t.safe.has(user)) continue;
+      const v = this.data.viewers[user];
+      if (!v) continue;
+      const loss = Math.min(t.penalty, DutyFree.balance(v)); // jamais sous les miles déjà dépensés
+      if (loss > 0) this.addMiles(user, -loss, 'turbulence');
+      hit.push({ name: v.name, loss });
+    }
+    const safe = [...t.safe.values()];
+    // Une phrase complète par cas : le bot traduit ses messages en entier (EN / ES).
+    const names = l => l.slice(0, 10).join(', ') + (l.length > 10 ? '…' : '');
+    const safeList = names(safe), hitList = names(hit.map(h => h.name)), loss = fmtNum(t.penalty);
+    this.ctx.say(!hit.length ? `✅ Signal ceinture éteint. Ceintures bouclées : ${safeList}. Tout le monde était attaché, bravo !`
+      : safe.length ? `✅ Signal ceinture éteint. Ceintures bouclées : ${safeList}. 😵 Sans ceinture (−${loss} miles) : ${hitList}.`
+        : `✅ Signal ceinture éteint. 😵 Sans ceinture (−${loss} miles) : ${hitList}.`);
+    this.ctx.alert({ type: 'cabin-turbulence-result', title: 'Turbulences', data: { safe: safe.length, hit: hit.slice(0, 8).map(h => h.name), hitCount: hit.length, penalty: t.penalty } });
+    this._save();
+    this.emit('state');
+    return { safe, hit };
+  }
+  // Secousses réelles : sur les 20 dernières secondes, le facteur de charge est passé à la fois
+  // au-dessus de 1 + s et en dessous de 1 − s (un virage serré ne fait que monter au-dessus de 1).
+  _checkTurbulence(d, phase, now) {
+    const c = this.cfg.turbulence, f = this.flight;
+    if (!c.enabled || this.turb || now - (f.lastTurb || 0) < TURB_GAP_MS) return;
+    if (c.auto && Number.isFinite(d.gForce) && TURB_PHASES.includes(phase) && !(d.aglFt != null && d.aglFt < 1500)) {
+      const w = (f.gWin || (f.gWin = [])).filter(x => now - x.t < 20000);
+      w.push({ t: now, g: d.gForce });
+      f.gWin = w;
+      const s = TURB_G[c.sensitivity] || TURB_G.medium;
+      if (Math.max(...w.map(x => x.g)) >= 1 + s && Math.min(...w.map(x => x.g)) <= 1 - s) { f.gWin = []; if (this.startTurbulence('auto')) return; }
+    }
+    if (c.random && phase === 'cruise') {
+      const every = Math.max(10, +c.everyMin || 45) * 60000;
+      if (!f.nextRandomTurb) f.nextRandomTurb = now + every * (0.5 + Math.random());
+      if (now >= f.nextRandomTurb) { f.nextRandomTurb = now + every * (0.5 + Math.random()); this.startTurbulence('random'); }
+    }
+  }
+  _cmdCfg() { return this.ctx.getCommandConfig ? this.ctx.getCommandConfig() : null; }
   _cool(m, k, sec) {
+    sec = Commands.cooldownOf(k, this._cmdCfg(), sec); // délai réglé dans l'onglet Twitch (clés du catalogue)
     const key = m.user + '|' + k, now = Date.now();
     if (!m.isMod && this.cooldowns.get(key) && now - this.cooldowns.get(key) < sec * 1000) return false;
     this.cooldowns.set(key, now); return true;
@@ -230,7 +368,8 @@ class Cabin extends EventEmitter {
     if (!v) return this.ctx.reply(`@${m.displayName} pas encore de miles : tape !embarquer au prochain vol pour commencer.`, m.displayName);
     const t = tierOf(v.miles), n = nextTier(v.miles);
     const rank = this.ranking().findIndex(x => x.user === m.user) + 1;
-    this.ctx.reply(`${t.icon} ${v.name} · ${t.name} · ${fmtNum(v.miles)} miles · ${v.flights} vol${v.flights > 1 ? 's' : ''}${rank ? ` · ${rank === 1 ? '1er' : rank + 'e'} du classement` : ''}${n ? ` · encore ${fmtNum(n.min - v.miles)} pour ${n.name}` : ''}`, m.displayName);
+    const lk = DutyFree.look(v), who = DutyFree.deco(v, v.name) + (lk.title ? ` « ${lk.title} »` : ''); // badge et titre du duty free
+    this.ctx.reply(`${t.icon} ${who} · ${t.name} · ${fmtNum(v.miles)} miles · ${v.flights} vol${v.flights > 1 ? 's' : ''}${rank ? ` · ${rank === 1 ? '1er' : rank + 'e'} du classement` : ''}${n ? ` · encore ${fmtNum(n.min - v.miles)} pour ${n.name}` : ''}`, m.displayName);
   }
   _cmdPassport(m, rest) {
     const v = this.data.viewers[m.user];
@@ -273,7 +412,7 @@ class Cabin extends EventEmitter {
     const f = this.flight;
     if (!f || !f.pax.size) return this.ctx.reply('Aucun passager à bord pour l\'instant. !embarquer pour être le premier !', m.displayName);
     const list = [...f.pax.values()];
-    this.ctx.reply(`👥 ${list.length} passager${list.length > 1 ? 's' : ''} à bord : ${list.slice(0, 15).map(p => p.name).join(', ')}${list.length > 15 ? '…' : ''}`, m.displayName);
+    this.ctx.reply(`👥 ${list.length} passager${list.length > 1 ? 's' : ''} à bord : ${list.slice(0, 15).map(p => DutyFree.deco(this.data.viewers[p.user], p.name)).join(', ')}${list.length > 15 ? '…' : ''}`, m.displayName);
   }
 
   /* ---------- croisière : tick télémétrie (1 Hz) ---------- */
@@ -298,6 +437,7 @@ class Cabin extends EventEmitter {
     if (!f.airborne || d.onGround) return;
     if (!this._tickN) this._tickN = 0;
     this._tickN++;
+    this._checkTurbulence(d, phase, now);
     const cruising = phase === 'cruise' || (phase === 'climb' && (d.altFt || 0) > 15000);
 
     // Fermeture de l'embarquement / ouverture du jeu d'heure d'arrivée
@@ -511,6 +651,7 @@ class Cabin extends EventEmitter {
     f.landedAt = new Date().toISOString();
     f.boarding = false;
     this._closeQuiz(false);
+    this.endTurbulence(); // signal ceinture éteint au toucher : verdict tout de suite
     const arr = up((info && info.icao) || f.arr || (this.ctx.getBriefing() || {}).arr);
     f.arr = arr || f.arr;
     const ap = arr && this.ctx.lookupAirport(arr);
@@ -575,7 +716,7 @@ class Cabin extends EventEmitter {
 
   /* ---------- état pour l'interface et les overlays ---------- */
   ranking(n) {
-    return Object.entries(this.data.viewers).map(([user, v]) => ({ user, name: v.name, miles: v.miles || 0, flights: v.flights || 0, stamps: Object.keys(v.stamps || {}).length, countries: (v.countries || []).length, tier: tierOf(v.miles || 0), bestTrip: v.bestTrip || 0, hasCity: !!v.city, hidden: !!v.hidden }))
+    return Object.entries(this.data.viewers).map(([user, v]) => ({ user, name: v.name, miles: v.miles || 0, flights: v.flights || 0, stamps: Object.keys(v.stamps || {}).length, countries: (v.countries || []).length, tier: tierOf(v.miles || 0), bestTrip: v.bestTrip || 0, hasCity: !!v.city, hidden: !!v.hidden, balance: DutyFree.balance(v), look: DutyFree.look(v) }))
       .sort((a, b) => b.miles - a.miles).slice(0, n || 1e9);
   }
   publicState() {
@@ -584,7 +725,8 @@ class Cabin extends EventEmitter {
       enabled: this.cfg.enabled,
       flight: f ? { key: f.key, callsign: f.callsign, dep: f.dep, arr: f.arr, boarding: f.boarding, airborne: f.airborne, landed: !!f.landedAt, distanceNm: Math.round(f.distanceNm), country: f.country ? { cc: f.country, name: geo.countryName(f.country), flag: geo.flag(f.country) } : null,
         arrival: { state: f.arrival.state, count: f.arrival.guesses.size } } : null,
-      passengers: f ? [...f.pax.values()].map(p => { const v = this.data.viewers[p.user] || {}; const t = tierOf(v.miles || 0); return { user: p.user, name: p.name, miles: Math.round(p.miles), total: v.miles || 0, tier: t.name, tierIcon: t.icon, tierKey: t.k, leg: p.leg, present: this.isPresent(p), first: p.firstTime }; }) : [],
+      passengers: f ? [...f.pax.values()].map(p => { const v = this.data.viewers[p.user] || {}; const t = tierOf(v.miles || 0); return { user: p.user, name: p.name, miles: Math.round(p.miles), total: v.miles || 0, tier: t.name, tierIcon: t.icon, tierKey: t.k, leg: p.leg, present: this.isPresent(p), first: p.firstTime, look: DutyFree.look(v) }; }) : [],
+      turbulence: this.turb ? { endsAt: this.turb.endsAt, reason: this.turb.reason, atRisk: this.turb.atRisk.size, safe: this.turb.safe.size, penalty: this.turb.penalty } : null,
       nextFlyover: next,
       quiz: this.quiz ? { text: this.quiz.text, endsAt: this.quiz.endsAt, count: this.quiz.guesses.size } : null,
       planned: this.plannedFlyovers().slice(0, 12).map(x => ({ name: x.name, city: x.city, flag: geo.flag(x.cc) })),
@@ -605,7 +747,8 @@ class Cabin extends EventEmitter {
   viewerDetail(user) {
     const v = this.data.viewers[user];
     if (!v) return null;
-    return { user, ...v, tier: tierOf(v.miles || 0), next: nextTier(v.miles || 0), countriesNamed: (v.countries || []).map(cc => ({ cc, name: geo.countryName(cc), flag: geo.flag(cc) })) };
+    return { user, ...v, tier: tierOf(v.miles || 0), next: nextTier(v.miles || 0), balance: DutyFree.balance(v), look: DutyFree.look(v),
+      ownedItems: (v.owned || []).map(DutyFree.get).filter(Boolean).map(it => ({ code: it.code, cat: it.cat, name: it.name, icon: it.icon, equipped: (v.equipped || {})[it.cat] === it.code })), countriesNamed: (v.countries || []).map(cc => ({ cc, name: geo.countryName(cc), flag: geo.flag(cc) })) };
   }
   removeViewer(user) { delete this.data.viewers[user]; if (this.flight) this.flight.pax.delete(user); this._save(true); this.emit('state'); }
   forgetCity(user) { const v = this.data.viewers[user]; if (v) { v.city = null; this._save(true); this.emit('state'); } }
@@ -615,7 +758,7 @@ class Cabin extends EventEmitter {
       id: user, name: v.name, miles: v.miles || 0, flights: v.flights || 0, tier: tierOf(v.miles || 0).name, tierIcon: tierOf(v.miles || 0).icon, bestTrip: v.bestTrip || 0,
       countries: (v.countries || []).map(cc => ({ cc, name: geo.countryName(cc), flag: geo.flag(cc) })),
       stamps: Object.entries(v.stamps || {}).map(([icao, s]) => ({ icao, name: s.name, city: s.city, cc: s.cc, count: s.count, first: s.first })),
-      postcards: (v.postcards || []).slice(-60)
+      postcards: (v.postcards || []).slice(-60), look: DutyFree.look(v)
     }));
     return { viewers, flights: this.data.flights.map(f => ({ ...f, passengers: f.passengers.filter(p => !(this.data.viewers[p.user] || {}).hidden).map(p => ({ id: p.user, name: p.name, miles: p.miles })) })), tiers: TIERS };
   }

@@ -143,7 +143,7 @@
     v.forEach(function(p, i){
       tb.appendChild(h('tr', { class: 'row', onclick: function(){ location.hash = '#/p/' + safeHash(p.id); } }, [
         h('td', { class: 'rk' }, String(i + 1)),
-        h('td', { class: 'name' }, p.name),
+        h('td', { class: 'name' }, pname(p, true)),
         h('td', null, h('span', { class: 'tier t-' + p.tier }, [p.tierIcon + ' ', p.tier])),
         h('td', { class: 'num' }, nf(p.miles)),
         h('td', { class: 'num hide-m' }, String(p.flights)),
@@ -156,6 +156,13 @@
 
   // Couleur et forme des tampons : stables pour un même aéroport.
   var INKS = ['#b23a48', '#2d5fa8', '#2f7d4f', '#7a3fa0', '#a8621d', '#1d7a86'];
+  // v1.9 — pseudo avec badge, couleur et titre achetés au duty free.
+  function pname(p, withTitle){
+    var lk = p.look || {};
+    var kids = [h('span', { class: lk.color === 'rainbow' ? 'rainbow' : null, style: lk.color && lk.color !== 'rainbow' ? { color: lk.color } : null }, (lk.badge ? lk.badge + ' ' : '') + p.name)];
+    if(withTitle && lk.title) kids.push(h('small', { class: 'v-title' }, ' ' + lk.title));
+    return kids;
+  }
   function hash(s){ var x = 0; for(var i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return Math.abs(x); }
   function viewPassport(main, id){
     var p = (D.viewers || []).filter(function(x){ return x.id === id; })[0];
@@ -176,7 +183,7 @@
     main.appendChild(h('div', { class: 'passport' }, [
       h('div', { class: 'pp-cover' }, [
         h('div', { class: 'crest' }, p.tierIcon || '✈'),
-        h('div', null, [ h('div', { class: 'lbl' }, 'Passeport · ' + (D.pilot || '')), h('h2', null, p.name) ]),
+        h('div', null, [ h('div', { class: 'lbl' }, 'Passeport · ' + (D.pilot || '')), h('h2', null, pname(p, false)), (p.look && p.look.title) ? h('div', { class: 'lbl' }, p.look.title) : null ]),
         h('div', { class: 'kv' }, [
           h('div', null, [h('b', null, p.tier), h('span', null, 'Statut')]),
           h('div', null, [h('b', null, nf(p.miles)), h('span', null, 'Miles')]),

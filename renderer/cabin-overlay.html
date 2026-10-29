@@ -40,6 +40,7 @@
   .empty code, .foot code{font-family:var(--mono); color:var(--accent);}
   .foot{padding:10px 16px 12px; font-size:12.5px; color:var(--sub); display:flex; flex-direction:column; gap:4px;}
   .foot b{color:var(--text);}
+.fb-rainbow{background:linear-gradient(90deg,#ff6b6b,#ffd166,#39e88f,#5cc8ff,#a06cf5); -webkit-background-clip:text; background-clip:text; color:transparent;}
 </style>
 </head>
 <body>
@@ -63,7 +64,11 @@ if(Q.get('largeur')) document.documentElement.style.setProperty('--w', Math.max(
 function hexA(hex, a){ const h = String(hex || '#0a0d11').replace('#',''); const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h.padEnd(6, '0');
   return `rgba(${parseInt(n.slice(0,2),16)||0},${parseInt(n.slice(2,4),16)||0},${parseInt(n.slice(4,6),16)||0},${(Math.max(0, Math.min(100, a)) / 100).toFixed(2)})`; }
 let known = new Set(), sig = '';
+// v1.9 — commandes renommables (onglet Twitch) et cosmétiques du duty free.
+let CMDS = {};
+const cmd = (k, d) => esc(CMDS[k] || d);
 function apply(s){
+  if(s.cmds) CMDS = s.cmds;
   const st = s.style || {}, r = document.documentElement.style;
   if(st.bg) r.setProperty('--bg', hexA(st.bg, st.opacity != null ? st.opacity : 92));
   if(st.text) r.setProperty('--text', st.text);
@@ -79,22 +84,23 @@ function apply(s){
   $('count').textContent = `${s.passengers.length} passager${s.passengers.length > 1 ? 's' : ''}`;
   $('state').innerHTML = f.landed ? 'Arrivés à destination 🛬' : f.boarding ? `<span class="dot"></span>Embarquement ouvert${f.callsign ? ' · ' + esc(f.callsign) : ''}` : `En vol${f.country ? ' · ' + esc(f.country.flag) + ' ' + esc(f.country.name) : ''}`;
   const list = s.passengers.slice().sort((a, b) => b.miles - a.miles);
-  const nsig = JSON.stringify(list.map(p => [p.user, p.miles, p.present]));
+  const nsig = JSON.stringify(list.map(p => [p.user, p.miles, p.present, p.look]));
   if(nsig !== sig){
     sig = nsig;
-    const row = p => `<div class="pax${known.has(p.user) ? '' : ' new'}${p.present ? '' : ' away'}"><span class="ic">${esc(p.tierIcon)}</span><span class="n">${esc(p.name)}</span>${p.leg > 1 ? `<span class="leg">×${p.leg}</span>` : ''}<span class="m">${p.miles} mi</span></div>`;
+    const row = p => `<div class="pax${known.has(p.user) ? '' : ' new'}${p.present ? '' : ' away'}"><span class="ic">${esc(p.tierIcon)}</span><span class="n${p.look && p.look.color === 'rainbow' ? ' fb-rainbow' : ''}"${p.look && p.look.color && p.look.color !== 'rainbow' ? ` style="color:${esc(p.look.color)}"` : ''}>${p.look && p.look.badge ? esc(p.look.badge) + ' ' : ''}${esc(p.name)}</span>${p.leg > 1 ? `<span class="leg">×${p.leg}</span>` : ''}<span class="m">${p.miles} mi</span></div>`;
     const html = list.map(row).join('');
     const scroll = list.length > ROWS;
     $('listIn').classList.toggle('scroll', scroll);
     $('listIn').style.animationDuration = (list.length * 2.2) + 's';
-    $('listIn').innerHTML = list.length ? (scroll ? html + html : html) : '<div class="empty">Personne à bord : tape <code>!embarquer</code> !</div>';
+    $('listIn').innerHTML = list.length ? (scroll ? html + html : html) : `<div class="empty">Personne à bord : tape <code>${cmd('board', '!embarquer')}</code> !</div>`;
     list.forEach(p => known.add(p.user));
   }
   const foot = [];
-  if(s.quiz) foot.push(`🧭 <b>Quiz du hublot</b> en cours · réponds avec <code>!rep</code>`);
+  if(s.turbulence) foot.push(`⚠️ <b>Turbulences</b> : tapez <code>${cmd('seatbelt', '!ceinture')}</code> ! (${s.turbulence.safe}/${s.turbulence.atRisk})`);
+  if(s.quiz) foot.push(`🧭 <b>Quiz du hublot</b> en cours · réponds avec <code>${cmd('answer', '!rep')}</code>`);
   else if(s.nextFlyover) foot.push(`🏠 Prochain survol : <b>chez ${esc(s.nextFlyover.name)}</b> (${esc(s.nextFlyover.city)}) · ${s.nextFlyover.km} km`);
-  if(f.arrival && f.arrival.state === 'open') foot.push(`⏱️ Devine l'heure d'arrivée : <code>!arrivee 21:47</code>`);
-  if(f.boarding && !f.landed) foot.push(`Monte à bord : <code>!embarquer</code> · <code>!maville</code> pour qu'on te survole`);
+  if(f.arrival && f.arrival.state === 'open') foot.push(`⏱️ Devine l'heure d'arrivée : <code>${cmd('arrival', '!arrivee')} 21:47</code>`);
+  if(f.boarding && !f.landed) foot.push(`Monte à bord : <code>${cmd('board', '!embarquer')}</code> · <code>${cmd('city', '!maville')}</code> pour qu'on te survole`);
   $('foot').innerHTML = foot.map(l => `<div>${l}</div>`).join('');
   $('foot').style.display = foot.length ? '' : 'none';
 }

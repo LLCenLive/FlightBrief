@@ -48,6 +48,7 @@
     </div>
     <div class="tab-group tab-group-end">
       <button data-view="profil" class="" title="Profil — Ctrl+8"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg><span class="tab-label">Profil</span></button>
+      <button class="icon-only bug-btn" type="button" onclick="FBBug.open()" title="Signaler un bug"><svg viewBox="0 0 24 24"><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M12 10v10M8 13H4M20 13h-4M8 17l-3 2M16 17l3 2M8 9 5 7M16 9l3-2M10 6a2 2 0 0 1 4 0"/></svg><span class="tab-label">Bug</span></button>
       <button data-view="admin" class="icon-only" title="Admin — Ctrl+9"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="tab-label">Admin</span></button>
     </div>
   </div>
@@ -196,6 +197,19 @@
             </div>
           </div>
           <div class="atc-airports" id="atcAirports"></div>
+          <details class="atc-all fr-panel" id="frDetails">
+            <summary>👥 Amis sur la carte <span id="frCount"></span></summary>
+            <div class="hint" style="margin:6px 0;">Tes amis apparaissent sur la carte quand ils volent sur VATSIM ou IVAO. Les viewers peuvent s'ajouter eux-mêmes depuis le chat avec <code>!vatsim 1234567</code> ou <code>!ivao 123456</code>.</div>
+            <div class="fr-add">
+              <select id="frNet"><option value="vatsim">VATSIM</option><option value="ivao">IVAO</option></select>
+              <input type="text" id="frId" placeholder="CID / VID" maxlength="9" inputmode="numeric">
+              <input type="text" id="frLabel" placeholder="Nom (facultatif)" maxlength="40">
+              <button class="btn small" onclick="FBv15.addFriend()">Ajouter</button>
+            </div>
+            <div class="status-msg" id="frMsg"></div>
+            <div class="fr-list" id="frList"></div>
+            <div class="switch-row"><span>Afficher les viewers inscrits depuis le chat</span><label class="switch"><input type="checkbox" id="frViewers" checked onchange="FBv15.friendsToggle('viewers', this.checked)"><span class="slider"></span></label></div>
+          </details>
           <details class="atc-all" id="atcAllDetails">
             <summary>Tous les contrôleurs en ligne <span id="atcAllCount"></span></summary>
             <input type="text" id="atcSearch" placeholder="Filtrer : LFFF, EGLL, CTR, APP, IVAO…">
@@ -323,12 +337,25 @@
 
     <div class="card-panel">
       <h3>Historique</h3>
+      <div class="lb-filters" id="lbFilters">
+        <input type="search" id="lbfQuery" placeholder="Rechercher : indicatif, OACI, appareil, remarque…" oninput="setLogbookFilter('q', this.value)">
+        <select id="lbfYear" onchange="setLogbookFilter('year', this.value)"><option value="">Toutes les années</option></select>
+        <select id="lbfNetwork" onchange="setLogbookFilter('network', this.value)"><option value="">Tous les réseaux</option></select>
+        <select id="lbfAircraft" onchange="setLogbookFilter('aircraft', this.value)"><option value="">Tous les appareils</option></select>
+        <select id="lbfRules" onchange="setLogbookFilter('rules', this.value)"><option value="">VFR et IFR</option><option value="VFR">VFR</option><option value="IFR">IFR</option></select>
+        <select id="lbfPirep" onchange="setLogbookFilter('pirep', this.value)"><option value="">Tous les PIREP</option><option value="none">Aucun</option><option value="pending">En attente</option><option value="ok">Validé</option><option value="rejected">Refusé</option></select>
+        <select id="lbfCareer" onchange="setLogbookFilter('career', this.value)"><option value="">Toutes les carrières</option></select>
+        <label class="lb-check"><input type="checkbox" id="lbfTracked" onchange="setLogbookFilter('tracked', this.checked)"> Avec tracé</label>
+        <button class="btn small" id="lbfReset" onclick="resetLogbookFilters()">Réinitialiser</button>
+      </div>
+      <div class="lb-filter-sum" id="lbfSummary"></div>
       <div style="overflow-x:auto;">
         <table>
           <thead><tr><th>Date</th><th>Indicatif</th><th>Trajet</th><th>Appareil</th><th>Règles</th><th>Durée</th><th title="Note d'atterrissage">Atterro</th><th>Distance</th><th>Réseau</th><th>Carrière</th><th>PIREP</th><th></th></tr></thead>
           <tbody id="logbookRows"></tbody>
         </table>
         <div class="empty-state" id="logbookEmpty">Aucun vol enregistré pour le moment.</div>
+        <div class="empty-state hidden" id="logbookNoMatch">Aucun vol ne correspond à ces filtres.</div>
       </div>
     </div>
   </div>
@@ -630,12 +657,22 @@
         <div class="status-msg" id="twLoginMsg"></div>
 
         <h2>Commandes</h2>
+        <p class="hint">Renomme une commande (ex. <code>!top</code> déjà pris par un autre bot) ou change son délai anti-spam. Une commande renommée ne répond plus à son nom d'origine. Champs vides = réglages d'origine.</p>
         <div id="twCommands"></div>
+        <div class="status-msg err" id="twCmdConflicts"></div>
         <div class="field" style="margin-top:8px;">
-          <label>Délai anti-spam par commande</label>
+          <label>Délai anti-spam par défaut (commandes du vol)</label>
           <div class="range-row"><input type="range" id="twCooldown" min="0" max="60" step="5"><span class="val-label" id="twCooldownVal">15 s</span></div>
         </div>
         <div class="switch-row"><span>Afficher aussi les réponses sur l'overlay</span><label class="switch"><input type="checkbox" id="twReplyOverlay"><span class="slider"></span></label></div>
+
+        <h2>Alertes dans le chat</h2>
+        <div class="switch-row"><span>Nouveau METAR à destination<small class="tw-sub">Annoncé dans le chat seulement, pendant le vol</small></span><label class="switch"><input type="checkbox" id="twAlertMetar"><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Excès de vitesse au roulage<small class="tw-sub">Au-dessus de la limite pendant 10 s, au sol</small></span><label class="switch"><input type="checkbox" id="twAlertTaxi"><span class="slider"></span></label></div>
+        <div class="field">
+          <label>Limite de vitesse au roulage</label>
+          <div class="range-row"><input type="range" id="twAlertTaxiKt" min="15" max="35" step="1"><span class="val-label" id="twAlertTaxiKtVal">30 kt</span></div>
+        </div>
 
         <h2>Paris d'atterrissage</h2>
         <div class="switch-row"><span>Ouvrir au début de la descente</span><label class="switch"><input type="checkbox" id="twBetAutoOpen" checked><span class="slider"></span></label></div>
@@ -646,7 +683,7 @@
         </div>
         <div class="switch-row"><span>Annoncer l'ouverture et le résultat dans le chat</span><label class="switch"><input type="checkbox" id="twBetAnnounce" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span>Prédiction Twitch (points de chaîne)</span><label class="switch"><input type="checkbox" id="twBetPrediction"><span class="slider"></span></label></div>
-        <p class="hint">Les viewers misent leurs points de chaîne sur une tranche de taux de toucher, dans l'interface de Twitch : ouverte et fermée avec les paris, résultat au toucher, remboursée si le vol est interrompu. Demande une chaîne Affiliée ou Partenaire et le compte de ta chaîne connecté (onglet À bord).</p>
+        <p class="hint">Les viewers misent leurs points de chaîne sur une tranche de taux de toucher, dans l'interface de Twitch : ouverte et fermée avec les paris, résultat au toucher, remboursée si le vol est interrompu. Demande une chaîne Affiliée ou Partenaire et le compte de ta chaîne connecté (onglet À bord) : Twitch n'autorise que le compte de la chaîne à lancer une prédiction, pas un compte modérateur comme le bot.</p>
         <div class="status-msg" id="twPredStatus"></div>
 
       </div>
@@ -815,6 +852,22 @@
         <div class="field"><label>Un quiz toutes les</label><div class="range-row"><input type="range" id="cbQuizEvery" min="6" max="40" step="1"><span class="val-label" id="cbQuizEveryVal">15 min</span></div></div>
         <div class="switch-row"><span>⏱️ Deviner l'heure d'arrivée (<code>!arrivee</code>)</span><label class="switch"><input type="checkbox" id="cbArrival" checked><span class="slider"></span></label></div>
 
+        <h2>Turbulences</h2>
+        <div class="switch-row"><span>⚠️ Alerte turbulences (<code>!ceinture</code>)<small class="tw-sub">Les passagers actifs dans le chat bouclent leur ceinture à temps, sinon ils perdent des miles</small></span><label class="switch"><input type="checkbox" id="cbTurb"><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Secousses réelles du simulateur<small class="tw-sub">Accélération verticale, en montée, croisière et descente</small></span><label class="switch"><input type="checkbox" id="cbTurbAuto" checked><span class="slider"></span></label></div>
+        <div class="field"><label>Sensibilité</label><select id="cbTurbSens"><option value="low">Faible (fortes secousses seulement)</option><option value="medium">Moyenne</option><option value="high">Forte (la moindre secousse)</option></select></div>
+        <div class="switch-row"><span>Turbulences surprises en croisière<small class="tw-sub">Même sans secousses, pour animer le chat</small></span><label class="switch"><input type="checkbox" id="cbTurbRandom"><span class="slider"></span></label></div>
+        <div class="field"><label>En moyenne toutes les</label><div class="range-row"><input type="range" id="cbTurbEvery" min="10" max="120" step="5"><span class="val-label" id="cbTurbEveryVal">45 min</span></div></div>
+        <div class="field"><label>Temps pour boucler sa ceinture</label><div class="range-row"><input type="range" id="cbTurbSec" min="15" max="180" step="5"><span class="val-label" id="cbTurbSecVal">60 s</span></div></div>
+        <div class="field"><label>Miles perdus sans ceinture</label><div class="range-row"><input type="range" id="cbTurbPenalty" min="0" max="500" step="10"><span class="val-label" id="cbTurbPenaltyVal">50 miles</span></div></div>
+        <small class="hint">Au plus une alerte automatique toutes les 10 min. Un viewer ne perd jamais les miles qu'il a déjà dépensés au duty free.</small>
+
+        <h2>Duty free</h2>
+        <div class="switch-row"><span>🛍️ Duty free (<code>!dutyfree</code>, <code>!acheter</code>)<small class="tw-sub">Les viewers dépensent leurs miles en badges, titres et couleurs de pseudo</small></span><label class="switch"><input type="checkbox" id="cbDuty" checked><span class="slider"></span></label></div>
+        <div class="field"><label>Prix</label><div class="range-row"><input type="range" id="cbDutyMult" min="0.5" max="3" step="0.25"><span class="val-label" id="cbDutyMultVal">×1</span></div></div>
+        <div class="cb-shop" id="cbShop"></div>
+        <small class="hint">Les achats se paient sur le solde (miles gagnés − miles dépensés) : le statut et le classement ne baissent pas. Les cosmétiques apparaissent dans le chat, sur les overlays et sur le carnet de vol public.</small>
+
         <h2>Titre du stream</h2>
         <div class="switch-row"><span>Me proposer un titre au lancement du vol</span><label class="switch"><input type="checkbox" id="cbTitleAuto" checked><span class="slider"></span></label></div>
         <div class="field"><label>Modèle</label><textarea id="cbTitleTpl" rows="3" maxlength="200"></textarea>
@@ -836,7 +889,25 @@
         <div class="field"><label>Adresse du site une fois publié <small class="hint">(donnée par <code>!passeport</code>)</small></label><input type="text" id="cbPubUrl" placeholder="https://llcenlive.github.io/carnet"></div>
         <div class="btn-row"><button class="btn small primary" onclick="FBCabin.exportPublic()">Générer le site</button><button class="btn small" onclick="FBCabin.openPubDir()">Ouvrir le dossier</button></div>
         <div class="status-msg" id="cbPubMsg"></div>
-        <details class="cb-howto"><summary>Comment le mettre en ligne (GitHub Pages)</summary>
+
+        <div class="cb-sub" style="margin-top:14px;">Publication automatique sur GitHub Pages</div>
+        <div class="field"><label>Dépôt GitHub</label><input type="text" id="cbGhRepo" placeholder="LLCenLive/carnet" maxlength="140" data-no-i18n></div>
+        <div class="field"><label>Branche</label><input type="text" id="cbGhBranch" placeholder="main" maxlength="100" data-no-i18n></div>
+        <div class="field"><label>Jeton GitHub (fine-grained, limité à ce dépôt)</label>
+          <div class="simbrief-row"><input type="password" id="cbGhToken" placeholder="github_pat_…" autocomplete="off" spellcheck="false"><button class="btn small" onclick="FBCabin.ghSaveToken()">Enregistrer</button></div>
+          <div class="hint" id="cbGhTokenState"></div></div>
+        <div class="field"><label>Après chaque vol</label>
+          <select id="cbGhMode"><option value="off">Ne rien publier</option><option value="ask">Me demander avant de publier</option><option value="auto">Publier automatiquement</option></select></div>
+        <div class="btn-row"><button class="btn small" onclick="FBCabin.ghCheck()">Vérifier l'accès</button><button class="btn small primary" onclick="FBCabin.ghPublish()">Publier maintenant</button></div>
+        <div class="status-msg" id="cbGhMsg"></div>
+        <details class="cb-howto"><summary>Créer le jeton GitHub (2 min)</summary>
+          <ol><li>Crée le dépôt public du carnet sur GitHub (par exemple <b>carnet</b>). Il peut être vide.</li>
+          <li>GitHub → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → « Generate new token ».</li>
+          <li>Repository access : <b>Only select repositories</b> → choisis <b>uniquement</b> le dépôt du carnet.</li>
+          <li>Permissions → Repository permissions : <b>Contents : Read and write</b>. Ajoute <b>Pages : Read and write</b> si tu veux que FlightBrief active le site tout seul.</li>
+          <li>Copie le jeton (il commence par <code>github_pat_</code>) et colle-le ici. Il est chiffré sur ton PC et ne donne accès à aucun autre dépôt.</li></ol>
+          <div class="btn-row"><button class="btn small" onclick="window.api.openExternal('https://github.com/settings/personal-access-tokens/new')">Ouvrir la page des jetons GitHub</button></div></details>
+        <details class="cb-howto"><summary>Comment le mettre en ligne à la main (GitHub Pages)</summary>
           <ol><li>Sur GitHub, crée un dépôt public, par exemple <b>carnet</b>.</li><li>« Add file » → « Upload files » : glisse <b>tout le contenu</b> du dossier généré (pas le dossier lui-même), puis « Commit ».</li><li>Settings → Pages → Branch : <b>main</b> / <b>(root)</b> → Save. Le site est en ligne à <i>https://ton-compte.github.io/carnet</i> en une minute.</li><li>Après de nouveaux vols : régénère, puis ré-uploade les fichiers (GitHub remplace les anciens).</li></ol></details>
       </div>
 
@@ -848,7 +919,9 @@
             <button class="btn small primary" onclick="FBCabin.boarding('open')">Ouvrir l'embarquement</button>
             <button class="btn small" onclick="FBCabin.boarding('close')">Fermer les portes</button>
             <button class="btn small" onclick="FBCabin.boarding('end')">Annuler le vol</button>
+            <button class="btn small" onclick="FBCabin.turbulence()" title="Allume le signal ceinture maintenant (alerte turbulences activée, passagers à bord)">⚠️ Turbulences !</button>
           </div>
+          <div class="status-msg" id="cbTurbMsg"></div>
           <div class="cb-pax" id="cbPax"></div>
           <div class="cb-planned" id="cbPlanned"></div>
         </div>
@@ -869,6 +942,9 @@
               <div><code>!passagers</code><span>qui est à bord</span></div>
               <div><code>!rep …</code><span>répondre au quiz du hublot</span></div>
               <div><code>!arrivee 21:47</code><span>deviner l'heure du toucher</span></div>
+              <div><code>!ceinture</code><span>boucler sa ceinture pendant les turbulences</span></div>
+              <div><code>!dutyfree</code><span>catalogue du duty free et solde de miles</span></div>
+              <div><code>!acheter canard</code><span>acheter (ou remettre) un article du duty free</span></div>
             </div>
             <div class="hint" style="margin-top:8px;">Statuts : 🎫 Membre · 🥈 Argent (1 500) · 🥇 Or (6 000) · 💠 Platine (20 000) · 👑 Légende (60 000 miles). Bonus : atterrissage +100, survol de chez soi +150, quiz +50, heure d'arrivée +100, correspondance +100 par vol enchaîné.</div>
           </div>
@@ -1293,6 +1369,11 @@
         <div class="btn-row"><button class="btn block" onclick="FBv17.deckInstall()">Installer le plugin Stream Deck</button></div>
         <div class="status-msg" id="deckStatus"></div>
         <button class="btn small" style="margin-top:6px;" onclick="FBv17.deckNewToken()">Nouveau code d'appairage</button>
+
+        <h2>🛫 EFB de MSFS 2024</h2>
+        <p class="hint">Ajoute FlightBrief à la tablette (EFB) de tous les avions de MSFS 2024, avec les mêmes rubriques que l'appli : Briefing (vol, météo, ATC, amis, OFP), Logbook, Carrière et Live (bot, paris, passagers, classement, chat). FlightBrief doit tourner sur ce PC pendant le vol. Relance le simulateur après l'installation.</p>
+        <div class="btn-row"><button class="btn block" onclick="FBv17.efbInstall()">Installer l'appli EFB</button></div>
+        <div class="status-msg" id="efbPkgStatus"></div>
 
         <h2>Visite guidée</h2>
         <div class="btn-row"><button class="btn block" onclick="startTour()">Revoir la visite guidée</button></div>
@@ -1803,6 +1884,7 @@
 <script src="vendor/qrcode.js"></script>
 <script src="fb-shared.js"></script>
 <script src="changelog.js"></script>
+<script src="bug-ui.js"></script>
 <script src="app.js"></script>
 <script src="v15.js"></script>
 <script src="cabin-ui.js"></script>

@@ -86,6 +86,41 @@ function startLiveOverlayServer(port, getLiveOverlayState, getAlerts, extra) {
       if (!body) { res.writeHead(404, h); return res.end('{"ok":false}'); }
       res.writeHead(200, h); return res.end(JSON.stringify(body));
     }
+    // v1.9 — appli FlightBrief dans l'EFB de MSFS 2024 (efb/ : une page de ce serveur dans l'EFB).
+    // Page, données et actions protégées par le code d'appairage (le même que le Stream Deck),
+    // glissé dans la page au moment où ce serveur la sert. Pas d'en-tête CORS : un site web
+    // ouvert dans un navigateur ne peut ni lire ces données ni déclencher d'action.
+    // Présence de FlightBrief, interrogée par l'appli EFB du simulateur avant d'afficher la page (sans donnée).
+    if (url === '/api/ping') { res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' }); return res.end('{"ok":true,"app":"flightbrief"}'); }
+    if (url === '/efb' || url === '/efb/') {
+      if (!extra.efb) { res.writeHead(404); return res.end(); }
+      return fs.readFile(path.join(__dirname, 'renderer', 'efb-sim', 'index.html'), 'utf-8', (err, html) => {
+        if (err) { res.writeHead(500); return res.end(); }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(html.replace('{{FB_TOKEN}}', extra.efb.token()).replace('{{FB_LANG}}', extra.efb.lang()));
+      });
+    }
+    const efbFile = url.match(/^\/efb\/(efb\.js|efb\.css|icon\.png)$/);
+    if (efbFile) {
+      const type = { js: 'application/javascript; charset=utf-8', css: 'text/css; charset=utf-8', png: 'image/png' }[efbFile[1].split('.').pop()];
+      return fs.readFile(path.join(__dirname, 'renderer', 'efb-sim', efbFile[1]), (err, buf) => {
+        if (err) { res.writeHead(404); return res.end(); }
+        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' }); res.end(buf);
+      });
+    }
+    const efbApi = url.match(/^\/api\/efb\/(state|logbook|careers|ofp|action)$/);
+    if (efbApi) {
+      const h = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
+      if (!extra.efb || req.headers['x-flightbrief-efb'] !== extra.efb.token()) { res.writeHead(401, h); return res.end('{"ok":false,"error":"pairing"}'); }
+      if (url === '/api/efb/action') {
+        if (req.method !== 'POST') { res.writeHead(405, h); return res.end('{"ok":false}'); }
+        let a = ''; try { a = new URL(req.url, 'http://localhost').searchParams.get('a') || ''; } catch (e) { a = ''; }
+        res.writeHead(200, h); return res.end(JSON.stringify(extra.efb.action(a)));
+      }
+      return Promise.resolve().then(() => extra.efb.state(efbApi[1]))
+        .then(s => { res.writeHead(200, h); res.end(JSON.stringify(s)); })
+        .catch(e => { res.writeHead(500, h); res.end(JSON.stringify({ ok: false, error: String(e && e.message || e) })); });
+    }
     // v1.7 — 4e source OBS : « À bord » (manifeste des passagers du chat) + cartes postales.
     if (url === '/cabin') return htmlResponse(res, 'cabin-overlay.html');
     if (url === '/api/cabin') return jsonResponse(res, extra.getCabin);

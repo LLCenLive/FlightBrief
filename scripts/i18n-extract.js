@@ -8,11 +8,11 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 
 const FILES = [
-  'renderer/index.html', 'renderer/app.js', 'renderer/v15.js', 'renderer/cabin-ui.js', 'renderer/v17.js', 'renderer/v18.js', 'renderer/copilot.js', 'renderer/fb-shared.js',
+  'renderer/index.html', 'renderer/app.js', 'renderer/v15.js', 'renderer/cabin-ui.js', 'renderer/v17.js', 'renderer/v18.js', 'renderer/copilot.js', 'renderer/fb-shared.js', 'renderer/bug-ui.js',
   'renderer/alerts-overlay.html', 'renderer/cabin-overlay.html', 'renderer/live-overlay.html', 'renderer/obs.html',
   'renderer/mobile/index.html', 'renderer/mobile/mobile.js', 'renderer/mobile/setup.html',
   'renderer/public-logbook/index.html', 'renderer/public-logbook/app.js',
-  'main.js', 'twitch.js', 'cabin.js', 'tracker.js', 'atc.js', 'shots.js', 'backups.js', 'public-logbook.js', 'predictions.js', 'checklists.js', 'suggest.js', 'mobile-tls.js'
+  'main.js', 'twitch.js', 'cabin.js', 'tracker.js', 'atc.js', 'shots.js', 'backups.js', 'public-logbook.js', 'predictions.js', 'checklists.js', 'suggest.js', 'mobile-tls.js', 'commands.js', 'dutyfree.js', 'github-pages.js', 'bugreport.js'
 ];
 const ATTRS = ['title', 'placeholder', 'aria-label', 'alt', 'data-label', 'data-tip', 'label', 'content'];
 const STOP = new Set(('le la les de du des un une et ou pour sur à au aux en pas ne est sont dans par avec ton ta tes ce cette ces '

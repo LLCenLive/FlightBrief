@@ -9,7 +9,9 @@
        compte dédié au bot), préfixé du nom de bot choisi.
      - Chaque utilisateur déclare SA PROPRE application Twitch (Client ID saisi dans
        l'onglet Twitch, assistant pas à pas) : aucun identifiant n'est intégré à FlightBrief.
-   • Commandes : !eta !route !metar !avion !alt !landing !pari !top !fb
+   • Commandes : !eta !route !metar !avion !alt !landing !pari !top !fb — renommables, avec
+     leur propre délai anti-spam (v1.9, voir commands.js).
+   • Alertes du chat (v1.9, optionnelles) : nouveau METAR à destination, excès de vitesse au roulage.
    • Pari sur l'atterrissage : ouverture auto au début de la descente, fermeture auto
      sous 1 000 ft sol, résultat au toucher (le plus proche du taux réel gagne).
    ========================================================= */
@@ -19,6 +21,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { writeJsonSafe, readJsonSafe } = require('./backups');
 const I18N = require('./renderer/i18n.js');
+const Commands = require('./commands');
 
 // Client ID : fourni par chaque utilisateur (sa propre application Twitch, type « Public »).
 // Format Twitch : 30 caractères minuscules / chiffres.
@@ -330,7 +333,10 @@ const COMMANDS = ['eta', 'route', 'metar', 'avion', 'alt', 'landing', 'pari', 't
 const DEFAULT_CONFIG = {
   enabled: false, channel: '', botName: 'FlightBot', prefixMessages: true, clientId: '',
   commands: { eta: true, route: true, metar: true, avion: true, alt: true, landing: true, pari: true, top: true, fb: true },
+  cmdNames: {},      // v1.9 — { clé: 'nouveaunom' } (sans « ! »), voir commands.js
+  cmdCooldowns: {},  // v1.9 — { clé: secondes } ; absent = délai par défaut
   cooldownSec: 15,
+  alerts: { metar: false, taxiSpeed: false, taxiSpeedKt: 30 }, // v1.9
   bets: { autoOpen: true, autoLock: true, lockAglFt: 1000, announceInChat: true, prediction: false },
   replyOnOverlay: false // true : réponses AUSSI affichées sur l'overlay Alertes quand le bot parle dans le chat
 };
@@ -340,12 +346,15 @@ function mergeConfig(c) {
   return {
     ...DEFAULT_CONFIG, ...c,
     commands: { ...DEFAULT_CONFIG.commands, ...(c.commands || {}) },
+    cmdNames: Object.fromEntries(Object.entries(c.cmdNames || {}).map(([k, v]) => [k, Commands.cleanName(v)]).filter(([, v]) => v)),
+    cmdCooldowns: Object.fromEntries(Object.entries(c.cmdCooldowns || {}).filter(([, v]) => v != null && v !== '' && isFinite(v)).map(([k, v]) => [k, Math.max(0, Math.min(3600, Math.round(+v)))])),
+    alerts: { ...DEFAULT_CONFIG.alerts, ...(c.alerts || {}) },
     bets: { ...DEFAULT_CONFIG.bets, ...(c.bets || {}) }
   };
 }
 
 class FlightBot extends EventEmitter {
-  // ctx : { getContext(): {...}, fetchMetar(icao): Promise<string|null>, statsFile }
+  // ctx : { getContext(): {...}, fetchMetar(icao): Promise<string|null>, statsFile, cabinOn?(): bool }
   constructor(chat, ctx) {
     super();
     this.chat = chat; this.ctx = ctx;
@@ -354,6 +363,8 @@ class FlightBot extends EventEmitter {
     this.bet = { state: 'closed', guesses: new Map(), openedAt: null, lockedAt: null, result: null, flightKey: null };
     this.stats = this._loadStats();
     this.log = [];
+    this._metar = null;   // dernier METAR vu à destination { icao, text }
+    this._taxi = { armed: false, since: null, max: 0, last: 0 };
     chat.on('message', m => this._onMessage(m));
   }
   _loadStats() {
@@ -382,21 +393,15 @@ class FlightBot extends EventEmitter {
 
   _onMessage(m) {
     const text = (m.text || '').trim();
-    if (!text.startsWith('!')) return;
-    const [rawCmd, ...args] = text.slice(1).split(/\s+/);
-    const cmd = (rawCmd || '').toLowerCase()
-      .replace(/^(landing|atterro|atterrissage|aterrizaje)$/, 'landing')
-      .replace(/^(avion|aircraft|plane|avión)$/, 'avion')
-      .replace(/^(alt|altitude|altitud)$/, 'alt')
-      .replace(/^(pari|bet|apuesta)$/, 'pari')
-      .replace(/^(fb|flightbrief|commandes|commands|comandos)$/, 'fb')
-      .replace(/^(top|classement|ranking|leaderboard)$/, 'top');
-    if (!COMMANDS.includes(cmd) || !this.config.commands[cmd]) return;
+    const r = Commands.resolve(text, this.config, 'bot');
+    if (!r) return;
+    const cmd = r.key, args = r.args;
     this._pushLog({ kind: 'cmd', user: m.displayName, text });
     if (cmd === 'pari') return this._onBet(m, args);
     // Anti-spam : délai par commande (les modos et le streamer passent outre).
     const now = Date.now();
-    if (!m.isMod && this.cooldowns[cmd] && now - this.cooldowns[cmd] < this.config.cooldownSec * 1000) return;
+    const cd = Commands.cooldownOf(cmd, this.config, this.config.cooldownSec);
+    if (!m.isMod && this.cooldowns[cmd] && now - this.cooldowns[cmd] < cd * 1000) return;
     this.cooldowns[cmd] = now;
     this._answer(cmd, args, m).catch(e => this._pushLog({ kind: 'error', text: e.message }));
   }
@@ -452,9 +457,10 @@ class FlightBot extends EventEmitter {
         return this.reply('🏆 Paris d\'atterrissage : ' + top.map((p, i) => `${i + 1}. ${p.name} (${p.wins})`).join(' · '), { user });
       }
       case 'fb': {
-        const local = { en: { avion: 'aircraft', pari: 'bet' }, es: { avion: 'avion', pari: 'apuesta', landing: 'aterrizaje' } }[I18N.lang] || {};
-        const on = COMMANDS.filter(k => this.config.commands[k] && k !== 'fb').map(k => '!' + (local[k] || k));
-        return this.reply(`Commandes du vol : ${on.join(' ')} · À bord : !embarquer !miles !passeport !maville !voyage`, { user });
+        const list = group => Commands.CATALOG.filter(c => c.group === group && c.key !== 'fb' && c.key !== 'help' && Commands.isEnabled(c.key, this.config))
+          .map(c => Commands.displayName(c.key, this.config, I18N.lang)).join(' ');
+        const cabin = this.ctx.cabinOn && !this.ctx.cabinOn() ? '' : list('cabin');
+        return this.reply(cabin ? `Commandes du vol : ${list('bot')} · À bord : ${cabin}` : `Commandes du vol : ${list('bot')}`, { user });
       }
       default: return null;
     }
@@ -539,7 +545,7 @@ class FlightBot extends EventEmitter {
   // Ouverture / fermeture automatiques selon le vol (appelé à chaque télémétrie).
   onFlightTick(phaseDetail, aglFt, vsFpm) {
     const b = this.config.bets;
-    if (!this.config.commands.pari) return;
+    if (!Commands.isEnabled('pari', this.config)) return;
     if (b.autoOpen && this.bet.state === 'closed' && (phaseDetail === 'descent' || phaseDetail === 'approach')) this.openBets('début de la descente');
     if (b.autoLock && this.bet.state === 'open' && aglFt != null && aglFt < (b.lockAglFt || 1000) && (vsFpm || 0) < 0) this.lockBets(`sous ${b.lockAglFt || 1000} ft sol`);
   }
@@ -547,7 +553,49 @@ class FlightBot extends EventEmitter {
     // Nouveau vol : paris remis à zéro (on garde le classement) ; une prédiction restée ouverte est remboursée.
     if (this.bet.state === 'open' || this.bet.state === 'locked') this.emit('bet', 'cancel');
     this.bet = { state: 'closed', guesses: new Map(), openedAt: null, lockedAt: null, result: null, flightKey: Date.now() };
+    this._metar = null; this._metarDone = false;
     this.emit('state');
+  }
+  onLanded() { this._metarDone = true; } // plus d'alerte METAR une fois posé
+
+  /* ---------- v1.9 — alertes du chat ---------- */
+  // Nouveau METAR à l'arrivée pendant le vol : annoncé dans le chat seulement (jamais sur
+  // l'overlay). Appelé régulièrement par main.js ; le 1er METAR lu sert de référence.
+  async checkArrivalMetar() {
+    if (!this.config.alerts.metar || this._metarDone || !this.chat.canSpeak()) return null;
+    const c = this.ctx.getContext();
+    if (!c.connected) return null;
+    const t = c.telemetry || {}, b = c.briefing || {};
+    const arr = String(t.arr || b.arr || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    if (arr.length !== 4) return null;
+    const metar = await this.ctx.fetchMetar(arr).catch(() => null);
+    if (!metar) return null;
+    const prev = this._metar;
+    this._metar = { icao: arr, text: metar };
+    if (!prev || prev.icao !== arr || prev.text === metar) return null;
+    const msg = `🌦️ Nouveau METAR à ${arr} : ${metar}`;
+    this.chat.say(this.config.prefixMessages && this.config.botName ? `[${this.config.botName}] ${msg}` : msg);
+    this._pushLog({ kind: 'reply', text: msg, inChat: true });
+    return msg;
+  }
+  // Excès de vitesse au roulage : vitesse sol au-dessus de la limite pendant 10 s, au sol,
+  // avant le décollage ou après l'atterrissage (une fois l'avion ralenti sous la limite,
+  // pour ne pas compter la décélération sur la piste). Une alerte toutes les 2 min au plus.
+  onTaxiTick(d, now) {
+    const a = this.config.alerts;
+    if (!a.taxiSpeed || !d) return null;
+    now = now || Date.now();
+    const s = this._taxi, limit = Math.max(5, +a.taxiSpeedKt || 30), gs = d.gsKt || 0;
+    if (!d.onGround || (d.phase !== 'ground' && d.phase !== 'landed')) { s.armed = false; s.since = null; return null; }
+    if (gs <= limit) { s.armed = true; s.since = null; s.max = 0; return null; }
+    if (!s.armed) return null;
+    if (!s.since) s.since = now;
+    s.max = Math.max(s.max, Math.round(gs));
+    if (now - s.since < 10000 || now - s.last < 120000) return null;
+    s.last = now;
+    const msg = `🚨 Excès de vitesse au roulage : ${s.max} kt (limite ${limit} kt) !`;
+    this.reply(msg, { title: 'Roulage' });
+    return msg;
   }
 }
 

@@ -9,6 +9,26 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '2.0.0',
+    date: '2026-10-29',
+    title: "Commandes du chat à ta main, duty free, EFB dans MSFS 2024",
+    items: [
+      ['new', "Appli FlightBrief dans la tablette (EFB) de MSFS 2024 : Briefing, Logbook, Carrière et Live (bot, paris, passagers, classement, chat). Installation en un clic depuis le Profil."],
+      ['new', "Commandes du chat personnalisables (onglet Twitch) : renomme chaque commande et règle son délai anti-spam. Une commande renommée ne répond plus à son ancien nom."],
+      ['new', "Turbulences : le chat doit taper !ceinture à temps, sinon il perd des miles. Secousses réelles du simulateur, turbulences surprises ou bouton."],
+      ['new', "Duty free : les viewers dépensent leurs miles en badges, titres et couleurs de pseudo (!dutyfree, !acheter), visibles dans le chat, sur les overlays et le carnet public."],
+      ['new', "Alertes dans le chat (au choix) : nouveau METAR à destination et excès de vitesse au roulage."],
+      ['new', "Amis sur la carte du Briefing grâce à leur CID VATSIM / VID IVAO, et les viewers s'y ajoutent eux-mêmes avec !vatsim ou !ivao."],
+      ['new', "Carnet de vol public publié automatiquement sur GitHub Pages (jeton limité au dépôt), après chaque vol ou en le demandant."],
+      ['new', "Recherche et filtres dans le logbook : texte libre, année, réseau, appareil, règles, PIREP, carrière, vols tracés."],
+      ['new', "Bouton « Signaler un bug » : rapport prérempli sur GitHub ou à copier, infos techniques nettoyées de toute donnée personnelle."],
+      ['improved', "Carte du Briefing plus fluide au zoom quand les ATC sont affichés."],
+      ['improved', "Version Microsoft Store en préparation (paquet MSIX) : les mises à jour y passeront par le Store."],
+      ['fix', "L'onglet À bord se charge à nouveau correctement : réglages appliqués au bot, vol en cours, classement et cartes postales."],
+      ['fix', "Les overlays affichent les bons noms de commandes, dans la langue de l'appli."]
+    ]
+  },
+  {
     version: '1.8.5',
     date: '2026-10-19',
     title: "Copilote sur ta sortie audio, bot plus discret",

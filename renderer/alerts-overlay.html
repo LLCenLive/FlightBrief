@@ -102,6 +102,7 @@
   .cb-names{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
   .cb-names span{font-size:13.5px; font-weight:600; padding:3px 10px; border-radius:20px; background:var(--tile); border:1px solid color-mix(in srgb, var(--accent) 40%, transparent);}
   .cb-names span.more{color:var(--sub); font-weight:500;}
+  .fb-rainbow{background:linear-gradient(90deg,#ff6b6b,#ffd166,#39e88f,#5cc8ff,#a06cf5); -webkit-background-clip:text; background-clip:text; color:transparent;}
   .cb-note{font-size:13px; color:var(--sub); margin-top:8px;}
   .cb-note b{color:var(--text);}
   .cb-big{display:flex; gap:16px; align-items:center;}
@@ -127,6 +128,11 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let cfg = { durationSec: 9, position: 'top-right', scale: 100, types: { landing: true, bet: true, achievement: true, chat: true, cabin: true }, style: {} };
 const PREVIEW = new URLSearchParams(location.search).has('preview');
+// v1.9 — noms des commandes (renommables dans l'onglet Twitch), fournis par /api/alerts.
+let CMDS = {};
+const cmd = (k, d) => esc(CMDS[k] || d);
+// Pseudo avec la couleur achetée au duty free (look = { badge, title, color }).
+const pseudo = (name, lk) => { lk = lk || {}; return `${lk.badge ? esc(lk.badge) + ' ' : ''}<span class="${lk.color === 'rainbow' ? 'fb-rainbow' : ''}"${lk.color && lk.color !== 'rainbow' ? ` style="color:${esc(lk.color)}"` : ''}>${esc(name)}</span>`; };
 function hexA(hex, a){
   const h = String(hex || '#0a0d11').replace('#','');
   const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h.padEnd(6, '0');
@@ -181,7 +187,7 @@ function betHtml(e){
       ${(r.podium || []).length ? `<div class="podium">${r.podium.map((p, i) => `<div class="pod p${i+1}"><div class="m">${medals[i]}</div><div class="n">${esc(p.name)}</div><div class="g">${p.fpm} · ±${p.diff}</div></div>`).join('')}</div>` : '<div class="banner"><div class="s">Personne n\'avait parié cette fois.</div></div>'}` };
   }
   const open = e.type === 'bet-open';
-  return { accent: open ? '#39e88f' : '#ffb020', html: `<div class="banner"><div class="ic">${open ? '🛬' : '🔒'}</div><div><div class="t">${esc(e.title)}</div><div class="s">${open ? 'Devine le taux de toucher : <code>!pari 180</code>' : esc(e.text || '')}</div></div></div>` };
+  return { accent: open ? '#39e88f' : '#ffb020', html: `<div class="banner"><div class="ic">${open ? '🛬' : '🔒'}</div><div><div class="t">${esc(e.title)}</div><div class="s">${open ? `Devine le taux de toucher : <code>${cmd('pari', '!pari')} 180</code>` : esc(e.text || '')}</div></div></div>` };
 }
 function achHtml(e){
   return { accent: '#ffd166', html: `<div class="ach"><div class="badge">${esc(e.icon || '🏆')}</div><div><div class="eyebrow">${esc(cardLabel('achievement', 'Succès débloqué'))}</div><div class="t">${esc(e.title)}</div><div class="d">${esc(e.text || '')}</div></div></div>` };
@@ -196,9 +202,9 @@ function cabinHtml(e){
   const eb = t => `<div class="eyebrow">${esc(lbl || t)}</div>`;
   const big = (ic, eyebrow, t, s, extra, accent) => ({ accent: accent || '#39e88f', html: `<div class="cb-big"><div class="ic">${ic}</div><div>${eb(eyebrow)}<div class="t">${t}</div>${s ? `<div class="s">${s}</div>` : ''}${extra || ''}</div></div>` });
   switch(e.type){
-    case 'cabin-open': return big('🛫', 'Embarquement ouvert', esc(e.text || 'Vol au départ'), 'Tape <code>!embarquer</code> pour monter à bord');
+    case 'cabin-open': return big('🛫', 'Embarquement ouvert', esc(e.text || 'Vol au départ'), `Tape <code>${cmd('board', '!embarquer')}</code> pour monter à bord`);
     case 'cabin-boarding': return { accent: '#39e88f', html: `${eb('Embarquement · ' + (d.total || 0) + ' à bord')}
-      <div class="cb-names">${(d.names || []).map(n => `<span>${esc(n)}</span>`).join('')}${d.more ? `<span class="more">+${d.more}</span>` : ''}</div>
+      <div class="cb-names">${(d.names || []).map((n, i) => `<span>${pseudo(n, (d.looks || [])[i])}</span>`).join('')}${d.more ? `<span class="more">+${d.more}</span>` : ''}</div>
       ${(d.connections || []).length ? `<div class="cb-note">🧳 Correspondance : ${d.connections.slice(0, 3).map(c => `<b>${esc(c.name)}</b> (${c.leg}e vol)`).join(', ')}</div>` : ''}` };
     case 'cabin-flyover': return big('🏠', 'Survol', `On survole chez ${esc(d.name)} !`, `${esc(d.flag || '')} ${esc(d.city || '')} · coucou en bas 👋`, d.aboard ? '<div class="bonus">+150 miles</div>' : '', '#ffd166');
     case 'cabin-flyover-soon': return big('👀', 'Survol imminent', `Dans ~${esc(d.etaMin)} min : chez ${esc(d.name)}`, `${esc(d.flag || '')} ${esc(d.city || '')}`, '', '#ffd166');
@@ -206,10 +212,13 @@ function cabinHtml(e){
     case 'cabin-country': return big(esc(d.flag || '🌍'), 'Nouveau pays sous nos ailes', esc(d.name || ''), '', '', '#54d6e8');
     case 'cabin-route': return { accent: '#ffd166', html: `${eb('Au programme de ce vol')}<div class="cb-q">On survolera chez :</div>
       <div class="cb-list">${(d.list || []).map(x => `<div><b>${esc(x.name)}</b><span>${esc(x.flag || '')} ${esc(x.city)}</span></div>`).join('')}${d.more ? `<div><span>et ${d.more} autres…</span></div>` : ''}</div>` };
-    case 'cabin-quiz': return { accent: '#a06cf5', html: `${eb('🧭 Quiz du hublot · +50 miles')}<div class="cb-q">${esc(d.text || '')}</div><div class="cb-note">Réponds avec <code>!rep …</code></div>` };
+    case 'cabin-quiz': return { accent: '#a06cf5', html: `${eb('🧭 Quiz du hublot · +50 miles')}<div class="cb-q">${esc(d.text || '')}</div><div class="cb-note">Réponds avec <code>${cmd('answer', '!rep')} …</code></div>` };
     case 'cabin-quiz-result': return big('🧭', 'Quiz du hublot', `Réponse : ${esc(d.answer || '')}`, d.winner ? `Bravo <b>${esc(d.winner)}</b> !` : 'Personne n\'a trouvé cette fois', d.winner ? '<div class="bonus">+50 miles</div>' : '', '#a06cf5');
-    case 'cabin-arrival-open': return big('⏱️', "Heure d'arrivée", `À quelle heure on touche${d.arr ? ' à ' + esc(d.arr) : ''} ?`, 'Pronostique : <code>!arrivee 21:47</code>', '', '#54d6e8');
+    case 'cabin-arrival-open': return big('⏱️', "Heure d'arrivée", `À quelle heure on touche${d.arr ? ' à ' + esc(d.arr) : ''} ?`, `Pronostique : <code>${cmd('arrival', '!arrivee')} 21:47</code>`, '', '#54d6e8');
     case 'cabin-arrival-result': return big('⏱️', "Heure d'arrivée", `Toucher à ${esc(d.time || '')}`, d.winner ? `Bravo <b>${esc(d.winner)}</b> (${esc(d.guess || '')})` : '', d.winner ? '<div class="bonus">+100 miles</div>' : '', '#54d6e8');
+    case 'cabin-turbulence': return big('⚠️', 'Turbulences', 'Attachez vos ceintures !', `Tapez <code>${cmd('seatbelt', '!ceinture')}</code> dans les ${esc(d.sec || 60)} s`, d.penalty ? `<div class="bonus">−${esc(d.penalty)} miles sinon</div>` : '', '#ff6b6b');
+    case 'cabin-turbulence-result': return big(d.hitCount ? '😵' : '✅', 'Turbulences', 'Signal ceinture éteint', d.hitCount ? `Sans ceinture : ${(d.hit || []).map(esc).join(', ')}${d.hitCount > (d.hit || []).length ? '…' : ''}` : 'Tout le monde était attaché, bravo !', d.hitCount && d.penalty ? `<div class="bonus">−${esc(d.penalty)} miles</div>` : '', '#ff6b6b');
+    case 'cabin-dutyfree': return big(esc(d.icon || '🛍️'), 'Duty free', `${pseudo(d.name, d.look)} s'offre ${esc(d.item || '')}`, '', '', '#a06cf5');
     case 'cabin-tier': return big(esc(e.icon || '🎫'), 'Nouveau statut', esc(e.title || ''), esc(e.text || ''), '', '#ffd166');
     case 'cabin-postcard': return { accent: '#ffd166', html: `<div class="cb-card"><img src="${esc(d.url || '')}" alt=""><div class="cap">${eb('Carte postale')}<b>Bons baisers${d.city ? ' de ' + esc(d.city) : ''} !</b></div></div>` };
     default: return big('🎫', 'À bord', esc(e.title || ''), esc(e.text || ''));
@@ -230,7 +239,7 @@ function pump(){
     const e = queue.shift();
     const r = render(e);
     if(!r) continue;
-    const dur = e.type === 'cabin-quiz' && e.data && e.data.sec ? Math.min(90, e.data.sec)
+    const dur = (e.type === 'cabin-quiz' || e.type === 'cabin-turbulence') && e.data && e.data.sec ? Math.min(90, e.data.sec)
       : (e.type === 'landing' || e.type === 'bet-result' || e.type === 'cabin-postcard' ? 1.6 : e.type === 'chat-answer' || e.type === 'cabin-flyover' || e.type === 'cabin-route' ? 1.1 : 0.8) * (cfg.durationSec || 9);
     const n = document.createElement('div');
     n.className = 'al';
@@ -321,6 +330,7 @@ async function poll(){
   try{
     const r = await fetch('/api/alerts?since=' + (lastId == null ? 0 : lastId), { cache: 'no-store' });
     const j = await r.json();
+    if(j.cmds) CMDS = j.cmds;
     applyCfg(j.config);
     if(PREVIEW) return;
     if(lastId == null){

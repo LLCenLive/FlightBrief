@@ -124,3 +124,6 @@ a.chip:hover{border-color:var(--green);}
   .passport{grid-template-columns:1fr;}
   .board .hide-m{display:none;}
 }
+/* v1.9 — cosmétiques du duty free */
+.rainbow{background:linear-gradient(90deg,#ff6b6b,#ffd166,#39e88f,#5cc8ff,#a06cf5); -webkit-background-clip:text; background-clip:text; color:transparent;}
+.v-title{font-size:.8em; opacity:.7; font-style:italic;}
