@@ -957,7 +957,7 @@ async function efbState() {
       cabin: cs.enabled ? { boarding: !!(cs.flight && cs.flight.boarding), pax: (cs.passengers || []).length, turbulence: cs.turbulence || null, turbOn: !!cabin.cfg.turbulence.enabled,
         passengers: (cs.passengers || []).slice().sort((a, b) => b.miles - a.miles).slice(0, 40).map(p => ({ name: p.name, miles: p.miles, tierIcon: p.tierIcon, tier: p.tier, present: p.present, leg: p.leg, look: p.look || null })),
         nextFlyover: cs.nextFlyover || null, quiz: cs.quiz ? { text: cs.quiz.text } : null,
-        ranking: cabin.ranking(10).map(r => ({ name: r.name, miles: r.miles, tierIcon: r.tier.icon, flights: r.flights, look: r.look || null })) } : null,
+        ranking: cabin.ranking(10).map(r => ({ name: r.name, miles: r.miles, tierIcon: r.tier.icon, tier: r.tier.name, flights: r.flights, look: r.look || null })) } : null,
       log: flightBot.log.slice(0, 15).map(e => ({ kind: e.kind, user: e.user || null, text: String(e.text || '').slice(0, 200) }))
     }
   };

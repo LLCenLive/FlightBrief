@@ -7,7 +7,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FlightBrief</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/efb/efb.css">
 <script>window.FB_EFB = { token: '{{FB_TOKEN}}', lang: '{{FB_LANG}}' };</script>
 </head>
@@ -26,7 +25,7 @@
 <div id="page-logbook" class="page"></div>
 <div id="page-career" class="page"></div>
 <div id="page-live" class="page"></div>
-<div id="sheet" class="sheet hidden"><div class="sheet-box"><div class="sheet-head"><b id="sheetTitle"></b><a href="#" class="btn small" data-action="sheet-close" data-t="Fermer">Fermer</a></div><div id="sheetBody" class="sheet-body"></div></div></div>
+<div id="sheet" class="sheet hidden" data-action="sheet-close"><div class="sheet-box" data-action="sheet-stay"><div class="sheet-head"><a href="#" class="sheet-x" data-action="sheet-close">✕ <span data-t="Fermer">Fermer</span></a><b id="sheetTitle"></b></div><div id="sheetBody" class="sheet-body"></div></div></div>
 <div id="toast" class="toast hidden"></div>
 <script src="/efb/efb.js"></script>
 </body>

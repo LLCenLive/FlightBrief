@@ -21,7 +21,7 @@
   var HEALTH_URL = 'http://127.0.0.1:4814/api/ping'; // 200 + CORS dès que FlightBrief tourne
   var APP_NAME = 'FlightBrief';
   var INTERNAL_NAME = 'FlightBriefEfb';
-  var VERSION = '2.0.0';
+  var VERSION = '2.0.1';
   var BASE_URL = 'coui://html_ui/efb_ui/efb_apps/' + INTERNAL_NAME;
   var STYLE_ID = 'fb-efb-style';
 
@@ -89,7 +89,7 @@
       }
       showMsg(on) {
         if (!this.msg) return;
-        this.msg.innerHTML = '<b>FlightBrief</b>Lance FlightBrief sur ce PC (version 2.0 ou plus récente).<br>Start FlightBrief on this PC.';
+        this.msg.innerHTML = '<b>FlightBrief</b>Lance FlightBrief sur ce PC (version 2.0.1 ou plus récente).<br>Start FlightBrief on this PC.';
         this.msg.className = on ? 'fbefb-msg' : 'fbefb-msg fbefb-hidden';
       }
       startPolling() {

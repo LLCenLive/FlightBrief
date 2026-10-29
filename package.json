@@ -1,7 +1,7 @@
 {
   "name": "flightbrief",
   "productName": "FlightBrief",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Briefing de vol, logbook, suivi de carrière et tracking de vol en direct (SimConnect) pour les créateurs de contenu simu aérienne, avec source OBS intégrée.",
   "main": "main.js",
   "author": "FlightBrief",
@@ -22,6 +22,7 @@
     "dist:linux": "electron-builder --linux --publish never",
     "predist:store": "node scripts/check-build.js && node scripts/check-store.js",
     "dist:store": "electron-builder --win --config build/electron-builder.store.js --publish never",
+    "dist:flightsim": "node scripts/build-flightsim.js",
     "test": "node --test"
   },
   "dependencies": {

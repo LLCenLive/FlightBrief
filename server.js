@@ -100,6 +100,22 @@ function startLiveOverlayServer(port, getLiveOverlayState, getAlerts, extra) {
         res.end(html.replace('{{FB_TOKEN}}', extra.efb.token()).replace('{{FB_LANG}}', extra.efb.lang()));
       });
     }
+    // Polices de l'EFB : le navigateur du simulateur n'a aucune police de secours et ne gère pas les
+    // polices web découpées par plages de caractères (Google Fonts) : accents, flèches et « · » sortaient
+    // en carrés. On sert donc des polices Windows complètes, lues sur ce PC (rien n'est redistribué).
+    const efbFont = url.match(/^\/efb\/font\/(ui|ui-bold|mono|mono-bold|symbol)\.ttf$/);
+    if (efbFont) {
+      const dir = path.join(process.env.WINDIR || 'C:\\Windows', 'Fonts');
+      const files = { ui: ['segoeui.ttf', 'arial.ttf'], 'ui-bold': ['segoeuib.ttf', 'arialbd.ttf'], mono: ['consola.ttf', 'cour.ttf'], 'mono-bold': ['consolab.ttf', 'courbd.ttf'], symbol: ['seguisym.ttf'] }[efbFont[1]];
+      const tryFile = i => {
+        if (i >= files.length) { res.writeHead(404); return res.end(); }
+        fs.readFile(path.join(dir, files[i]), (err, buf) => {
+          if (err) return tryFile(i + 1);
+          res.writeHead(200, { 'Content-Type': 'font/ttf', 'Cache-Control': 'max-age=86400' }); res.end(buf);
+        });
+      };
+      return tryFile(0);
+    }
     const efbFile = url.match(/^\/efb\/(efb\.js|efb\.css|icon\.png)$/);
     if (efbFile) {
       const type = { js: 'application/javascript; charset=utf-8', css: 'text/css; charset=utf-8', png: 'image/png' }[efbFile[1].split('.').pop()];

@@ -58,12 +58,16 @@
   function mins(m) { if (m == null) return '—'; m = Math.max(0, Math.round(m)); return m >= 60 ? Math.floor(m / 60) + ' h ' + ('0' + (m % 60)).slice(-2) : m + ' min'; }
   function hhmm(iso) { if (!iso) return '—'; var d = new Date(iso); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
   function dateFr(s) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (s || '—'); }
-  // Pseudo avec badge et couleur du duty free (arc-en-ciel : doré, le dégradé n'est pas fiable dans le simulateur).
+  // Le simulateur n'affiche pas les emojis : on les retire des textes (pseudos, messages du chat).
+  function noEmoji(s) { return String(s == null ? '' : s).replace(/[\uD800-\uDFFF\uFE0F\u200D]/g, '').replace(/^\s+/, ''); }
+  // Pseudo avec la couleur et le titre achetés au duty free (arc-en-ciel : doré, le dégradé n'est pas fiable dans le simulateur).
   function pseudo(name, lk) {
     lk = lk || {};
     var col = lk.color ? ' style="color:' + esc(lk.color === 'rainbow' ? '#ffd166' : lk.color) + '"' : '';
-    return (lk.badge ? esc(lk.badge) + ' ' : '') + '<span' + col + '>' + esc(name) + '</span>';
+    return '<span' + col + '>' + esc(noEmoji(name)) + '</span>' + (lk.title ? ' <span class="net">' + esc(lk.title) + '</span>' : '');
   }
+  // Statut du programme passagers en texte (Membre, Argent, Or…), à la place de la médaille emoji.
+  function tierTag(tier) { return tier ? '<span class="tier-tag">' + esc(tier) + '</span>' : ''; }
 
   var state = null, failures = 0, tab = 'briefing';
   var logbook = null, careers = null, lbFilter = 'all', lbShown = 40, lastLoaded = {};
@@ -233,7 +237,7 @@
     left += '<div class="card"><h3>' + t('Paris d\'atterrissage') + '<small>' + (b.count ? b.count + ' ' + t('pronostics') : '') + '</small></h3><div><span class="state' + (b.state === 'open' ? ' on' : '') + '" style="margin-left:0">' + (BS[b.state] || t('pas de paris')) + '</span></div>'
       + '<div class="btns">' + btn('bets-open', t('Ouvrir'), b.state !== 'open', 'primary') + btn('bets-lock', t('Fermer les paris'), b.state === 'open') + btn('bets-cancel', t('Annuler'), b.state === 'open' || b.state === 'locked', 'warn') + '</div>';
     (b.guesses || []).forEach(function (g) { left += '<div class="row"><span class="l">' + esc(g.name) + '</span><span class="r">−' + esc(g.fpm) + ' fpm</span></div>'; });
-    if (b.result && b.result.winner) left += '<div class="result">🎯 ' + t('Gagnant') + ' : ' + esc(b.result.winner.name) + ' (' + esc(b.result.winner.fpm) + ', ' + t('à') + ' ' + esc(b.result.winner.diff) + ' ' + t('près') + ') · −' + esc(b.result.actual) + ' fpm</div>';
+    if (b.result && b.result.winner) left += '<div class="result">' + t('Gagnant') + ' : ' + esc(b.result.winner.name) + ' (' + esc(b.result.winner.fpm) + ', ' + t('à') + ' ' + esc(b.result.winner.diff) + ' ' + t('près') + ') · −' + esc(b.result.actual) + ' fpm</div>';
     left += '</div>';
     if ((st.leaderboard || []).length) {
       left += '<div class="card"><h3>' + t('Meilleurs parieurs') + '</h3>';
@@ -243,25 +247,25 @@
     left += '<div class="card"><h3>' + t('Activité du chat') + '</h3><div class="log">';
     var log = st.log || [];
     if (!log.length) left += '<div>' + t('Rien pour l\'instant.') + '</div>';
-    log.forEach(function (e) { left += '<div class="' + (e.kind === 'reply' ? 'reply' : '') + '">' + (e.user ? '<b>' + esc(e.user) + '</b>' : '') + esc(e.text) + '</div>'; });
+    log.forEach(function (e) { left += '<div class="' + (e.kind === 'reply' ? 'reply' : '') + '">' + (e.user ? '<b>' + esc(noEmoji(e.user)) + '</b>' : '') + esc(noEmoji(e.text)) + '</div>'; });
     left += '</div></div>';
 
     var right = '', c = st.cabin;
     if (c) {
       right += '<div class="card"><h3>' + t('À bord') + '<small>' + c.pax + ' ' + t('passagers') + '</small></h3><div><span class="state' + (c.boarding ? ' on' : '') + '" style="margin-left:0">' + (c.boarding ? t('Embarquement ouvert') : t('Portes fermées')) + '</span>'
-        + (c.turbulence ? '<span class="state warn">⚠ ' + c.turbulence.safe + '/' + c.turbulence.atRisk + ' ' + t('ceintures') + '</span>' : '') + '</div>'
+        + (c.turbulence ? '<span class="state warn">' + t('Turbulences !') + ' ' + c.turbulence.safe + '/' + c.turbulence.atRisk + ' ' + t('ceintures') + '</span>' : '') + '</div>'
         + '<div class="btns">' + btn('boarding-open', t('Ouvrir l\'embarquement'), !c.boarding, 'primary') + btn('boarding-close', t('Fermer les portes'), c.boarding)
         + (c.turbOn ? btn('turbulence', t('Turbulences !'), !c.turbulence, 'warn') : '') + btn('shot', t('Capture d\'écran'), true) + '</div>';
-      if (c.nextFlyover) right += '<div class="names" style="margin-bottom:6px">🏠 ' + t('Prochain survol') + ' : ' + t('chez') + ' ' + esc(c.nextFlyover.name) + ' (' + esc(c.nextFlyover.city) + ') · ' + esc(c.nextFlyover.km) + ' km</div>';
-      if (c.quiz) right += '<div class="names" style="margin-bottom:6px">🧭 ' + t('Quiz en cours') + ' : ' + esc(c.quiz.text) + '</div>';
+      if (c.nextFlyover) right += '<div class="names" style="margin-bottom:6px">' + t('Prochain survol') + ' : ' + t('chez') + ' ' + esc(noEmoji(c.nextFlyover.name)) + ' (' + esc(c.nextFlyover.city) + ') · ' + esc(c.nextFlyover.km) + ' km</div>';
+      if (c.quiz) right += '<div class="names" style="margin-bottom:6px">' + t('Quiz en cours') + ' : ' + esc(c.quiz.text) + '</div>';
       if (!c.passengers.length) right += '<div class="empty">' + t('Personne à bord pour l\'instant.') + '</div>';
       c.passengers.forEach(function (p) {
-        right += '<div class="row pax' + (p.present ? '' : ' away') + '"><span class="l"><span class="tier">' + esc(p.tierIcon) + '</span>' + pseudo(p.name, p.look) + (p.leg > 1 ? ' <span class="net">×' + p.leg + '</span>' : '') + '</span><span class="r">' + num(p.miles) + ' mi</span></div>';
+        right += '<div class="row pax' + (p.present ? '' : ' away') + '"><span class="l">' + tierTag(p.tier) + pseudo(p.name, p.look) + (p.leg > 1 ? ' <span class="net">×' + p.leg + '</span>' : '') + '</span><span class="r">' + num(p.miles) + ' mi</span></div>';
       });
       right += '</div>';
       if ((c.ranking || []).length) {
         right += '<div class="card"><h3>' + t('Classement des miles') + '</h3>';
-        c.ranking.forEach(function (r, i) { right += '<div class="row"><span class="l">' + (i + 1) + '. <span class="tier">' + esc(r.tierIcon) + '</span>' + pseudo(r.name, r.look) + '</span><span class="r">' + num(r.miles) + '</span></div>'; });
+        c.ranking.forEach(function (r, i) { right += '<div class="row"><span class="l">' + (i + 1) + '. ' + tierTag(r.tier) + pseudo(r.name, r.look) + '</span><span class="r">' + num(r.miles) + '</span></div>'; });
         right += '</div>';
       }
     } else right += '<div class="card"><div class="btns" style="margin-top:0">' + btn('shot', t('Capture d\'écran'), true) + '</div></div>';
@@ -319,6 +323,7 @@
     if (attr === 'data-lb') { lbFilter = v; lbShown = 40; return render(); }
     if (attr === 'data-flight') return openFlight(v);
     if (v === 'sheet-close') return closeSheet();
+    if (v === 'sheet-stay') return; // toucher l'intérieur de la fiche ne la ferme pas
     if (v === 'lb-more') { lbShown += 60; return render(); }
     if (v === 'ofp') {
       openSheet(t('OFP SimBrief'), '<div class="empty">' + t('Chargement…') + '</div>');
@@ -326,6 +331,7 @@
         var o = j && j.ofp;
         $('sheetTitle').textContent = o ? 'OFP ' + (o.callsign || '') + ' · ' + (o.dep || '') + ' → ' + (o.arr || '') + (o.airac ? ' · AIRAC ' + o.airac : '') : t('OFP SimBrief');
         $('sheetBody').innerHTML = o ? '<pre>' + esc(o.text) + '</pre>' : '<div class="empty">' + t('Pas d\'OFP SimBrief importé.') + '</div>';
+        $('sheetBody').scrollTop = 0; $('sheetBody').scrollLeft = 0; // toujours le début de l'OFP
       });
     }
     if (el.className.indexOf(' off') >= 0) return;

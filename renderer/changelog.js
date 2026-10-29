@@ -9,6 +9,16 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '2.0.1',
+    date: '2026-10-29',
+    title: "EFB lisible dans MSFS 2024",
+    items: [
+      ['fix', "EFB de MSFS 2024 : lettres accentuées, flèches et symboles s'affichent enfin (polices complètes fournies par FlightBrief)."],
+      ['fix', "EFB : l'OFP SimBrief se ferme avec un gros bouton toujours visible ou en touchant le fond, et ses colonnes sont alignées."],
+      ['improved', "EFB : statut des passagers en toutes lettres (Argent, Or…) au lieu des emojis, que le simulateur n'affiche pas."]
+    ]
+  },
+  {
     version: '2.0.0',
     date: '2026-10-29',
     title: "Commandes du chat à ta main, duty free, EFB dans MSFS 2024",

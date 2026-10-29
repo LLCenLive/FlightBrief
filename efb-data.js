@@ -50,7 +50,7 @@ function careers(db) {
 function ofpText(db) {
   const o = (db || {}).ofp;
   if (!o || !o.planHtml) return { ok: true, ofp: null };
-  const text = String(o.planHtml).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|h\d|tr)>/gi, '\n').replace(/<[^>]+>/g, '')
+  const text = String(o.planHtml).replace(/\r/g, '').replace(/<br\s*\/?>\n?/gi, '\n').replace(/<\/(p|div|h\d|tr)>/gi, '\n').replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
   return { ok: true, ofp: { dep: o.dep, arr: o.arr, callsign: o.callsign, aircraft: o.aircraft, airac: o.airac, generatedAt: o.generatedAt, text: text.slice(0, 60000) } };
 }
