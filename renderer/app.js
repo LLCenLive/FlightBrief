@@ -1081,9 +1081,25 @@ function resetLogbookForm(){
   setLbRules('VFR');
 }
 
+// v2.1 — anti-doublon : un seul enregistrement à la fois. Le formulaire est vidé et la liste
+// redessinée AVANT l'écriture disque (lente avec beaucoup de vols trackés) : un 2e clic pendant
+// l'écriture ne peut plus recréer le vol, et l'utilisateur voit tout de suite le résultat.
+let _lbSaving = false;
 async function saveLogbookEntry(){
+  if(_lbSaving) return;
+  _lbSaving = true;
+  const btn = el('lbSaveBtn'), btnLabel = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.classList.add('is-busy'); btn.textContent = 'Enregistrement…'; }
+  try{ await saveLogbookEntryInner(); }
+  finally{
+    _lbSaving = false;
+    if(btn){ btn.disabled = false; btn.classList.remove('is-busy'); btn.textContent = btnLabel; }
+  }
+}
+async function saveLogbookEntryInner(){
+  const editingId = editingLogbookId;
   const entry = {
-    id: editingLogbookId || 'f' + Date.now(),
+    id: editingId || 'f' + Date.now(),
     date: el('lbDate').value || new Date().toISOString().slice(0,10),
     callsign: el('lbCallsign').value.trim(),
     dep: el('lbDep').value.trim().toUpperCase(),
@@ -1099,23 +1115,27 @@ async function saveLogbookEntry(){
   };
   const distVal = parseFloat(el('lbDistance').value);
   if(!el('lbDistance').disabled && isFinite(distVal) && distVal > 0) entry.distanceNm = Math.round(distVal);
-  if(_pendingTrackData && !editingLogbookId){
+  if(_pendingTrackData && !editingId){
     entry.trackData = _pendingTrackData;
     _pendingTrackData = null;
-  } else if(editingLogbookId){
-    const prev = db.logbook.find(f => f.id === editingLogbookId);
-    if(prev && prev.trackData) entry.trackData = prev.trackData;
+  } else if(editingId){
+    const prev = db.logbook.find(f => f.id === editingId);
+    // On garde tout ce que le formulaire ne montre pas (trace, captures, import, toucher…).
+    if(prev) Object.keys(prev).forEach(k => { if(!(k in entry)) entry[k] = prev[k]; });
+    if(prev && prev.distanceNm != null && entry.distanceNm == null && el('lbDistance').disabled) entry.distanceNm = prev.distanceNm;
   }
-  if(editingLogbookId){
-    const idx = db.logbook.findIndex(f => f.id === editingLogbookId);
+  if(editingId){
+    const idx = db.logbook.findIndex(f => f.id === editingId);
     if(idx > -1) db.logbook[idx] = entry;
+    else db.logbook.unshift(entry);
   } else {
     db.logbook.unshift(entry);
   }
-  await saveDbNow();
   resetLogbookForm();
   renderLogbook();
-  if(window.FBv15) FBv15.afterLogbookChange();
+  await saveDbNow();
+  if(window.FBNotice) FBNotice.show({ kind: 'ok', title: editingId ? 'Vol modifié' : 'Vol enregistré', text: `${entry.dep || '----'} → ${entry.arr || '----'}`, ms: 2600, sound: false });
+  if(window.FBv15) setTimeout(() => FBv15.afterLogbookChange(), 0);
 }
 
 function editLogbookEntry(id){
@@ -1288,113 +1308,210 @@ function escapeHtml(str){
 /* =========================================================
    CAREER
    ========================================================= */
+/* ---- v2.1 — Carrière refondue ----
+   • Un seul bouton « + » en haut à droite (menu : Nouvelle carrière / Nouveau tour).
+   • Création et modification dans des modales : grades et étapes saisis ligne par ligne,
+     avec saisie rapide (coller « LFPG EDDF LOWW LIRF » ou « LFPG-EDDF » ligne à ligne).
+   • Tours possibles pour toutes les carrières (plus seulement IVAO).
+   • Étapes validées automatiquement quand un vol du logbook correspond (option par tour). */
 let editingCareerId = null;
+let _careerRanksDraft = [];
 
+const CAREER_TYPES = { VA: 'Compagnie virtuelle', IVAO: 'IVAO', VATSIM: 'VATSIM', Autre: 'Autre' };
+const CAREER_PRESETS = {
+  VA: [['Cadet', 0], ['First Officer', 50], ['Senior First Officer', 150], ['Captain', 300], ['Senior Captain', 600]],
+  IVAO: [['FS1', 0], ['FS2', 25], ['FS3', 50], ['PP', 100], ['SPP', 300], ['CP', 500], ['ADP', 750], ['APE', 1000]],
+  VATSIM: [['P0', 0], ['P1', 10], ['P2', 50], ['P3', 100], ['P4', 300]]
+};
+
+function careerMenuClose(){ const m = el('careerAddPop'); if(m) m.classList.add('hidden'); document.removeEventListener('click', careerMenuOutside, true); }
+function careerMenuOutside(e){ if(!e.target.closest('#careerAddMenu')) careerMenuClose(); }
+function toggleCareerAddMenu(e){
+  if(e) e.stopPropagation();
+  const m = el('careerAddPop');
+  const open = m.classList.contains('hidden');
+  m.classList.toggle('hidden', !open);
+  if(open) setTimeout(() => document.addEventListener('click', careerMenuOutside, true), 0);
+  else careerMenuClose();
+}
+
+/* ---------------- Carrière : modale ---------------- */
 function resetCareerForm(){
   editingCareerId = null;
   el('careerFormTitle').textContent = 'Nouvelle carrière';
   el('carName').value = '';
   el('carType').value = 'VA';
-  el('carRanks').value = '';
+  _careerRanksDraft = CAREER_PRESETS.VA.map(([name, hours]) => ({ name, hours }));
+  renderCareerRanksEditor();
 }
-
-async function saveCareer(){
-  const name = el('carName').value.trim();
-  if(!name){ alert('Indique un nom pour cette carrière.'); return; }
-  const ranks = el('carRanks').value.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
-    const [n, h] = line.split(';');
-    return { name: (n||'').trim(), hours: parseFloat(h) || 0 };
-  }).sort((a,b) => a.hours - b.hours);
-
-  const career = { id: editingCareerId || 'c' + Date.now(), name, type: el('carType').value, ranks };
-  if(editingCareerId){
-    const idx = db.careers.findIndex(c => c.id === editingCareerId);
-    const prevTours = idx > -1 ? db.careers[idx].tours : undefined;
-    if(idx > -1) db.careers[idx] = { ...career, tours: prevTours };
-  } else {
-    db.careers.push(career);
-  }
-  await saveDbNow();
+function openCareerEditor(id){
+  careerMenuClose();
   resetCareerForm();
-  renderCareers();
-  populateCareerSelect();
+  if(id){
+    const c = db.careers.find(x => x.id === id);
+    if(c){
+      editingCareerId = id;
+      el('careerFormTitle').textContent = 'Modifier la carrière';
+      el('carName').value = c.name;
+      el('carType').value = c.type;
+      _careerRanksDraft = (c.ranks || []).map(r => ({ name: r.name, hours: r.hours }));
+      renderCareerRanksEditor();
+    }
+  }
+  el('careerEditOverlay').classList.remove('hidden');
+  setTimeout(() => el('carName').focus(), 30);
+}
+function closeCareerEditor(){ el('careerEditOverlay').classList.add('hidden'); editingCareerId = null; }
+function editCareer(id){ openCareerEditor(id); }
+
+function renderCareerRanksEditor(){
+  const box = el('carRanksList');
+  if(!_careerRanksDraft.length) _careerRanksDraft.push({ name: '', hours: 0 });
+  box.innerHTML = _careerRanksDraft.map((r, i) => `<div class="rank-row" data-i="${i}">
+      <span class="rank-idx">${i + 1}</span>
+      <input type="text" class="rk-name" value="${escapeHtml(r.name)}" placeholder="Nom du grade" maxlength="40">
+      <div class="rk-hours"><input type="number" class="rk-h" value="${r.hours}" min="0" step="1"${i === 0 ? ' title="Le premier grade commence à 0 h"' : ''}><span>h</span></div>
+      <button class="icon-btn" type="button" data-act="del" title="Retirer ce grade"${_careerRanksDraft.length < 2 ? ' disabled' : ''}>✕</button>
+    </div>`).join('');
+  box.querySelectorAll('.rank-row').forEach(row => {
+    const i = +row.dataset.i;
+    row.querySelector('.rk-name').oninput = e => { _careerRanksDraft[i].name = e.target.value; };
+    row.querySelector('.rk-h').oninput = e => { _careerRanksDraft[i].hours = parseFloat(e.target.value) || 0; };
+    row.querySelector('.rk-name').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); row.querySelector('.rk-h').focus(); } };
+    row.querySelector('.rk-h').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); addCareerRank(); } };
+    row.querySelector('[data-act="del"]').onclick = () => { _careerRanksDraft.splice(i, 1); renderCareerRanksEditor(); };
+  });
+}
+function addCareerRank(){
+  const last = _careerRanksDraft[_careerRanksDraft.length - 1];
+  _careerRanksDraft.push({ name: '', hours: last ? Math.round((last.hours || 0) + 50) : 0 });
+  renderCareerRanksEditor();
+  const rows = el('carRanksList').querySelectorAll('.rk-name');
+  if(rows.length) rows[rows.length - 1].focus();
+}
+function applyCareerPreset(){
+  const p = CAREER_PRESETS[el('carType').value];
+  if(!p) return;
+  const filled = _careerRanksDraft.some(r => r.name.trim());
+  if(filled && !confirm('Remplacer les grades saisis par le modèle de ce type de carrière ?')) return;
+  _careerRanksDraft = p.map(([name, hours]) => ({ name, hours }));
+  renderCareerRanksEditor();
 }
 
-function editCareer(id){
-  const c = db.careers.find(x => x.id === id);
-  if(!c) return;
-  editingCareerId = id;
-  el('careerFormTitle').textContent = 'Modifier la carrière';
-  el('carName').value = c.name;
-  el('carType').value = c.type;
-  el('carRanks').value = c.ranks.map(r => `${r.name};${r.hours}`).join('\n');
-  window.scrollTo({top:0, behavior:'smooth'});
+let _careerSaving = false;
+async function saveCareer(){
+  if(_careerSaving) return;
+  const name = el('carName').value.trim();
+  if(!name){ el('carName').focus(); el('carName').classList.add('field-err'); setTimeout(() => el('carName').classList.remove('field-err'), 1400); return; }
+  const ranks = _careerRanksDraft.map(r => ({ name: (r.name || '').trim(), hours: Math.max(0, parseFloat(r.hours) || 0) }))
+    .filter(r => r.name).sort((a, b) => a.hours - b.hours);
+  if(ranks.length) ranks[0].hours = 0;
+  _careerSaving = true;
+  try{
+    const career = { id: editingCareerId || 'c' + Date.now(), name, type: el('carType').value, ranks };
+    if(editingCareerId){
+      const idx = db.careers.findIndex(c => c.id === editingCareerId);
+      if(idx > -1) db.careers[idx] = { ...db.careers[idx], ...career };
+    } else {
+      db.careers.push(career);
+    }
+    closeCareerEditor();
+    renderCareers();
+    populateCareerSelect();
+    await saveDbNow();
+  } finally { _careerSaving = false; }
 }
 
 async function deleteCareer(id){
-  if(!confirm('Supprimer cette carrière ? Les vols liés resteront dans le logbook mais perdront ce lien.')) return;
+  const c = db.careers.find(x => x.id === id);
+  const nTours = c && c.tours ? c.tours.length : 0;
+  if(!confirm(`Supprimer cette carrière${nTours ? ` et ses ${nTours} tour${nTours > 1 ? 's' : ''}` : ''} ? Les vols liés resteront dans le logbook mais perdront ce lien.`)) return;
   db.careers = db.careers.filter(c => c.id !== id);
   db.logbook.forEach(f => { if(f.careerId === id) f.careerId = null; });
-  await saveDbNow();
   renderCareers();
   populateCareerSelect();
   renderLogbook();
+  await saveDbNow();
+}
+
+function careerProgress(c){
+  const flights = db.logbook.filter(f => f.careerId === c.id);
+  const totalMin = flights.reduce((s, f) => s + (f.durationMin || 0), 0);
+  const totalHours = totalMin / 60;
+  const ranks = c.ranks && c.ranks.length ? c.ranks : [{ name: 'Non défini', hours: 0 }];
+  let current = ranks[0], next = null, idx = 0;
+  for(let i = 0; i < ranks.length; i++){
+    if(totalHours >= ranks[i].hours){ current = ranks[i]; idx = i; }
+    if(totalHours < ranks[i].hours){ next = ranks[i]; break; }
+  }
+  const from = current.hours || 0;
+  const pct = next ? Math.max(0, Math.min(100, ((totalHours - from) / Math.max(0.01, next.hours - from)) * 100)) : 100;
+  const last = flights.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0];
+  return { flights, totalHours, ranks, current, next, idx, pct, last };
 }
 
 function renderCareers(){
+  autoValidateTours(false);
   const grid = el('careerGrid');
   if(!db.careers.length){
-    grid.innerHTML = '<div class="empty-state">Aucune carrière définie. Crée-en une ci-dessous pour suivre ta progression.</div>';
+    grid.innerHTML = `<div class="career-empty">
+      <div class="ce-icon">🎖️</div>
+      <div><b>Aucune carrière pour l'instant</b><p>Crée une carrière (compagnie virtuelle, IVAO, VATSIM…) pour suivre tes heures, tes grades et tes tours.</p></div>
+      <button class="btn primary" onclick="openCareerEditor()">＋ Nouvelle carrière</button>
+    </div>`;
   } else {
     grid.innerHTML = db.careers.map(c => {
-      const totalMin = db.logbook.filter(f => f.careerId === c.id).reduce((s,f) => s + f.durationMin, 0);
-      const totalHours = totalMin / 60;
-      const ranks = c.ranks.length ? c.ranks : [{name:'Non défini', hours:0}];
-      let current = ranks[0], next = null;
-      for(let i=0;i<ranks.length;i++){
-        if(totalHours >= ranks[i].hours) current = ranks[i];
-        if(totalHours < ranks[i].hours){ next = ranks[i]; break; }
-      }
-      const progressPct = next ? Math.min(100, (totalHours / next.hours) * 100) : 100;
-
+      const p = careerProgress(c);
+      const tours = c.tours || [];
+      const toursActive = tours.filter(t => t.legs && t.legs.length && !FBShared.tourIsComplete(t)).length;
+      const toursDone = tours.filter(t => FBShared.tourIsComplete(t)).length;
       return `<div class="career-card">
-        <div class="type-tag">${escapeHtml(c.type)}</div>
+        <div class="cc-head">
+          <span class="cc-type t-${escapeHtml(c.type)}">${escapeHtml(CAREER_TYPES[c.type] || c.type)}</span>
+          <div class="cc-actions">
+            <button class="icon-btn" onclick="openCareerEditor('${c.id}')" title="Modifier la carrière">✎</button>
+            <button class="icon-btn" onclick="deleteCareer('${c.id}')" title="Supprimer la carrière">🗑</button>
+          </div>
+        </div>
         <div class="name">${escapeHtml(c.name)}</div>
-        <div class="rank-now">${escapeHtml(current.name)}</div>
-        <div class="progress-track"><div class="progress-fill" style="width:${progressPct}%"></div></div>
+        <div class="cc-rank"><span class="rank-now">${escapeHtml(p.current.name)}</span>${p.ranks.length > 1 ? `<span class="cc-rank-n">grade ${p.idx + 1}/${p.ranks.length}</span>` : ''}</div>
+        <div class="progress-track"><div class="progress-fill" style="width:${p.pct.toFixed(1)}%"></div></div>
         <div class="meta">
-          <span>${totalHours.toFixed(1)} h</span>
-          <span>${next ? 'Prochain : ' + escapeHtml(next.name) + ' à ' + next.hours + 'h' : 'Grade maximum atteint'}</span>
+          <span>${p.totalHours.toFixed(1)} h</span>
+          <span>${p.next ? `${escapeHtml(p.next.name)} dans ${Math.max(0, p.next.hours - p.totalHours).toFixed(1)} h` : 'Grade maximum atteint'}</span>
         </div>
-        <div class="btn-row">
-          <button class="icon-btn" onclick="editCareer('${c.id}')">Modifier</button>
-          <button class="icon-btn" onclick="deleteCareer('${c.id}')">Supprimer</button>
+        <div class="cc-stats">
+          <div><b>${p.flights.length}</b><span>vol${p.flights.length > 1 ? 's' : ''}</span></div>
+          <div><b>${toursActive}</b><span>tour${toursActive > 1 ? 's' : ''} en cours</span></div>
+          <div><b>${toursDone}</b><span>terminé${toursDone > 1 ? 's' : ''}</span></div>
+          <div><b>${p.last ? escapeHtml(FBShared.fmtDateFr(p.last.date)) : '—'}</b><span>dernier vol</span></div>
         </div>
+        <button class="btn small block cc-addtour" onclick="openTourEditor(null, '${c.id}')">＋ Ajouter un tour à cette carrière</button>
       </div>`;
     }).join('');
   }
   renderTours();
-  populateTourCareerSelect();
   renderBriefingTourMatch();
 }
 
 /* =========================================================
-   TOURS IVAO — timeline horizontale ("paysage"), édition, animation
+   TOURS — liste, éditeur (modale), validation des étapes
    ========================================================= */
 let editingTourId = null; // { careerId, tourId } ou null
 let _justCompletedTourId = null;
-
+let _tourLegsDraft = [];
 let _toursDoneOpen = false; // état replié/déplié de la section "Tours terminés", conservé entre deux rendus
 let _tourCoordsRequested = new Set(); // OACI déjà demandés à l'index local pour les distances des tours
 
 // Timeline horizontale d'un tour (réutilisée dans la liste ET dans la fenêtre de détail).
 function tourTrackHtml(c, t){
   const done = t.legs.filter(l => l.done).length;
+  const nextIdx = t.legs.findIndex(l => !l.done);
   const nodes = [{ icao: t.legs[0].dep, done: t.legs[0].done || done > 0 }];
   let html = `<div class="tour-node ${nodes[0].done ? 'done':''}"><div class="dot"></div><div class="icao">${escapeHtml(nodes[0].icao || '----')}</div></div>`;
   t.legs.forEach((l, i) => {
-    html += `<div class="tour-leg ${l.done ? 'done':''}"></div>`;
-    html += `<div class="tour-node ${l.done ? 'done':''}" onclick="toggleTourLeg('${c.id}','${t.id}',${i})" title="Étape ${escapeHtml(l.dep)} → ${escapeHtml(l.arr)} — valide aussi les étapes précédentes">
+    html += `<div class="tour-leg ${l.done ? 'done':''}${i === nextIdx ? ' next' : ''}"></div>`;
+    html += `<div class="tour-node ${l.done ? 'done':''}${i === nextIdx ? ' next' : ''}" onclick="toggleTourLeg('${c.id}','${t.id}',${i})" title="Étape ${i + 1} : ${escapeHtml(l.dep)} → ${escapeHtml(l.arr)} — ${l.done ? 'cliquer pour annuler cette étape et les suivantes' : 'cliquer pour valider (et les étapes précédentes)'}">
       <div class="dot"></div><div class="icao">${escapeHtml(l.arr || '----')}</div>
     </div>`;
   });
@@ -1411,9 +1528,14 @@ function ensureTourCoords(tours){
   })));
   if(missing.length) resolveAirportCoords(missing).then(() => { renderTours(); refreshTourModalIfOpen(); });
 }
+function legNm(l){
+  const a = cachedAirportLookup(l.dep), b = cachedAirportLookup(l.arr);
+  return a && b ? Math.round(FBShared.haversineNm(a.lat, a.lon, b.lat, b.lon)) : null;
+}
 
 function renderTours(){
   const container = el('toursList');
+  if(!container) return;
 
   // Le innerHTML est reconstruit à chaque rendu : on sauvegarde le scroll horizontal de
   // chaque piste de tour avant reconstruction, puis on le restaure juste après.
@@ -1424,10 +1546,10 @@ function renderTours(){
   });
 
   const all = [];
-  db.careers.filter(c => c.type === 'IVAO' && c.tours && c.tours.length)
-    .forEach(c => c.tours.forEach(t => { if(t.legs && t.legs.length) all.push({ c, t }); }));
+  db.careers.forEach(c => (c.tours || []).forEach(t => { if(t.legs && t.legs.length) all.push({ c, t }); }));
+  el('toursHeadCount').textContent = '';
   if(!all.length){
-    container.innerHTML = '<div class="tours-empty">Aucun tour IVAO pour le moment. Crée une carrière de type IVAO puis ajoute un tour ci-dessous.</div>';
+    container.innerHTML = `<div class="tours-empty">Aucun tour pour le moment.${db.careers.length ? ' Clique sur <b>＋</b> en haut à droite puis « Nouveau tour ».' : ' Crée d\'abord une carrière.'}</div>`;
     return;
   }
   ensureTourCoords(all);
@@ -1438,24 +1560,41 @@ function renderTours(){
   const completed = all.filter(({ t }) => FBShared.tourIsComplete(t) && t.id !== _justCompletedTourId)
     .map(x => ({ ...x, stats: FBShared.tourStats(x.c, x.t, db.logbook, cachedAirportLookup) }))
     .sort((a, b) => (b.stats.completedAt || '').localeCompare(a.stats.completedAt || ''));
+  el('toursHeadCount').textContent = active.length ? String(active.length) : '';
 
   const activeHtml = active.length ? active.map(({ c, t }) => {
     const done = t.legs.filter(l => l.done).length;
+    const pct = Math.round(100 * done / t.legs.length);
     const justCompleted = _justCompletedTourId === t.id;
+    const nextIdx = t.legs.findIndex(l => !l.done);
+    const next = nextIdx > -1 ? t.legs[nextIdx] : null;
+    const nmTotal = t.legs.reduce((s, l) => s + (legNm(l) || 0), 0);
+    const nmDone = t.legs.reduce((s, l) => s + (l.done ? (legNm(l) || 0) : 0), 0);
+    const nextNm = next ? legNm(next) : null;
+    const nextInfo = next ? cachedAirportLookup(next.arr) : null;
     return `<div class="tour-card ${justCompleted ? 'just-completed':''}" data-tour-id="${t.id}">
       <div class="tour-card-head">
         <div class="titles">
-          <div class="career-name">${escapeHtml(c.name)}</div>
+          <div class="career-name">${escapeHtml(c.name)}${t.autoValidate !== false ? ' · <span class="tc-auto" title="Les étapes se valident toutes seules quand un vol correspondant arrive dans le logbook">auto</span>' : ''}</div>
           <div class="tour-name">${escapeHtml(t.name)}</div>
         </div>
-        <div class="tour-progress">${done}/${t.legs.length} étapes</div>
         <div class="tour-card-actions">
           <button class="icon-btn" onclick="openTourModal('${c.id}','${t.id}')">Détails</button>
-          <button class="icon-btn" onclick="startEditTour('${c.id}','${t.id}')">Modifier</button>
-          <button class="icon-btn" onclick="deleteTour('${c.id}','${t.id}')">Supprimer</button>
+          <button class="icon-btn" onclick="startEditTour('${c.id}','${t.id}')" title="Modifier le tour">✎</button>
+          <button class="icon-btn" onclick="deleteTour('${c.id}','${t.id}')" title="Supprimer le tour">🗑</button>
         </div>
       </div>
+      <div class="tc-progress">
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <span class="tc-pct"><b>${done}</b>/${t.legs.length} étapes · ${pct} %${nmTotal ? ` · ${FBShared.fmtNm(nmDone)} / ${FBShared.fmtNm(nmTotal)}` : ''}</span>
+      </div>
       ${justCompleted ? '<div class="tour-complete-badge">✓ Tour terminé — rangé dans « Tours terminés »</div>' : ''}
+      ${next ? `<div class="tc-next">
+        <span class="tc-next-k">Prochaine étape ${nextIdx + 1}</span>
+        <span class="tc-next-v">${escapeHtml(next.dep)} → ${escapeHtml(next.arr)}${nextInfo && nextInfo.name ? ` <small>${escapeHtml(nextInfo.name)}</small>` : ''}${nextNm ? ` <small>· ${FBShared.fmtNm(nextNm)}</small>` : ''}</span>
+        <button class="btn small" onclick="prepareTourLeg('${c.id}','${t.id}',${nextIdx})" title="Remplir le Briefing avec cette étape">✈ Préparer le vol</button>
+        <button class="btn small" onclick="toggleTourLeg('${c.id}','${t.id}',${nextIdx})" title="Marquer cette étape comme faite">✓ Faite</button>
+      </div>` : ''}
       <div class="tour-track">${tourTrackHtml(c, t)}</div>
     </div>`;
   }).join('') : '<div class="tours-empty">Aucun tour en cours — tous tes tours sont terminés 🎉</div>';
@@ -1494,6 +1633,7 @@ function renderTours(){
     const saved = scrollPositions[card.dataset.tourId];
     const track = card.querySelector('.tour-track');
     if(track && saved) track.scrollLeft = saved;
+    else if(track){ const nx = track.querySelector('.tour-node.next'); if(nx) track.scrollLeft = Math.max(0, nx.offsetLeft - track.clientWidth / 2); }
   });
 
   if(_justCompletedTourId){
@@ -1506,82 +1646,243 @@ function renderTours(){
   }
 }
 
-function populateTourCareerSelect(){
-  const sel = el('tourCareerSelect');
-  const current = sel.value;
-  const ivaoCareers = db.careers.filter(c => c.type === 'IVAO');
-  sel.innerHTML = ivaoCareers.length
-    ? ivaoCareers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')
-    : '<option value="">Aucune carrière IVAO</option>';
-  if(current) sel.value = current;
+// Remplit le Briefing avec l'étape (départ / arrivée) et y bascule.
+function prepareTourLeg(careerId, tourId, i){
+  const c = db.careers.find(x => x.id === careerId);
+  const t = c && (c.tours || []).find(x => x.id === tourId);
+  const l = t && t.legs[i];
+  if(!l) return;
+  el('depIcao').value = l.dep; el('arrIcao').value = l.arr;
+  const a = cachedAirportLookup(l.dep), b = cachedAirportLookup(l.arr);
+  if(a && a.name && !el('depName').value) el('depName').value = a.name;
+  if(b && b.name) el('arrName').value = b.name;
+  ['depIcao', 'arrIcao', 'depName', 'arrName'].forEach(id => el(id).dispatchEvent(new Event('input', { bubbles: true })));
+  render();
+  switchView('briefing');
+  if(window.FBNotice) FBNotice.show({ kind: 'info', title: 'Étape chargée dans le Briefing', text: `${t.name} · étape ${i + 1} : ${l.dep} → ${l.arr}`, ms: 3500, sound: false });
 }
 
+/* ---------------- Éditeur de tour (modale) ---------------- */
+function populateTourCareerSelect(){
+  const sel = el('tourCareerSelect');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = db.careers.length
+    ? db.careers.map(c => `<option value="${c.id}">${escapeHtml(c.name)} · ${escapeHtml(CAREER_TYPES[c.type] || c.type)}</option>`).join('')
+    : '<option value="">Aucune carrière</option>';
+  if(current && db.careers.some(c => c.id === current)) sel.value = current;
+}
 function resetTourForm(){
   editingTourId = null;
   el('tourFormTitle').textContent = 'Nouveau tour';
-  el('tourSaveBtn').textContent = 'Ajouter ce tour';
+  el('tourSaveBtn').textContent = 'Créer le tour';
   el('tourName').value = '';
-  el('tourLegs').value = '';
+  el('tourQuick').value = '';
+  el('tourAuto').checked = true;
+  _tourLegsDraft = [{ dep: '', arr: '' }];
+  renderTourLegsEditor();
 }
-
+function openTourEditor(tour, careerId){
+  careerMenuClose();
+  if(!db.careers.length){
+    if(confirm("Un tour appartient à une carrière. Créer d'abord une carrière ?")) openCareerEditor();
+    return;
+  }
+  resetTourForm();
+  populateTourCareerSelect();
+  if(careerId) el('tourCareerSelect').value = careerId;
+  if(tour){
+    editingTourId = { careerId, tourId: tour.id };
+    el('tourFormTitle').textContent = 'Modifier le tour';
+    el('tourSaveBtn').textContent = 'Enregistrer les modifications';
+    el('tourName').value = tour.name;
+    el('tourAuto').checked = tour.autoValidate !== false;
+    _tourLegsDraft = tour.legs.map(l => ({ dep: l.dep, arr: l.arr }));
+    renderTourLegsEditor();
+  }
+  el('tourEditOverlay').classList.remove('hidden');
+  setTimeout(() => el(tour ? 'tourName' : 'tourName').focus(), 30);
+}
+function closeTourEditor(){ el('tourEditOverlay').classList.add('hidden'); editingTourId = null; }
 function startEditTour(careerId, tourId){
   const career = db.careers.find(c => c.id === careerId);
   const tour = career && (career.tours||[]).find(t => t.id === tourId);
-  if(!tour) return;
-  editingTourId = { careerId, tourId };
-  el('tourFormTitle').textContent = 'Modifier le tour';
-  el('tourSaveBtn').textContent = 'Enregistrer les modifications';
-  populateTourCareerSelect();
-  el('tourCareerSelect').value = careerId;
-  el('tourName').value = tour.name;
-  el('tourLegs').value = tour.legs.map(l => `${l.dep};${l.arr}`).join('\n');
-  el('tourPanel').scrollIntoView({behavior:'smooth', block:'center'});
+  if(tour) openTourEditor(tour, careerId);
 }
 
+// Saisie rapide : « LFPG EDDF LOWW » (chaîne) ou une étape par ligne « LFPG-EDDF », « LFPG;EDDF »…
+function parseTourLegsText(text){
+  const lines = String(text || '').toUpperCase().split(/\r?\n/).map(l => l.match(/\b[A-Z][A-Z0-9]{3}\b/g) || []).filter(t => t.length);
+  if(!lines.length) return [];
+  if(lines.length > 1 && lines.every(t => t.length === 2)) return lines.map(([dep, arr]) => ({ dep, arr }));
+  const chain = lines.flat();
+  const legs = [];
+  for(let i = 0; i + 1 < chain.length; i++) if(chain[i] !== chain[i + 1]) legs.push({ dep: chain[i], arr: chain[i + 1] });
+  return legs;
+}
+function applyTourQuick(mode){
+  const legs = parseTourLegsText(el('tourQuick').value);
+  const msg = el('tourQuickMsg');
+  if(!legs.length){ msg.className = 'status-msg err'; msg.textContent = 'Aucun code OACI reconnu (4 caractères, ex : LFPG EDDF LOWW).'; return; }
+  const cur = _tourLegsDraft.filter(l => l.dep || l.arr);
+  _tourLegsDraft = mode === 'append' ? cur.concat(legs) : legs;
+  el('tourQuick').value = '';
+  msg.className = 'status-msg ok'; msg.textContent = `${legs.length} étape${legs.length > 1 ? 's' : ''} ${mode === 'append' ? 'ajoutée' : 'créée'}${legs.length > 1 ? 's' : ''}.`;
+  setTimeout(() => { if(msg.textContent.includes('étape')) msg.textContent = ''; }, 3000);
+  renderTourLegsEditor();
+}
+
+const refreshTourLegsMeta = debounce(async () => {
+  const codes = [...new Set(_tourLegsDraft.flatMap(l => [l.dep, l.arr]).filter(c => /^[A-Z0-9]{4}$/.test(c || '')))];
+  if(codes.length) await resolveAirportCoords(codes);
+  const rows = el('tourLegsList').querySelectorAll('.leg-row');
+  let total = 0, count = 0;
+  _tourLegsDraft.forEach((l, i) => {
+    const row = rows[i]; if(!row) return;
+    const a = l.dep && cachedAirportLookup(l.dep), b = l.arr && cachedAirportLookup(l.arr);
+    const nm = a && b ? Math.round(FBShared.haversineNm(a.lat, a.lon, b.lat, b.lon)) : null;
+    if(nm != null){ total += nm; count++; }
+    row.querySelector('.lg-nm').textContent = nm != null ? FBShared.fmtNm(nm) : '';
+    row.querySelector('.lg-dep').classList.toggle('field-warn', !!(l.dep && l.dep.length === 4 && _airportCoordCache[l.dep] === null));
+    row.querySelector('.lg-arr').classList.toggle('field-warn', !!(l.arr && l.arr.length === 4 && _airportCoordCache[l.arr] === null));
+    row.querySelector('.lg-dep').title = a && a.name ? a.name : (l.dep && _airportCoordCache[l.dep] === null ? 'Aéroport inconnu de l\'index' : '');
+    row.querySelector('.lg-arr').title = b && b.name ? b.name : (l.arr && _airportCoordCache[l.arr] === null ? 'Aéroport inconnu de l\'index' : '');
+    const brk = i > 0 && _tourLegsDraft[i - 1].arr && l.dep && _tourLegsDraft[i - 1].arr !== l.dep;
+    row.classList.toggle('leg-break', !!brk);
+  });
+  const valid = _tourLegsDraft.filter(l => /^[A-Z0-9]{4}$/.test(l.dep || '') && /^[A-Z0-9]{4}$/.test(l.arr || '')).length;
+  el('tourLegsSummary').textContent = `${valid} étape${valid > 1 ? 's' : ''}${count ? ' · ' + FBShared.fmtNm(total) : ''}`;
+}, 180);
+
+function renderTourLegsEditor(focus){
+  const box = el('tourLegsList');
+  if(!_tourLegsDraft.length) _tourLegsDraft.push({ dep: '', arr: '' });
+  box.innerHTML = _tourLegsDraft.map((l, i) => `<div class="leg-row" data-i="${i}">
+      <span class="lg-idx">${i + 1}</span>
+      <input type="text" class="lg-dep" value="${escapeHtml(l.dep)}" placeholder="Départ" maxlength="4" spellcheck="false">
+      <span class="lg-arrow">→</span>
+      <input type="text" class="lg-arr" value="${escapeHtml(l.arr)}" placeholder="Arrivée" maxlength="4" spellcheck="false">
+      <span class="lg-nm"></span>
+      <div class="lg-actions">
+        <button class="icon-btn" type="button" data-act="up" title="Monter"${i === 0 ? ' disabled' : ''}>↑</button>
+        <button class="icon-btn" type="button" data-act="down" title="Descendre"${i === _tourLegsDraft.length - 1 ? ' disabled' : ''}>↓</button>
+        <button class="icon-btn" type="button" data-act="ins" title="Insérer une étape après">＋</button>
+        <button class="icon-btn" type="button" data-act="del" title="Supprimer l'étape">✕</button>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('.leg-row').forEach(row => {
+    const i = +row.dataset.i;
+    const dep = row.querySelector('.lg-dep'), arr = row.querySelector('.lg-arr');
+    const norm = inp => { const v = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); if(v !== inp.value) inp.value = v; return v; };
+    dep.oninput = () => { _tourLegsDraft[i].dep = norm(dep); if(dep.value.length === 4) arr.focus(); refreshTourLegsMeta(); };
+    arr.oninput = () => {
+      _tourLegsDraft[i].arr = norm(arr);
+      // Chaînage : l'arrivée devient le départ de l'étape suivante si celui-ci est vide.
+      const nx = _tourLegsDraft[i + 1];
+      if(nx && !nx.dep && arr.value.length === 4){ nx.dep = arr.value; const nd = box.querySelector(`.leg-row[data-i="${i + 1}"] .lg-dep`); if(nd) nd.value = arr.value; }
+      refreshTourLegsMeta();
+    };
+    arr.onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); insertTourLeg(i); } };
+    dep.onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); arr.focus(); } };
+    row.querySelector('[data-act="up"]').onclick = () => { [_tourLegsDraft[i - 1], _tourLegsDraft[i]] = [_tourLegsDraft[i], _tourLegsDraft[i - 1]]; renderTourLegsEditor(); };
+    row.querySelector('[data-act="down"]').onclick = () => { [_tourLegsDraft[i + 1], _tourLegsDraft[i]] = [_tourLegsDraft[i], _tourLegsDraft[i + 1]]; renderTourLegsEditor(); };
+    row.querySelector('[data-act="ins"]').onclick = () => insertTourLeg(i);
+    row.querySelector('[data-act="del"]').onclick = () => { _tourLegsDraft.splice(i, 1); renderTourLegsEditor(); };
+  });
+  if(focus != null){ const f = box.querySelector(`.leg-row[data-i="${focus}"] ${_tourLegsDraft[focus].dep ? '.lg-arr' : '.lg-dep'}`); if(f) f.focus(); }
+  refreshTourLegsMeta();
+}
+function insertTourLeg(after){
+  const i = after == null ? _tourLegsDraft.length - 1 : after;
+  const prev = _tourLegsDraft[i];
+  _tourLegsDraft.splice(i + 1, 0, { dep: prev && prev.arr ? prev.arr : '', arr: '' });
+  renderTourLegsEditor(i + 1);
+}
+
+let _tourSaving = false;
 async function saveTour(){
+  if(_tourSaving) return;
   const careerId = el('tourCareerSelect').value;
   const career = db.careers.find(c => c.id === careerId);
-  if(!career){ alert("Crée d'abord une carrière de type IVAO."); return; }
+  if(!career){ alert("Crée d'abord une carrière."); return; }
   const name = el('tourName').value.trim() || 'Tour sans nom';
-  const legs = el('tourLegs').value.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
-    const [d, a] = line.split(';');
-    return { dep: (d||'').trim().toUpperCase(), arr: (a||'').trim().toUpperCase(), done:false };
-  });
-  if(!legs.length){ alert('Ajoute au moins une étape (une ligne OACI départ;OACI arrivée).'); return; }
-
-  if(editingTourId){
-    // Si le tour est déplacé vers une autre carrière, on le retire de l'ancienne.
-    const oldCareer = db.careers.find(c => c.id === editingTourId.careerId);
-    const oldTour = oldCareer && (oldCareer.tours||[]).find(t => t.id === editingTourId.tourId);
-    const previousLegs = oldTour ? oldTour.legs : [];
-    // Conserve l'état "done" des étapes identiques (même dep;arr, même position).
-    const mergedLegs = legs.map((l, i) => {
-      const prev = previousLegs[i];
-      if(!(prev && prev.dep === l.dep && prev.arr === l.arr)) return l;
-      const kept = { ...l, done: prev.done };
-      if(prev.doneAt) kept.doneAt = prev.doneAt;
-      if(prev.flightId) kept.flightId = prev.flightId;
-      return kept;
-    });
-    if(oldCareer && oldCareer.id !== careerId){
-      oldCareer.tours = (oldCareer.tours||[]).filter(t => t.id !== editingTourId.tourId);
+  const legs = _tourLegsDraft.map(l => ({ dep: (l.dep || '').trim().toUpperCase(), arr: (l.arr || '').trim().toUpperCase(), done: false }))
+    .filter(l => l.dep && l.arr);
+  const msg = el('tourEditMsg');
+  if(!legs.length){ msg.className = 'status-msg err'; msg.textContent = 'Ajoute au moins une étape complète (départ et arrivée).'; return; }
+  if(legs.some(l => !/^[A-Z0-9]{4}$/.test(l.dep) || !/^[A-Z0-9]{4}$/.test(l.arr))){ msg.className = 'status-msg err'; msg.textContent = 'Chaque code OACI doit faire 4 caractères.'; return; }
+  msg.textContent = '';
+  const autoValidate = el('tourAuto').checked;
+  _tourSaving = true;
+  try{
+    if(editingTourId){
+      // Si le tour est déplacé vers une autre carrière, on le retire de l'ancienne.
+      const oldCareer = db.careers.find(c => c.id === editingTourId.careerId);
+      const oldTour = oldCareer && (oldCareer.tours||[]).find(t => t.id === editingTourId.tourId);
+      const previousLegs = oldTour ? oldTour.legs : [];
+      // Conserve l'état "done" des étapes identiques (même départ / arrivée, dans l'ordre).
+      const pool = previousLegs.map(l => ({ ...l }));
+      const mergedLegs = legs.map(l => {
+        const k = pool.findIndex(p => p && p.dep === l.dep && p.arr === l.arr);
+        if(k < 0) return l;
+        const prev = pool[k]; pool[k] = null;
+        const kept = { ...l, done: prev.done };
+        if(prev.doneAt) kept.doneAt = prev.doneAt;
+        if(prev.flightId) kept.flightId = prev.flightId;
+        return kept;
+      });
+      if(oldCareer && oldCareer.id !== careerId){
+        oldCareer.tours = (oldCareer.tours||[]).filter(t => t.id !== editingTourId.tourId);
+      }
+      career.tours = career.tours || [];
+      const existingIdx = career.tours.findIndex(t => t.id === editingTourId.tourId);
+      const tourObj = { ...(oldTour || {}), id: editingTourId.tourId, name, legs: mergedLegs, autoValidate };
+      if(FBShared.tourIsComplete(tourObj)) tourObj.completedAt = (oldTour && oldTour.completedAt) || new Date().toISOString();
+      else delete tourObj.completedAt;
+      if(existingIdx > -1) career.tours[existingIdx] = tourObj;
+      else career.tours.push(tourObj);
+    } else {
+      career.tours = career.tours || [];
+      career.tours.push({ id: 't' + Date.now(), name, legs, autoValidate, createdAt: new Date().toISOString() });
     }
-    const targetCareer = career;
-    targetCareer.tours = targetCareer.tours || [];
-    const existingIdx = targetCareer.tours.findIndex(t => t.id === editingTourId.tourId);
-    const tourObj = { id: editingTourId.tourId, name, legs: mergedLegs };
-    if(oldTour && oldTour.startedAt) tourObj.startedAt = oldTour.startedAt;
-    if(FBShared.tourIsComplete(tourObj)) tourObj.completedAt = (oldTour && oldTour.completedAt) || new Date().toISOString();
-    if(existingIdx > -1) targetCareer.tours[existingIdx] = tourObj;
-    else targetCareer.tours.push(tourObj);
-  } else {
-    career.tours = career.tours || [];
-    career.tours.push({ id:'t'+Date.now(), name, legs });
-  }
+    closeTourEditor();
+    renderCareers();
+    refreshTourModalIfOpen();
+    await saveDbNow();
+  } finally { _tourSaving = false; }
+}
 
-  await saveDbNow();
-  resetTourForm();
-  renderCareers();
+// v2.1 — validation automatique : la prochaine étape d'un tour (option « auto ») est validée dès
+// qu'un vol du logbook a le même départ et la même arrivée, daté au plus tôt du jour de création du
+// tour (ou de l'étape précédente) et pas déjà associé à une autre étape. Renvoie le nombre d'étapes validées.
+function autoValidateTours(save){
+  let changed = 0;
+  const used = new Set();
+  db.careers.forEach(c => (c.tours || []).forEach(t => (t.legs || []).forEach(l => { if(l.flightId) used.add(l.flightId); })));
+  const byDate = db.logbook.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  db.careers.forEach(c => (c.tours || []).forEach(t => {
+    if(t.autoValidate === false || !t.legs || !t.legs.length || FBShared.tourIsComplete(t)) return;
+    let floor = String(t.createdAt || '').slice(0, 10);
+    t.legs.forEach(l => { if(l.done && l.doneAt) floor = String(l.doneAt).slice(0, 10) > floor ? String(l.doneAt).slice(0, 10) : floor; });
+    for(let i = t.legs.findIndex(l => !l.done); i > -1 && i < t.legs.length; i++){
+      const l = t.legs[i];
+      if(l.done) continue;
+      const skip = new Set(t.autoSkip || []);
+      const f = byDate.find(x => !used.has(x.id) && !skip.has(x.id) && (x.dep || '').toUpperCase() === l.dep && (x.arr || '').toUpperCase() === l.arr && (!floor || String(x.date || '') >= floor)
+        && (!x.careerId || x.careerId === c.id));
+      if(!f) break;
+      used.add(f.id);
+      l.done = true; l.flightId = f.id; l.doneAt = f.date ? `${f.date}T12:00:00.000Z` : new Date().toISOString(); l.auto = true;
+      floor = String(f.date || floor);
+      if(!t.startedAt) t.startedAt = l.doneAt;
+      changed++;
+      if(FBShared.tourIsComplete(t)){ t.completedAt = l.doneAt; _justCompletedTourId = t.id; }
+      if(window.FBNotice) FBNotice.show({ kind: 'ok', title: FBShared.tourIsComplete(t) ? `Tour terminé : ${t.name} 🎉` : 'Étape de tour validée', text: `${t.name} · étape ${i + 1} : ${l.dep} → ${l.arr}`, ms: 5000 });
+    }
+  }));
+  if(changed && save !== false) saveDbNow();
+  else if(changed) queueSaveDb();
+  return changed;
 }
 
 async function toggleTourLeg(careerId, tourId, legIndex){
@@ -1602,19 +1903,24 @@ async function toggleTourLeg(careerId, tourId, legIndex){
     const matched = FBShared.tourLegFlights(career, tour, db.logbook);
     tour.legs.forEach((l, i) => { if(l.done && !l.flightId && matched[i]) l.flightId = matched[i].id; });
   } else {
-    // Recliquer dessus revient en arrière : dévalide cette étape et toutes celles qui suivent
+    if(legIndex < tour.legs.length - 1 && tour.legs.slice(legIndex + 1).some(l => l.done)
+      && !confirm(`Annuler l'étape ${legIndex + 1} et toutes les étapes suivantes déjà validées ?`)) return;
+    // Recliquer dessus revient en arrière : dévalide cette étape et toutes celles qui suivent.
+    // Les vols retirés d'une étape validée automatiquement ne la revalideront plus.
     for(let i=legIndex;i<tour.legs.length;i++){
+      if(tour.legs[i].auto && tour.legs[i].flightId) tour.autoSkip = [...new Set([...(tour.autoSkip || []), tour.legs[i].flightId])].slice(-200);
       tour.legs[i].done = false;
       delete tour.legs[i].doneAt;
       delete tour.legs[i].flightId;
+      delete tour.legs[i].auto;
     }
   }
   const nowAllDone = FBShared.tourIsComplete(tour);
   if(nowAllDone && !wasComplete){ _justCompletedTourId = tourId; tour.completedAt = nowIso; }
   if(!nowAllDone) delete tour.completedAt;
-  await saveDbNow();
   renderCareers();
   refreshTourModalIfOpen();
+  await saveDbNow();
 }
 
 async function deleteTour(careerId, tourId){
@@ -1622,10 +1928,10 @@ async function deleteTour(careerId, tourId){
   const career = db.careers.find(c => c.id === careerId);
   if(!career) return;
   career.tours = (career.tours||[]).filter(t => t.id !== tourId);
-  if(editingTourId && editingTourId.tourId === tourId) resetTourForm();
+  if(editingTourId && editingTourId.tourId === tourId) closeTourEditor();
   if(_tourModalRef && _tourModalRef.tourId === tourId) closeTourModal();
-  await saveDbNow();
   renderCareers();
+  await saveDbNow();
 }
 
 /* ---------------- Fenêtre de détail d'un tour (en cours ou terminé) ---------------- */
@@ -2414,6 +2720,19 @@ function initTrackerListeners(){
 // réutilisé à la fois par la fin de vol normale (onFlightEnd ci-dessus) et par la récupération
 // d'un vol resté en sauvegarde de secours après un crash/fermeture inattendue (voir
 // checkForRecoverableFlight, appelée au démarrage de l'appli).
+// v2.1 — assiette et angle de crabe au toucher (vols trackés à partir de la v2.1).
+function fmtTdPitch(td){
+  // Vols d'avant la v2.1 : assiette du point de toucher (1 Hz, signe SimConnect inversé).
+  const v = td && (td.tdPitchDeg != null ? td.tdPitchDeg : (Number.isFinite(td.pitchDeg) ? -td.pitchDeg : null));
+  if(v == null || !isFinite(v)) return '—';
+  return `${v > 0 ? '+' : ''}${v.toFixed(1)}°${v < 0 ? ' (nez bas)' : ''}`;
+}
+function fmtTdCrab(td){
+  const v = td && td.crabDeg;
+  if(v == null || !isFinite(v)) return '—';
+  if(Math.abs(v) < 0.5) return '0° (aligné)';
+  return `${Math.abs(v).toFixed(1)}° ${v > 0 ? 'à droite' : 'à gauche'}`;
+}
 function renderTrkResultPanel(data){
   const dep = data.depGuess ? data.depGuess.icao : '----';
   const arr = data.arrGuess ? data.arrGuess.icao : '----';
@@ -2432,6 +2751,8 @@ function renderTrkResultPanel(data){
   el('trkResG').textContent = tdx.gForce != null ? tdx.gForce.toFixed(2) + ' G' : '—';
   el('trkResWind').textContent = tdx.windKt != null ? `${String(tdx.windDir ?? 0).padStart(3,'0')}°/${tdx.windKt} kt${tdx.crosswindKt != null ? ' · travers ' + Math.abs(tdx.crosswindKt) + ' kt' : ''}` : '—';
   const scx = FBShared.landingScore({ fpm: data.landingRateFpm, gForce: tdx.gForce, bounces: data.bounceCount || 0, zone: tdx.zone }, currentFlightCategory(data));
+  el('trkResPitch').textContent = fmtTdPitch(tdx);
+  el('trkResCrab').textContent = fmtTdCrab(tdx);
   el('trkResScore').innerHTML = scx ? `<span class="score-pill" style="--sc:${scx.color}">${scx.letter}</span> ${scx.score}/100` : '—';
   el('trkResultPanel').classList.remove('hidden');
   // Rapport final complet (avec la vraie phase d'atterrissage) à la place du live partiel.
@@ -2734,6 +3055,8 @@ function renderTouchdownPanel(touchdown, turnStats){
       <div class="tstat"><div class="cap">Facteur de charge</div><div class="val">${touchdown.gForce != null ? touchdown.gForce.toFixed(2) + ' G' : '—'}</div></div>
       <div class="tstat"><div class="cap">Vent au toucher</div><div class="val">${windHtml}</div></div>
       <div class="tstat"><div class="cap">Vent traversier</div><div class="val val-sm">${xwHtml}</div></div>
+      <div class="tstat"><div class="cap">Assiette (pitch)</div><div class="val">${fmtTdPitch(touchdown)}</div></div>
+      <div class="tstat"><div class="cap">Angle de crabe</div><div class="val val-sm" title="Écart entre l'axe de l'avion et sa trajectoire au contact">${fmtTdCrab(touchdown)}</div></div>
       <div class="tstat"><div class="cap">Piste identifiée</div><div class="val">${zone ? escapeHtml(zone.runway) : 'Non identifiée'}</div></div>
       <div class="tstat"><div class="cap">Distance depuis le seuil</div><div class="val">${zone ? zone.distanceFromThresholdFt + ' ft (' + zone.percentAlongRunway + '%)' : '—'}</div></div>
       <div class="tstat"><div class="cap">Écart latéral</div><div class="val">${zone ? zone.lateralOffsetFt + ' ft à ' + zone.side : '—'}</div></div>
@@ -4538,6 +4861,10 @@ async function endTour(){
     if(e.key !== 'Escape') return;
     if(!el('routeModalOverlay').classList.contains('hidden')) closeRouteModal(); // ouverte par-dessus les autres
     else if(!el('hangarFormOverlay').classList.contains('hidden')) closeHangarForm();
+    else if(!el('careerEditOverlay').classList.contains('hidden')) closeCareerEditor();
+    else if(!el('evModalOverlay').classList.contains('hidden')) FBv21.eventClose();
+    else if(!el('tourEditOverlay').classList.contains('hidden')) closeTourEditor();
+    else if(el('careerAddPop') && !el('careerAddPop').classList.contains('hidden')) careerMenuClose();
     else if(!el('hangarDetailOverlay').classList.contains('hidden')) closeHangarDetail();
     else if(!el('airportModalOverlay').classList.contains('hidden')) closeAirportModal();
     else if(!el('landingThresholdsOverlay').classList.contains('hidden')) closeLandingThresholds();
@@ -4579,6 +4906,7 @@ async function endTour(){
   if(window.FBv15) await FBv15.init();
   if(window.FBv17) await FBv17.init().catch(e => console.warn('[v1.7]', e));
   if(window.FBv18) await FBv18.init().catch(e => console.warn('[v1.8]', e));
+  if(window.FBv21) await FBv21.init().catch(e => console.warn('[v2.1]', e));
   applyStreamFeatures();
   maybeShowOnboarding();
   await maybeShowChangelogAfterUpdate();

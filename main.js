@@ -11,6 +11,8 @@ const I18N = require('./renderer/i18n.js');
 require('./renderer/i18n/translations.js');
 const T = s => I18N.tr(s);
 const { fetchAtc, findPilots } = require('./atc');
+const NetImport = require('./netimport');
+const NetEvents = require('./events');
 const { TwitchAuth, TwitchChat, FlightBot, mergeConfig: mergeTwitchConfig } = require('./twitch');
 const Commands = require('./commands');
 const { Shots } = require('./shots');
@@ -1085,6 +1087,27 @@ ipcMain.handle('atc:get', (evt, opts) => fetchAtc((url, o) => net.fetch(url, o),
   networks: (opts && opts.networks) || { vatsim: true, ivao: false }, force: !!(opts && opts.force),
   cacheDir: path.join(app.getPath('userData'), 'atc-data'), lookupAirport
 }));
+// v2.1 — logbook : export CSV dans le dossier « exports » de l'appli, import des vols VATSIM / IVAO.
+const exportsDir = () => path.join(app.getPath('userData'), 'exports');
+ipcMain.handle('logbook:exportCsv', (evt, o) => {
+  try {
+    const dir = exportsDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const file = path.join(dir, `logbook-${stamp}.csv`);
+    fs.writeFileSync(file, '\ufeff' + String((o && o.csv) || ''), 'utf-8'); // BOM : Excel lit les accents
+    return { ok: true, file, dir };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('logbook:openExports', () => { fs.mkdirSync(exportsDir(), { recursive: true }); shell.openPath(exportsDir()); return true; });
+ipcMain.handle('logbook:revealExport', (evt, file) => {
+  if (file && path.dirname(path.resolve(file)) === path.resolve(exportsDir()) && fs.existsSync(file)) shell.showItemInFolder(file);
+  return true;
+});
+// v2.1 — events VATSIM + IVAO (onglet Outils, carte du Briefing).
+ipcMain.handle('events:get', (evt, o) => NetEvents.fetchEvents((u, op) => net.fetch(u, op), { force: !!(o && o.force), lookupAirport }));
+ipcMain.handle('netimport:vatsim', (evt, o) => NetImport.importVatsim((u, op) => net.fetch(u, op), o && o.cid));
+ipcMain.handle('netimport:ivao', (evt, o) => NetImport.importIvao((u, op) => net.fetch(u, op), o && o.vid, o && o.apiKey));
 // v1.9 — amis sur la carte du Briefing : ceux du pilote (réglage) + les viewers inscrits avec !vatsim / !ivao.
 ipcMain.handle('atc:friends', (evt, o) => {
   o = o || {};

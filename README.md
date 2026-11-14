@@ -24,6 +24,7 @@ FlightBrief est une application Windows (avec un compagnon mobile consultable ho
 - **Stream Deck (v1.7)** : plugin (touches + molettes du Stream Deck +) installé d'un clic depuis Profil → Stream Deck, appairé par un code local.
 - **Pas de live ?** Profil → « Je fais des lives » : désactivé, les onglets Outil Live, Twitch et À bord disparaissent.
 - **Prédictions Twitch (v1.7)** : en plus de `!pari`, le chat mise ses points de chaîne sur une tranche de taux de toucher (chaîne Affiliée ou Partenaire, compte de la chaîne connecté dans l'onglet À bord).
+- **Version 2.1** : events VATSIM et IVAO (liste et fiche dans Outils, terrains en surbrillance sur la carte du Briefing), Carrière repensée (bouton « + », tours avec prochaine étape et validation automatique), assiette et angle de crabe au toucher, PFD dans l'approche 3D, import de l'historique VATSIM / IVAO et export CSV du logbook, couleurs et ATC pour les amis sur la carte.
 - **Stockage local** : toutes les données (logbook, carrières, thème, overlay live, profil) sont enregistrées dans un fichier JSON sur ta machine (dossier de données utilisateur de l'application), pas dans le cloud.
 
 ## Installation (utilisateurs)

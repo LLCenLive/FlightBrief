@@ -192,6 +192,7 @@ function landingAlertData(d){
     score: sc ? sc.score : null, letter: sc ? sc.letter : null, color: sc ? sc.color : '#7c8894',
     gradeLabel: grade ? grade.label.replace(/\s*\(.*\)$/, '') : null, gradeColor: grade ? grade.color : null,
     windDir: d.windDir, windKt: d.windKt, crosswindKt: d.crosswindKt, headwindKt: d.headwindKt,
+    pitchDeg: d.pitchDeg != null ? d.pitchDeg : null, crabDeg: d.crabDeg != null ? d.crabDeg : null,
     icao: d.arr ? d.arr.icao : null, airport: d.arr ? d.arr.name : null,
     zone: zone ? { runway: zone.runway, lengthFt: zone.lengthFt, distanceFromThresholdFt: zone.distanceFromThresholdFt, percentAlongRunway: zone.percentAlongRunway, lateralOffsetFt: zone.lateralOffsetFt, side: zone.side } : null,
     callsign: (el('callsign').value || '').trim() || null
@@ -236,6 +237,8 @@ function landingCardHtml(a){
       <div><span>Rebonds</span><b>${a.bounces || 0}</b></div>
       <div><span>Vent</span><b>${wind}</b></div>
       <div><span>Travers</span><b>${xw}</b></div>
+      ${a.pitchDeg != null ? `<div><span>Assiette</span><b>${a.pitchDeg > 0 ? '+' : ''}${(+a.pitchDeg).toFixed(1)}°</b></div>` : ''}
+      ${a.crabDeg != null ? `<div><span>Crabe</span><b>${Math.abs(a.crabDeg).toFixed(1)}°${Math.abs(a.crabDeg) >= 0.5 ? (a.crabDeg > 0 ? ' D' : ' G') : ''}</b></div>` : ''}
     </div>
     ${a.zone ? `<div class="lc-rwy">${FBShared.runwayDiagramSvg(a.zone, { width: 300, height: 70, fluid: true })}</div>` : ''}`;
 }
@@ -716,7 +719,10 @@ function buildApproachScene(){
     controls.minDistance = 40; controls.maxDistance = Math.max(8000, span * 6);
     if(typeof attachSmoothZoom === 'function') zoom = attachSmoothZoom(controls, camera, renderer.domElement, { floor: 0, speed: 0.0016 });
   }
-  Object.assign(ap3d, { renderer, scene, camera, controls, zoom, curve, plane, pts, aimM, tan3, ux, un, elevFt, span, dirty: 2 });
+  Object.assign(ap3d, { renderer, scene, camera, controls, zoom, curve, plane, pts, aimM, tan3, ux, un, elevFt, span, rwyLen, rwyHdg: (Math.atan2(ux, un) * 180 / Math.PI + 360) % 360, dirty: 2 });
+  const pfdOn = db.ap3dPfd !== false;
+  if($('ap3dPfdOn')) $('ap3dPfdOn').checked = pfdOn;
+  if($('ap3dPfd')) $('ap3dPfd').classList.toggle('hidden', !pfdOn);
   ap3d.u = 0; $('ap3dScrub').value = 0;
   $('ap3dScrub').oninput = e => { ap3d.playing = false; $('ap3dPlay').textContent = '▶ Rejouer'; ap3d.u = e.target.value / 1000; placePlane(); };
   $('ap3dView').value = ap3d.view;
@@ -798,7 +804,182 @@ function placePlane(){
     <div><span>Vario</span><b>${sp.vsFpm != null ? sp.vsFpm + ' ft/min' : '—'}</b></div>
     <div><span>IAS</span><b>${sp.iasKt != null ? sp.iasKt + ' kt' : '—'}</b></div>`;
   if(ap3d.view === 'chase' && ap3d.playing) followChase(p, tan);
+  drawPfd(u, p, hFt, distM, along);
 }
+
+/* ---- v2.1 — PFD reconstitué pendant la rediffusion de l'approche ----
+   Valeurs interpolées entre deux points enregistrés : assiette, inclinaison, IAS, hauteur,
+   vario, cap ; écarts ILS calculés par rapport à l'axe de piste et au plan de 3°. */
+function lerpPt(u, key){
+  const P = ap3d.pts, n = P.length;
+  if(!n) return null;
+  const f = Math.max(0, Math.min(1, u)) * (n - 1), i = Math.floor(f), t = f - i;
+  const j = Math.min(n - 1, i + 1);
+  const a = P[i] && P[i][key], b = P[j] && P[j][key];
+  if(!Number.isFinite(a)) return Number.isFinite(b) ? b : null;
+  if(!Number.isFinite(b)) return a;
+  if(key === 'hdg'){ const d = ((b - a + 540) % 360) - 180; return (a + d * t + 360) % 360; }
+  return a + (b - a) * t;
+}
+function drawPfd(u, p, hFt, distM, along){
+  const cv = $('ap3dPfd');
+  if(!cv || cv.classList.contains('hidden')) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = cv.clientWidth || 300, H = cv.clientHeight || 230;
+  if(cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)){ cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const x = cv.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, W, H);
+  x.save(); x.scale(W / 300, H / 230); // dessin prévu pour 300 × 230
+  const td = ap3d.build && ap3d.build.t;
+  const touchdown = u >= 0.999;
+  const rawPitch = lerpPt(u, 'pitchDeg'), rawBank = lerpPt(u, 'bankDeg');
+  // SimConnect : assiette négative = nez haut, inclinaison négative = virage à droite.
+  const pitch = touchdown && td && td.tdPitchDeg != null ? td.tdPitchDeg : (rawPitch != null ? -rawPitch : 0);
+  const roll = rawBank != null ? -rawBank : 0;
+  const ias = lerpPt(u, 'iasKt'), vs = touchdown && td && td.vsFpm != null ? td.vsFpm : lerpPt(u, 'vsFpm'), hdg = lerpPt(u, 'hdg');
+  const MONO = '"JetBrains Mono", Consolas, monospace';
+  const SKY = '#1f6fb8', GND = '#7a4a22', WHITE = '#f2f5f7', MAG = '#ff5cf2', GREEN = '#39e88f', AMBER = '#ffb020', DIM = '#9aa7b3';
+
+  // --- Horizon artificiel ---
+  const cx = 150, cy = 95, R = 64, ppd = 4.0; // pixels par degré d'assiette
+  x.save();
+  x.beginPath(); x.rect(cx - R, cy - R, R * 2, R * 2); x.clip();
+  x.translate(cx, cy); x.rotate(-roll * Math.PI / 180);
+  const off = pitch * ppd;
+  x.fillStyle = SKY; x.fillRect(-300, -600 + off, 600, 600);
+  x.fillStyle = GND; x.fillRect(-300, off, 600, 600);
+  x.strokeStyle = WHITE; x.lineWidth = 1.4;
+  x.beginPath(); x.moveTo(-300, off); x.lineTo(300, off); x.stroke();
+  x.fillStyle = WHITE; x.font = `600 9px ${MONO}`; x.textAlign = 'right'; x.textBaseline = 'middle'; x.lineWidth = 1;
+  for(let d = -20; d <= 20; d += 2.5){
+    if(!d) continue;
+    const yy = off - d * ppd, w = d % 10 === 0 ? 30 : d % 5 === 0 ? 18 : 8;
+    x.beginPath(); x.moveTo(-w, yy); x.lineTo(w, yy); x.stroke();
+    if(d % 10 === 0) x.fillText(String(Math.abs(d)), -w - 3, yy);
+  }
+  x.restore();
+  // Échelle d'inclinaison + index
+  x.save(); x.translate(cx, cy);
+  x.strokeStyle = WHITE; x.lineWidth = 1.2;
+  x.beginPath(); x.arc(0, 0, R - 6, (-90 - 60) * Math.PI / 180, (-90 + 60) * Math.PI / 180); x.stroke();
+  [-60, -45, -30, -20, -10, 10, 20, 30, 45, 60].forEach(a => {
+    const r1 = R - 6, r2 = R - (Math.abs(a) % 30 === 0 ? 14 : 10), t = (a - 90) * Math.PI / 180;
+    x.beginPath(); x.moveTo(Math.cos(t) * r1, Math.sin(t) * r1); x.lineTo(Math.cos(t) * r2, Math.sin(t) * r2); x.stroke();
+  });
+  x.rotate(-roll * Math.PI / 180);
+  x.fillStyle = Math.abs(roll) > 30 ? AMBER : WHITE;
+  x.beginPath(); x.moveTo(0, -R + 7); x.lineTo(-5, -R + 15); x.lineTo(5, -R + 15); x.closePath(); x.fill();
+  x.restore();
+  // Maquette avion
+  x.strokeStyle = '#ffd400'; x.lineWidth = 2.5;
+  x.beginPath(); x.moveTo(cx - 44, cy); x.lineTo(cx - 17, cy); x.lineTo(cx - 17, cy + 7); x.stroke();
+  x.beginPath(); x.moveTo(cx + 44, cy); x.lineTo(cx + 17, cy); x.lineTo(cx + 17, cy + 7); x.stroke();
+  x.fillStyle = '#ffd400'; x.fillRect(cx - 2.5, cy - 2.5, 5, 5);
+
+  // --- Écarts ILS : glide à droite de l'horizon, localizer dessous ---
+  const dotGs = 0.35, dotLoc = 1.25, dotPx = 15;
+  const distAim = Math.max(1, ap3d.aimM - along);
+  const gsDev = Math.atan2(Math.max(0, hFt) * FT, distAim) * 180 / Math.PI - 3; // > 0 : au-dessus du plan
+  const east = p.x, north = -p.z, cross = east * ap3d.un - north * ap3d.ux;        // > 0 : à droite de l'axe
+  const locDev = Math.atan2(cross, Math.max(1, (ap3d.rwyLen || 3000) - along)) * 180 / Math.PI;
+  const clamp = v => Math.max(-2.3, Math.min(2.3, v));
+  const gx = cx + R + 9, ly = cy + R + 9;
+  x.strokeStyle = WHITE; x.lineWidth = 1.1;
+  for(let i = -2; i <= 2; i++){
+    if(!i) continue;
+    x.beginPath(); x.arc(gx, cy + i * dotPx, 2.5, 0, Math.PI * 2); x.stroke();
+    x.beginPath(); x.arc(cx + i * dotPx, ly, 2.5, 0, Math.PI * 2); x.stroke();
+  }
+  x.beginPath(); x.moveTo(gx - 6, cy); x.lineTo(gx + 6, cy); x.stroke();
+  x.beginPath(); x.moveTo(cx, ly - 6); x.lineTo(cx, ly + 6); x.stroke();
+  const diamond = (dx, dy) => { x.fillStyle = MAG; x.beginPath(); x.moveTo(dx, dy - 6); x.lineTo(dx + 4.5, dy); x.lineTo(dx, dy + 6); x.lineTo(dx - 4.5, dy); x.closePath(); x.fill(); };
+  if(!touchdown){
+    diamond(gx, cy + clamp(gsDev / dotGs) * dotPx);     // trop haut : le glide est sous l'avion
+    diamond(cx - clamp(locDev / dotLoc) * dotPx, ly);   // à droite de l'axe : le localizer est à gauche
+  }
+
+  // --- Bandes de vitesse (gauche) et de hauteur (droite) ---
+  const tape = (x0, w, value, step, pxPer, label, col) => {
+    const left = x0 < cx;
+    x.save();
+    x.fillStyle = 'rgba(30,36,44,.92)'; x.fillRect(x0, cy - R, w, R * 2);
+    x.beginPath(); x.rect(x0, cy - R, w, R * 2); x.clip();
+    x.strokeStyle = WHITE; x.fillStyle = WHITE; x.lineWidth = 1; x.font = `600 10px ${MONO}`; x.textBaseline = 'middle';
+    if(value != null){
+      const base = Math.floor(value / step) * step;
+      for(let v = base - step * 8; v <= base + step * 8; v += step){
+        if(v < 0) continue;
+        const yy = cy - (v - value) * pxPer;
+        x.beginPath(); x.moveTo(left ? x0 + w - 6 : x0, yy); x.lineTo(left ? x0 + w : x0 + 6, yy); x.stroke();
+        x.textAlign = left ? 'right' : 'left'; x.fillText(String(v), left ? x0 + w - 9 : x0 + 9, yy);
+      }
+    }
+    x.restore();
+    x.fillStyle = '#000'; x.strokeStyle = col || WHITE; x.lineWidth = 1.4;
+    x.fillRect(x0 - 2, cy - 10, w + 4, 20); x.strokeRect(x0 - 2, cy - 10, w + 4, 20);
+    x.fillStyle = col || WHITE; x.font = `700 12px ${MONO}`; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(value != null ? String(Math.round(value)) : '---', x0 + w / 2, cy + 1);
+    x.font = `600 8px ${MONO}`; x.fillStyle = DIM; x.fillText(label, x0 + w / 2, cy - R - 7);
+  };
+  tape(16, 42, ias, 10, 2.2, 'IAS KT');
+  const agl = touchdown ? 0 : Math.max(0, hFt);
+  tape(240, 44, agl, 50, 0.45, 'HAUT FT', agl < 100 ? AMBER : null);
+
+  // --- Vario ---
+  const vsY = v => cy - Math.sign(v) * Math.min(R - 6, Math.sqrt(Math.abs(v) / 2000) * (R - 6));
+  x.strokeStyle = '#5b6b78'; x.lineWidth = 1;
+  [-2000, -1000, -500, 0, 500, 1000, 2000].forEach(v => { x.beginPath(); x.moveTo(289, vsY(v)); x.lineTo(294, vsY(v)); x.stroke(); });
+  if(vs != null){
+    const c = vs < -1000 ? AMBER : GREEN;
+    x.strokeStyle = c; x.lineWidth = 2.4;
+    x.beginPath(); x.moveTo(289, cy); x.lineTo(296, vsY(vs)); x.stroke();
+    x.fillStyle = c; x.font = `600 9px ${MONO}`; x.textAlign = 'right';
+    x.fillText((vs > 0 ? '+' : '') + Math.round(vs), 297, vs < 0 ? cy + R + 9 : cy - R - 16);
+  }
+
+  // --- Cap ---
+  const hy = 210;
+  x.fillStyle = 'rgba(30,36,44,.92)'; x.fillRect(70, hy - 12, 160, 24);
+  x.save(); x.beginPath(); x.rect(70, hy - 12, 160, 24); x.clip();
+  x.strokeStyle = WHITE; x.fillStyle = WHITE; x.lineWidth = 1; x.font = `600 9px ${MONO}`; x.textAlign = 'center'; x.textBaseline = 'middle';
+  if(hdg != null){
+    const ppdH = 3.2, base = Math.floor(hdg / 5) * 5;
+    for(let d = base - 30; d <= base + 30; d += 5){
+      const xx = cx + (d - hdg) * ppdH, dd = ((d % 360) + 360) % 360;
+      x.beginPath(); x.moveTo(xx, hy - 12); x.lineTo(xx, hy - (dd % 10 === 0 ? 5 : 8)); x.stroke();
+      if(dd % 10 === 0) x.fillText(String(dd / 10).padStart(2, '0'), xx, hy + 4);
+    }
+    const rd = ((ap3d.rwyHdg - hdg + 540) % 360) - 180; // axe de piste en magenta
+    x.fillStyle = MAG; x.fillRect(cx + rd * ppdH - 1.5, hy - 12, 3, 8);
+  }
+  x.restore();
+  x.strokeStyle = '#ffd400'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx, hy - 13); x.lineTo(cx, hy - 5); x.stroke();
+  x.fillStyle = '#000'; x.fillRect(cx - 17, hy - 27, 34, 14); x.strokeStyle = WHITE; x.lineWidth = 1; x.strokeRect(cx - 17, hy - 27, 34, 14);
+  x.fillStyle = WHITE; x.font = `700 10px ${MONO}`; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(hdg != null ? String(Math.round(hdg) % 360).padStart(3, '0') : '---', cx, hy - 20);
+
+  // --- Bandeau : distance au seuil, assiette, inclinaison, annonces ---
+  x.font = `600 9px ${MONO}`; x.textBaseline = 'middle'; x.fillStyle = DIM;
+  x.textAlign = 'left'; x.fillText(`${(distM / 1852).toFixed(1)} NM`, 8, 11);
+  x.textAlign = 'right'; x.fillText(`P ${pitch > 0 ? '+' : ''}${pitch.toFixed(1)}°  R ${Math.abs(roll).toFixed(0)}°${Math.abs(roll) >= 1 ? (roll > 0 ? 'D' : 'G') : ''}`, 292, 11);
+  x.textAlign = 'center';
+  if(touchdown){
+    x.fillStyle = GREEN; x.font = `700 11px ${MONO}`; x.fillText('TOUCHDOWN', cx, cy - R + 26);
+    if(td && td.crabDeg != null){ x.font = `600 9px ${MONO}`; x.fillText(`CRABE ${Math.abs(td.crabDeg).toFixed(1)}°`, cx, cy + 38); }
+  } else if(hFt < 2600 && hFt > 5){
+    const callout = [2500, 1000, 500, 400, 300, 200, 100, 50, 40, 30, 20, 10].find(c => Math.abs(hFt - c) <= Math.max(6, c * 0.03));
+    if(callout){ x.fillStyle = AMBER; x.font = `700 12px ${MONO}`; x.fillText(String(callout), cx, cy + 40); }
+  }
+  x.restore();
+}
+FBv15.approachTogglePfd = on => {
+  const cv = $('ap3dPfd'); if(!cv) return;
+  cv.classList.toggle('hidden', !on);
+  db.ap3dPfd = !!on; queueSaveDb();
+  if(on && ap3d.curve) placePlane();
+};
+
 function followChase(p, tan){
   const s = ap3d.span || 8000;
   const back = new THREE.Vector3(tan.x, 0, tan.z).normalize().multiplyScalar(-s * 0.16);
@@ -987,9 +1168,11 @@ function renderAtcMapChips(){
   box.innerHTML = `<button class="atc-chip ${c.map ? 'on' : ''}" onclick="FBv15.atcToggle('map')" title="Afficher les contrôleurs sur la carte">📡 ATC</button>`
     + ['vatsim', 'ivao'].map(n => { const k = count(n); const err = atcData && atcData[n] && !atcData[n].ok;
       return `<button class="atc-chip net ${c[n] ? 'on' : ''}" style="--net:${NET[n].color}" onclick="FBv15.atcToggle('${n}')" title="${err ? esc(NET[n].label + ' injoignable : ' + atcData[n].error) : 'Afficher / masquer ' + NET[n].label}"><i></i>${NET[n].label}${c[n] && k != null ? ` <small>${k}</small>` : ''}${err && c[n] ? ' ⚠' : ''}</button>`; }).join('')
-    + `<button class="atc-chip ${c.friendsOn ? 'on' : ''}" onclick="FBv15.friendsToggle('friendsOn')" title="Afficher les amis et les viewers qui volent en ligne">👥 Amis${c.friendsOn && friendsOnline.length ? ` <small>${friendsOnline.length}</small>` : ''}</button>`
+    + `<button class="atc-chip ${c.friendsOn ? 'on' : ''}" onclick="FBv15.friendsToggle('friendsOn')" title="Afficher les amis et les viewers en ligne (en vol ou en tant que contrôleurs)">👥 Amis${c.friendsOn && (friendsOnline.length + friendsAtc.length) ? ` <small>${friendsOnline.length + friendsAtc.length}</small>` : ''}</button>`
+    + (window.FBv21 && FBv21.eventsMapOn ? (() => { const on = FBv21.eventsMapOn(), n = FBv21.eventsMapCount(); return `<button class="atc-chip ${on ? 'on' : ''}" onclick="FBv21.eventsToggleMap()" title="Terrains avec un event VATSIM ou IVAO (en cours ou à venir) — détail dans l'onglet Outils">🎉 Events${on && n ? ` <small>${n}</small>` : ''}</button>`; })() : '')
     + `<button class="atc-chip atc-help" onclick="FBv15.toggleAtcLegend()" title="Légende">?</button>`;
 }
+FBv15.renderAtcChips = () => renderAtcMapChips();
 FBv15.atcToggle = function(k){
   const c = atcCfg();
   c[k] = !c[k];
@@ -1043,7 +1226,15 @@ FBv15.refreshAtc = async function(force){
   renderAtcMap();
 };
 /* ---- v1.9 — amis sur la carte (CID VATSIM / VID IVAO, et viewers inscrits avec !vatsim / !ivao) ---- */
-let friendsOnline = [], friendLayer = null, friendsBusy = false;
+let friendsOnline = [], friendsAtc = [], friendLayer = null, friendsBusy = false;
+// v2.1 — couleur choisie par l'utilisateur pour un ami (sinon couleur du réseau).
+function friendCfgOf(network, id){ const c = atcCfg(); return (c.friends || []).find(f => f.network === network && String(f.id) === String(id)) || null; }
+function friendColor(p){ const f = friendCfgOf(p.network, p.id); return (f && /^#[0-9a-f]{6}$/i.test(f.color || '')) ? f.color : NET[p.network].color; }
+const FR_ATC_FAC = { DEL: 'D', GND: 'G', TWR: 'T', APP: 'A', DEP: 'A', CTR: 'C', FSS: 'F', ATIS: 'i' };
+function friendAtcPopup(a){
+  return `<div class="atc-pop"><div class="atc-pop-h">${esc(a.label || a.callsign)} · ${NET[a.network].label} · ATC</div>
+    <div class="fr-pop"><b>${esc(a.callsign)}</b> · ${esc(a.frequency || '—')}${a.sector ? '<br>' + esc(a.sector) : ''}${a.logonTime ? '<br>En ligne depuis ' + esc(atcSince(a.logonTime)) : ''}</div></div>`;
+}
 const FR_PLANE = '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2c.8 0 1.3.8 1.3 1.8v5.4l7.7 4.6v2.1l-7.7-2.3v4.6l2.2 1.7v1.7L12 20.6l-3.5 1v-1.7l2.2-1.7v-4.6l-7.7 2.3v-2.1l7.7-4.6V3.8C10.7 2.8 11.2 2 12 2z"/></svg>';
 function ensureFriendLayer(){
   if(friendLayer || !ensureAtcLayer()) return friendLayer;
@@ -1062,9 +1253,17 @@ function renderFriends(){
     friendLayer.clearLayers();
     if(c.friendsOn) friendsOnline.forEach(p => {
       L.marker([p.lat, p.lon], { pane: 'atcAirports', zIndexOffset: 500, keyboard: false, icon: L.divIcon({ className: 'fr-mk-wrap', iconSize: null,
-        html: `<div class="fr-mk${p.viewer ? ' viewer' : ''}" style="--net:${NET[p.network].color}"><i style="transform:rotate(${Math.round(p.hdg || 0)}deg)">${FR_PLANE}</i><span>${esc(p.label || p.callsign)}${p.label ? `<b>${esc(p.callsign)}</b>` : ''}</span></div>` }) })
+        html: `<div class="fr-mk${p.viewer ? ' viewer' : ''}" style="--net:${friendColor(p)}"><i style="transform:rotate(${Math.round(p.hdg || 0)}deg)">${FR_PLANE}</i><span>${esc(p.label || p.callsign)}${p.label ? `<b>${esc(p.callsign)}</b>` : ''}</span></div>` }) })
         .bindPopup(() => friendPopup(p), { className: 'atc-popup', maxWidth: 300 })
         .bindTooltip(`${esc(p.callsign)} · ${esc(friendFl(p))}`, { className: 'atc-tip', direction: 'top', offset: [0, -12] })
+        .addTo(friendLayer);
+    });
+    // v2.1 — amis connectés en tant que contrôleurs : étiquette sur leur aéroport / secteur.
+    if(c.friendsOn && c.friendsAtcOn !== false) friendsAtc.filter(a => a.lat != null && a.lon != null).forEach(a => {
+      L.marker([a.lat, a.lon], { pane: 'atcAirports', zIndexOffset: 600, keyboard: false, icon: L.divIcon({ className: 'fr-mk-wrap', iconSize: null,
+        html: `<div class="fr-atc-mk" style="--fr:${friendColor(a)}"><b>${esc(FR_ATC_FAC[a.facility] || '·')}</b>${esc(a.label || a.callsign)} <small>${esc(a.label ? a.callsign + ' ' : '')}${esc(a.frequency || '')}</small></div>` }) })
+        .bindPopup(() => friendAtcPopup(a), { className: 'atc-popup', maxWidth: 300 })
+        .bindTooltip(`${esc(a.callsign)} · ${esc(a.frequency || '')}`, { className: 'atc-tip', direction: 'top', offset: [0, -22] })
         .addTo(friendLayer);
     });
   }
@@ -1074,21 +1273,29 @@ function renderFriends(){
 function renderFriendList(){
   const box = $('frList'); if(!box) return;
   const c = atcCfg(), on = new Map(friendsOnline.map(p => [p.network + ':' + p.id, p]));
+  const onAtc = new Map(friendsAtc.map(a => [a.network + ':' + a.id, a]));
   $('frViewers').checked = c.viewers !== false;
+  if($('frAtcOn')) $('frAtcOn').checked = c.friendsAtcOn !== false;
   const viewersOn = friendsOnline.filter(p => p.viewer);
-  $('frCount').textContent = `(${friendsOnline.length} en ligne)`;
-  box.innerHTML = (c.friends.length ? c.friends.map((f, i) => { const p = on.get(f.network + ':' + f.id);
-    return `<div class="fr-row${p ? ' on' : ''}"><i class="net-dot" style="background:${NET[f.network].color}"></i><b>${esc(f.label || f.id)}</b><small>${NET[f.network].label} ${esc(f.id)}</small>
-      <span class="fr-st">${p ? `${esc(p.callsign)} · ${esc(friendFl(p))} <a href="#" onclick="FBv15.centerFriend('${esc(f.network)}','${esc(f.id)}'); return false;">voir</a>` : 'hors ligne'}</span>
+  const nAtc = friendsAtc.length;
+  $('frCount').textContent = `(${friendsOnline.length} en vol${nAtc ? ` · ${nAtc} ATC` : ''})`;
+  box.innerHTML = (c.friends.length ? c.friends.map((f, i) => { const p = on.get(f.network + ':' + f.id), a = onAtc.get(f.network + ':' + f.id);
+    const col = /^#[0-9a-f]{6}$/i.test(f.color || '') ? f.color : NET[f.network].color;
+    const st = p ? `${esc(p.callsign)} · ${esc(friendFl(p))} <a href="#" onclick="FBv15.centerFriend('${esc(f.network)}','${esc(f.id)}'); return false;">voir</a>`
+      : a ? `<span class="fr-atc" title="Connecté en tant que contrôleur">📡 ${esc(a.callsign)} ${esc(a.frequency || '')}</span>${a.lat != null ? ` <a href="#" onclick="FBv15.centerFriend('${esc(f.network)}','${esc(f.id)}', true); return false;">voir</a>` : ''}`
+      : 'hors ligne';
+    return `<div class="fr-row${p || a ? ' on' : ''}"><input type="color" class="fr-color" value="${esc(col)}" title="Couleur de cet ami sur la carte" onchange="FBv15.setFriendColor(${i}, this.value)"><b>${esc(f.label || f.id)}</b><small>${NET[f.network].label} ${esc(f.id)}</small>
+      <span class="fr-st">${st}</span>
+      ${f.color ? `<button class="icon-btn" onclick="FBv15.setFriendColor(${i}, '')" title="Revenir à la couleur du réseau">↺</button>` : ''}
       <button class="icon-btn" onclick="FBv15.removeFriend(${i})" title="Retirer">×</button></div>`; }).join('') : '<div class="hint">Aucun ami pour l\'instant.</div>')
     + (viewersOn.length ? `<div class="cb-sub">Viewers en vol</div>` + viewersOn.map(p => `<div class="fr-row on viewer"><i class="net-dot" style="background:${NET[p.network].color}"></i><b>${esc(p.label)}</b><small>${NET[p.network].label}</small><span class="fr-st">${esc(p.callsign)} · ${esc(friendFl(p))} <a href="#" onclick="FBv15.centerFriend('${esc(p.network)}','${esc(p.id)}'); return false;">voir</a></span></div>`).join('') : '');
 }
 FBv15.refreshFriends = async function(){
   if(!window.atc || !window.atc.friends || friendsBusy) return;
   const c = atcCfg();
-  if(!c.friendsOn){ friendsOnline = []; renderFriends(); return; }
+  if(!c.friendsOn){ friendsOnline = []; friendsAtc = []; renderFriends(); return; }
   friendsBusy = true;
-  try{ const r = await window.atc.friends({ friends: c.friends, viewers: c.viewers !== false }); friendsOnline = (r && r.pilots) || []; }
+  try{ const r = await window.atc.friends({ friends: c.friends, viewers: c.viewers !== false }); friendsOnline = (r && r.pilots) || []; friendsAtc = (r && r.atc) || []; }
   catch(e){ /* réseau injoignable : on garde les dernières positions */ }
   friendsBusy = false;
   renderFriends();
@@ -1104,15 +1311,23 @@ FBv15.addFriend = function(){
   const network = $('frNet').value, id = $('frId').value.replace(/\D/g, ''), label = $('frLabel').value.trim().slice(0, 40);
   if(!/^\d{3,9}$/.test(id)){ m.className = 'status-msg err'; m.textContent = network === 'vatsim' ? 'CID VATSIM invalide : 3 à 9 chiffres (ex : 1234567).' : 'VID IVAO invalide : 3 à 9 chiffres (ex : 123456).'; return; }
   if(c.friends.some(f => f.network === network && f.id === id)){ m.className = 'status-msg err'; m.textContent = 'Déjà dans ta liste.'; return; }
-  c.friends.push({ network, id, label });
+  const color = $('frColor') && $('frColor').dataset.touched ? $('frColor').value : '';
+  c.friends.push(color ? { network, id, label, color } : { network, id, label });
+  if($('frColor')) delete $('frColor').dataset.touched;
   $('frId').value = ''; $('frLabel').value = ''; m.className = 'status-msg'; m.textContent = '';
   queueSaveDb();
   FBv15.refreshFriends();
 };
 FBv15.removeFriend = function(i){ const c = atcCfg(); c.friends.splice(i, 1); queueSaveDb(); FBv15.refreshFriends(); };
-FBv15.centerFriend = function(network, id){
-  const p = friendsOnline.find(x => x.network === network && x.id === id);
-  if(p && trackMap){ trackMap.setView([p.lat, p.lon], Math.max(trackMap.getZoom(), 7)); }
+FBv15.centerFriend = function(network, id, atc){
+  const p = atc ? friendsAtc.find(x => x.network === network && x.id === id) : friendsOnline.find(x => x.network === network && x.id === id);
+  if(p && p.lat != null && trackMap){ trackMap.setView([p.lat, p.lon], Math.max(trackMap.getZoom(), 7)); }
+};
+FBv15.setFriendColor = function(i, color){
+  const c = atcCfg(); const f = c.friends[i]; if(!f) return;
+  if(color && /^#[0-9a-f]{6}$/i.test(color)) f.color = color; else delete f.color;
+  queueSaveDb();
+  renderFriends();
 };
 
 function startAtcPolling(){

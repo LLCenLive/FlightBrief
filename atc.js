@@ -176,6 +176,7 @@ async function fetchVatsim(fetchFn, cacheDir, lookupAirport, force) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const raw = await res.json();
       const stations = [];
+      const controllers = new Map(); // v2.1 — CID -> station (amis connectés en tant qu'ATC)
       const push = (c, isAtis) => {
         const callsign = String(c.callsign || '').toUpperCase();
         const facility = isAtis ? 'ATIS' : facilityOf(callsign, FACILITIES[c.facility]);
@@ -191,11 +192,12 @@ async function fetchVatsim(fetchFn, cacheDir, lookupAirport, force) {
           if (g) { st.poly = g.rings; st.pos = g.label; if (g.name) st.sector = g.name; }
         }
         stations.push(st);
+        if (c.cid != null && (!isAtis || !controllers.has(String(c.cid)))) controllers.set(String(c.cid), st);
       };
       (raw.controllers || []).filter(c => c.facility > 0 && c.frequency && c.frequency !== '199.998').forEach(c => push(c, false));
       (raw.atis || []).forEach(c => push(c, true));
       const data = { ok: true, network: 'vatsim', updatedAt: (raw.general && raw.general.update_timestamp) || new Date().toISOString(), stations, pilots: Array.isArray(raw.pilots) ? raw.pilots.length : null, sectors: !!vatspy };
-      vatsimCache = { at: Date.now(), data, pilots: indexVatsimPilots(raw.pilots) };
+      vatsimCache = { at: Date.now(), data, pilots: indexVatsimPilots(raw.pilots), controllers };
       return data;
     } catch (e) {
       if (vatsimCache) return { ...vatsimCache.data, stale: true, error: e.message || String(e) };
@@ -231,6 +233,7 @@ async function fetchIvao(fetchFn, lookupAirport, force) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const raw = await res.json();
       const atcs = (raw.clients && (raw.clients.atcs || raw.clients.atc)) || raw.atcs || [];
+      const controllers = new Map(); // v2.1 — VID -> station
       const stations = atcs.map(a => {
         const callsign = String(a.callsign || '').toUpperCase();
         const facility = facilityOf(callsign, pick(a, 'atcSession.position', 'atcPosition.position'));
@@ -252,10 +255,12 @@ async function fetchIvao(fetchFn, lookupAirport, force) {
           st.poly = ivaoRings(pick(a, 'atcPosition.regionMap', 'subcenter.regionMap', 'regionMap'));
           st.sector = pick(a, 'atcPosition.composePosition', 'subcenter.composePosition') || '';
         }
+        const uid = pick(a, 'userId', 'vid');
+        if (uid != null) controllers.set(String(uid), st);
         return st;
       });
       const data = { ok: true, network: 'ivao', updatedAt: raw.updatedAt || new Date().toISOString(), stations, pilots: raw.clients && Array.isArray(raw.clients.pilots) ? raw.clients.pilots.length : null };
-      ivaoCache = { at: Date.now(), data, pilots: indexIvaoPilots(raw.clients && raw.clients.pilots) };
+      ivaoCache = { at: Date.now(), data, pilots: indexIvaoPilots(raw.clients && raw.clients.pilots), controllers };
       return data;
     } catch (e) {
       if (ivaoCache) return { ...ivaoCache.data, stale: true, error: e.message || String(e) };
@@ -299,15 +304,32 @@ async function findPilots(fetchFn, opts, wanted) {
     nets.ivao ? fetchIvao(fetchFn, opts.lookupAirport, false) : null
   ]);
   const idx = { vatsim: vatsimCache && vatsimCache.pilots, ivao: ivaoCache && ivaoCache.pilots };
-  const out = [], seen = new Set();
+  const ctl = { vatsim: vatsimCache && vatsimCache.controllers, ivao: ivaoCache && ivaoCache.controllers };
+  const out = [], atc = [], seen = new Set();
   for (const w of wanted) {
     const k = w.network + ':' + w.id;
     if (seen.has(k)) continue;
     seen.add(k);
     const p = idx[w.network] && idx[w.network].get(String(w.id));
     if (p) out.push({ ...p, label: String(w.label || '').slice(0, 40), viewer: !!w.viewer });
+    // v2.1 — ami connecté en tant que contrôleur : position de la station (aéroport, centre du secteur…).
+    const s = ctl[w.network] && ctl[w.network].get(String(w.id));
+    if (s) atc.push(controllerEntry(s, w));
   }
-  return { ok: true, pilots: out, checked: wanted.length };
+  return { ok: true, pilots: out, atc, checked: wanted.length };
+}
+function controllerEntry(s, w) {
+  let pos = s.ap ? [s.ap.lat, s.ap.lon] : (Array.isArray(s.pos) ? s.pos : null);
+  if (!pos && Array.isArray(s.poly) && s.poly[0] && s.poly[0].length) {
+    const ring = s.poly[0];
+    pos = [ring.reduce((a, p) => a + p[0], 0) / ring.length, ring.reduce((a, p) => a + p[1], 0) / ring.length];
+  }
+  return {
+    network: s.network, id: String(w.id), callsign: s.callsign, facility: s.facility, frequency: s.frequency,
+    icao: s.ap ? s.ap.icao : null, sector: s.sector || '', logonTime: s.logonTime || null,
+    lat: pos ? +pos[0] : null, lon: pos ? +pos[1] : null,
+    label: String(w.label || '').slice(0, 40), viewer: !!w.viewer
+  };
 }
 
 async function fetchAtc(fetchFn, opts) {

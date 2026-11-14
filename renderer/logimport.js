@@ -136,7 +136,44 @@
     return { flights, skipped };
   }
 
-  const api = { parseCsv, detectColumns, toFlights, parseDate, parseDuration, FIELDS, LABELS };
+  // v2.1 — export CSV du logbook. En-têtes choisis pour être reconnus tels quels par l'import
+  // (sauvegarde / transfert vers une autre installation). ctx : { careers, hangar, landing(f), distance(f) }.
+  const CSV_COLS = [
+    ['Date', f => f.date], ['Callsign', f => f.callsign], ['Departure', f => f.dep], ['Arrival', f => f.arr],
+    ['Aircraft', f => f.aircraft], ['Rules', f => f.rules],
+    ['Duration', f => f.durationMin ? `${Math.floor(f.durationMin / 60)}:${String(Math.round(f.durationMin % 60)).padStart(2, '0')}` : ''],
+    ['Distance NM', (f, c) => { const d = c.distance ? c.distance(f) : f.distanceNm; return d != null ? Math.round(d) : ''; }],
+    ['Landing rate', (f, c) => { const v = c.landing ? c.landing(f) : f.landingRateFpm; return v != null ? Math.round(v) : ''; }],
+    ['Network', f => f.network], ['Remarks', f => f.remarks],
+    ['Career', (f, c) => { const k = (c.careers || []).find(x => x.id === f.careerId); return k ? k.name : ''; }],
+    ['Hangar aircraft', (f, c) => { const a = (c.hangar || []).find(x => x.id === f.aircraftId); return a ? a.name : ''; }],
+    ['PIREP', f => f.pirep && f.pirep !== 'none' ? f.pirep : ''],
+    ['Tracked', f => f.trackData ? 'yes' : '']
+  ];
+  function csvCell(v, sep) {
+    const s = v == null ? '' : String(v);
+    return (s.includes(sep) || /["\r\n]/.test(s)) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function toCsv(flights, ctx, sep) {
+    sep = sep || ';'; ctx = ctx || {};
+    const lines = [CSV_COLS.map(c => c[0]).join(sep)];
+    (flights || []).forEach(f => lines.push(CSV_COLS.map(([, fn]) => csvCell(fn(f, ctx), sep)).join(sep)));
+    return lines.join('\r\n') + '\r\n';
+  }
+  // Vols (VATSIM / IVAO / CSV) qui ne sont pas déjà dans le logbook (même date, départ, arrivée ; ou même identifiant).
+  function dedupe(incoming, existing) {
+    const ids = new Set((existing || []).map(f => f.id));
+    const seen = new Set((existing || []).map(f => `${f.date}|${(f.dep || '').toUpperCase()}|${(f.arr || '').toUpperCase()}`));
+    const out = [], skipped = { duplicate: 0 };
+    (incoming || []).forEach(f => {
+      const k = `${f.date}|${(f.dep || '').toUpperCase()}|${(f.arr || '').toUpperCase()}`;
+      if (ids.has(f.id) || seen.has(k)) { skipped.duplicate++; return; }
+      seen.add(k); ids.add(f.id); out.push(f);
+    });
+    return { flights: out, skipped };
+  }
+
+  const api = { parseCsv, detectColumns, toFlights, toCsv, dedupe, parseDate, parseDuration, FIELDS, LABELS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.FBImport = api;
 })(typeof window !== 'undefined' ? window : globalThis);

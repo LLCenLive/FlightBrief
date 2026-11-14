@@ -43,6 +43,20 @@ contextBridge.exposeInMainWorld('updater', {
 });
 
 // v1.5 — contrôleurs en ligne (VATSIM + IVAO)
+// v2.1 — logbook : export CSV (dossier exports de l'appli) et import des vols VATSIM / IVAO
+contextBridge.exposeInMainWorld('logbookIO', {
+  exportCsv: (csv) => ipcRenderer.invoke('logbook:exportCsv', { csv }),
+  openExports: () => ipcRenderer.invoke('logbook:openExports'),
+  reveal: (file) => ipcRenderer.invoke('logbook:revealExport', file),
+  vatsim: (cid) => ipcRenderer.invoke('netimport:vatsim', { cid }),
+  ivao: (vid, apiKey) => ipcRenderer.invoke('netimport:ivao', { vid, apiKey })
+});
+
+// v2.1 — events VATSIM + IVAO
+contextBridge.exposeInMainWorld('netEvents', {
+  get: (force) => ipcRenderer.invoke('events:get', { force: !!force })
+});
+
 contextBridge.exposeInMainWorld('atc', {
   get: (opts) => ipcRenderer.invoke('atc:get', opts || {}),
   friends: (opts) => ipcRenderer.invoke('atc:friends', opts || {})

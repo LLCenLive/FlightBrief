@@ -9,6 +9,23 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '2.1.0',
+    date: '2026-11-14',
+    title: "Carrière repensée, PFD en rediffusion, logbook connecté à VATSIM et IVAO",
+    items: [
+      ['new', "Carrière : un seul bouton « + » (Nouvelle carrière / Nouveau tour) et des fenêtres de saisie claires. Grades et étapes se saisissent ligne par ligne, ou en collant d'un coup la liste des aéroports du tour (LFPG EDDF LOWW…)."],
+      ['new', "Tours : prochaine étape mise en avant avec bouton « Préparer le vol » (remplit le Briefing), progression en % et en NM, validation automatique des étapes quand le vol arrive dans le logbook. Tours possibles pour toutes les carrières."],
+      ['new', "Atterrissage : assiette (pitch) et angle de crabe mesurés au moment du toucher, dans le rapport de vol et la carte d'atterrissage."],
+      ['new', "Approche 3D : un PFD reconstitué accompagne la rediffusion (horizon, vitesse, hauteur, vario, cap, écarts ILS, annonces de hauteur)."],
+      ['new', "Logbook : import automatique de tes vols VATSIM (CID) et IVAO (VID, avec ta clé API IVAO), et export CSV dans le dossier « exports » de FlightBrief (ré-importable)."],
+      ['new', "Events VATSIM et IVAO : liste filtrable et fiche détaillée (horaires, terrains, routes, description) dans Outils, terrains en surbrillance sur la carte du Briefing, et alerte quand ton départ ou ton arrivée accueille un event. Une route d'event remplit le Briefing en un clic."],
+      ['new', "Amis sur la carte : une couleur au choix pour chaque ami, et les amis connectés en tant que contrôleurs (ATC) apparaissent aussi."],
+      ['improved', "Briefing : indicateur de chargement sur la carte quand tu actives VATSIM, IVAO ou les amis ; panneaux « Copilote vocal » et « ATC en ligne » repliables."],
+      ['improved', "Profil : textes d'aide remplacés par de petits (i) qui s'affichent au survol."],
+      ['fix', "Logbook : enregistrer une modification de vol ne crée plus de doublon en cas de double clic, et la liste se met à jour immédiatement."]
+    ]
+  },
+  {
     version: '2.0.1',
     date: '2026-10-29',
     title: "EFB lisible dans MSFS 2024",

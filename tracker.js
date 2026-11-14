@@ -53,8 +53,36 @@ const FAST_VARS = [
   { name: 'AMBIENT WIND DIRECTION', unit: 'degrees', key: 'windDir' },
   { name: 'AMBIENT WIND VELOCITY', unit: 'knots', key: 'windKt' },
   { name: 'PLANE ALT ABOVE GROUND', unit: 'feet', key: 'agl' },
-  { name: 'SIM ON GROUND', unit: 'bool', key: 'onGround' }
+  { name: 'SIM ON GROUND', unit: 'bool', key: 'onGround' },
+  // v2.1 — attitude au toucher : assiette (SimConnect : négatif = nez haut) et angle de crabe
+  // (dérive entre l'axe de l'avion et sa trajectoire, d'après la vitesse dans le repère avion).
+  { name: 'PLANE PITCH DEGREES', unit: 'degrees', key: 'pitch' },
+  { name: 'VELOCITY BODY X', unit: 'feet per second', key: 'vbx' },
+  { name: 'VELOCITY BODY Z', unit: 'feet per second', key: 'vbz' }
 ];
+
+// v2.1 — Assiette (nez haut = positif) et angle de crabe (° ; positif = trajectoire à droite du nez).
+function attitudeFromFast(s) {
+  if (!s) return {};
+  const out = {};
+  if (Number.isFinite(s.pitch)) out.pitchDeg = Math.round(-s.pitch * 10) / 10;
+  if (Number.isFinite(s.vbx) && Number.isFinite(s.vbz) && Math.hypot(s.vbx, s.vbz) > 10) {
+    out.crabDeg = Math.round(Math.atan2(s.vbx, s.vbz) * 180 / Math.PI * 10) / 10;
+  }
+  return out;
+}
+// Repli 1 Hz : crabe = cap vrai − route sol estimée entre les deux derniers points enregistrés.
+function crabFromPath(prev, td) {
+  if (!prev || !td || td.hdg == null || prev.lat == null) return null;
+  const toR = d => d * Math.PI / 180;
+  const dLon = toR(td.lon - prev.lon);
+  const y = Math.sin(dLon) * Math.cos(toR(td.lat));
+  const x = Math.cos(toR(prev.lat)) * Math.sin(toR(td.lat)) - Math.sin(toR(prev.lat)) * Math.cos(toR(td.lat)) * Math.cos(dLon);
+  if (Math.hypot(x, y) < 1e-9) return null;
+  const trk = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  let d = ((trk - td.hdg + 540) % 360) - 180;
+  return Math.abs(d) > 45 ? null : Math.round(d * 10) / 10;
+}
 // v1.7 — Systèmes de l'avion (1 Hz), dans une 3e définition SimConnect : alimentent le
 // copilote vocal. Variables « standard » du simulateur : la plupart
 // des avions les tiennent à jour ; certains add-ons très poussés (Fenix, PMDG…) passent par
@@ -757,6 +785,14 @@ class FlightTracker extends EventEmitter {
     td.measure = source;
     if (gForce != null) td.gForce = gForce;
     if (windSrc && Number.isFinite(windSrc.windDir)) { td.windDir = Math.round(windSrc.windDir); td.windKt = Math.round(windSrc.windKt); }
+    // v2.1 — assiette et crabe à l'instant du contact (flux 10 Hz), sinon repli sur la trame 1 Hz.
+    const att = attitudeFromFast(windSrc);
+    td.tdPitchDeg = att.pitchDeg != null ? att.pitchDeg : (Number.isFinite(td.pitchDeg) ? Math.round(-td.pitchDeg * 10) / 10 : null);
+    if (att.crabDeg != null) td.crabDeg = att.crabDeg;
+    else {
+      const prev = this._path.filter(p => p.phase === 'air' && p.ts < at - 300).pop();
+      td.crabDeg = crabFromPath(prev, td);
+    }
 
     // Piste + composantes du vent tout de suite (rapport, carte d'atterrissage, paris Twitch).
     const arr = nearestAirport(td.lat, td.lon, this._rendererDir);
@@ -769,6 +805,7 @@ class FlightTracker extends EventEmitter {
       landingRate: fpm, bounceCount: this._bounceCount, gForce, measure: source,
       windDir: td.windDir ?? null, windKt: td.windKt ?? null,
       headwindKt: td.headwindKt ?? null, crosswindKt: td.crosswindKt ?? null,
+      pitchDeg: td.tdPitchDeg ?? null, crabDeg: td.crabDeg ?? null,
       arr: arr ? { icao: arr.icao, name: arr.name } : null, zone,
       touchdown: { ...td, zone }, ts: tdTs
     });
@@ -1107,4 +1144,4 @@ class FlightTracker extends EventEmitter {
   }
 }
 
-module.exports = { FlightTracker, nearestAirport, loadAirports, loadRunways, computeTouchdownZone, computePhases, computeLivePhases, windComponents };
+module.exports = { FlightTracker, nearestAirport, loadAirports, loadRunways, computeTouchdownZone, computePhases, computeLivePhases, windComponents, attitudeFromFast, crabFromPath };

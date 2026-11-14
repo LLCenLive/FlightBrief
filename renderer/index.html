@@ -92,6 +92,7 @@
         </div>
         <div class="chart-links" id="chartLinks"></div>
         <div class="tour-match hidden" id="briefingTourMatch"></div>
+        <div class="tour-match hidden" id="briefingEventMatch"></div>
         <div class="row2">
           <div class="field"><label>Nom aéroport départ</label><input type="text" id="depName" placeholder="Paris CDG"></div>
           <div class="field"><label>Nom aéroport arrivée</label><input type="text" id="arrName" placeholder="Toulouse Blagnac"></div>
@@ -199,8 +200,9 @@
           <div class="atc-airports" id="atcAirports"></div>
           <details class="atc-all fr-panel" id="frDetails">
             <summary>👥 Amis sur la carte <span id="frCount"></span></summary>
-            <div class="hint" style="margin:6px 0;">Tes amis apparaissent sur la carte quand ils volent sur VATSIM ou IVAO. Les viewers peuvent s'ajouter eux-mêmes depuis le chat avec <code>!vatsim 1234567</code> ou <code>!ivao 123456</code>.</div>
+            <div class="hint" style="margin:6px 0;">Tes amis apparaissent sur la carte quand ils volent ou contrôlent sur VATSIM ou IVAO. Choisis la couleur de chacun avec la pastille. Les viewers peuvent s'ajouter eux-mêmes depuis le chat avec <code>!vatsim 1234567</code> ou <code>!ivao 123456</code>.</div>
             <div class="fr-add">
+              <input type="color" id="frColor" class="fr-color" value="#ffb020" title="Couleur de l'ami sur la carte (par défaut : couleur du réseau)" oninput="this.dataset.touched='1'">
               <select id="frNet"><option value="vatsim">VATSIM</option><option value="ivao">IVAO</option></select>
               <input type="text" id="frId" placeholder="CID / VID" maxlength="9" inputmode="numeric">
               <input type="text" id="frLabel" placeholder="Nom (facultatif)" maxlength="40">
@@ -209,6 +211,7 @@
             <div class="status-msg" id="frMsg"></div>
             <div class="fr-list" id="frList"></div>
             <div class="switch-row"><span>Afficher les viewers inscrits depuis le chat</span><label class="switch"><input type="checkbox" id="frViewers" checked onchange="FBv15.friendsToggle('viewers', this.checked)"><span class="slider"></span></label></div>
+            <div class="switch-row"><span>Afficher les amis connectés en tant qu'ATC</span><label class="switch"><input type="checkbox" id="frAtcOn" checked onchange="FBv15.friendsToggle('friendsAtcOn', this.checked)"><span class="slider"></span></label></div>
           </details>
           <details class="atc-all" id="atcAllDetails">
             <summary>Tous les contrôleurs en ligne <span id="atcAllCount"></span></summary>
@@ -250,6 +253,8 @@
           <div class="tstat"><div class="cap">Virage max</div><div class="val" id="trkResMaxBank">—</div></div>
           <div class="tstat"><div class="cap">Facteur de charge</div><div class="val" id="trkResG">—</div></div>
           <div class="tstat"><div class="cap">Vent au toucher</div><div class="val val-sm" id="trkResWind">—</div></div>
+          <div class="tstat"><div class="cap">Assiette au toucher</div><div class="val" id="trkResPitch">—</div></div>
+          <div class="tstat"><div class="cap">Angle de crabe</div><div class="val val-sm" id="trkResCrab">—</div></div>
           <div class="tstat"><div class="cap">Note d'atterrissage</div><div class="val" id="trkResScore">—</div></div>
         </div>
         <div class="hint" style="margin-bottom:10px;">Trajet complet (tracé sur la carte), phases et statistiques du vol inclus automatiquement dans le PIREP.</div>
@@ -263,10 +268,16 @@
 
   <!-- ================= LOGBOOK VIEW ================= -->
   <div class="view" id="view-logbook">
-    <div class="page-head">
-      <h1>Logbook</h1>
-      <p>Historique de tous tes vols, réseau par réseau, avec le lien vers ta progression de carrière.</p>
-      <button class="btn small" onclick="FBv17.importOpen()">📥 Importer un historique (CSV)</button>
+    <div class="page-head with-action">
+      <div>
+        <h1>Logbook</h1>
+        <p>Historique de tous tes vols, réseau par réseau, avec le lien vers ta progression de carrière.</p>
+      </div>
+      <div class="head-actions lb-head-actions">
+        <button class="btn small" onclick="FBv21.netImportOpen()" title="Récupérer tes vols VATSIM (CID) ou IVAO (VID)">🌐 Importer VATSIM / IVAO</button>
+        <button class="btn small" onclick="FBv17.importOpen()" title="Importer un fichier CSV (Little Navmap, Volanta, tableur, export FlightBrief…)">📥 Importer un CSV</button>
+        <button class="btn small" id="lbExportBtn" onclick="FBv21.exportLogbook()" title="Enregistre tout le logbook en CSV dans le dossier « exports » de FlightBrief (ré-importable)">📤 Exporter en CSV</button>
+      </div>
     </div>
 
     <div class="stat-row">
@@ -330,7 +341,7 @@
       </div>
       <div class="field"><label>Remarques</label><input type="text" id="lbRemarks" placeholder="ex : turbulences en approche"></div>
       <div class="btn-row">
-        <button class="btn primary" onclick="saveLogbookEntry()">Enregistrer le vol</button>
+        <button class="btn primary" id="lbSaveBtn" onclick="saveLogbookEntry()">Enregistrer le vol</button>
         <button class="btn" onclick="resetLogbookForm()">Annuler</button>
       </div>
     </div>
@@ -362,54 +373,27 @@
 
   <!-- ================= CAREER VIEW ================= -->
   <div class="view" id="view-career">
-    <div class="page-head">
-      <h1>Carrière</h1>
-      <p>Suis ta progression au sein d'une compagnie virtuelle, d'un réseau IVAO/VATSIM, ou de tout autre parcours basé sur les heures de vol.</p>
+    <div class="page-head with-action">
+      <div>
+        <h1>Carrière</h1>
+        <p>Suis ta progression au sein d'une compagnie virtuelle, d'un réseau IVAO/VATSIM, ou de tout autre parcours basé sur les heures de vol, et l'avancement de tes tours.</p>
+      </div>
+      <div class="head-actions">
+        <div class="add-menu" id="careerAddMenu">
+          <button class="btn primary add-btn" onclick="toggleCareerAddMenu(event)" title="Ajouter une carrière ou un tour" aria-haspopup="menu" aria-label="Ajouter">＋</button>
+          <div class="add-menu-pop hidden" id="careerAddPop" role="menu">
+            <button role="menuitem" onclick="openCareerEditor()"><span class="am-ico">🎖️</span><span><b>Nouvelle carrière</b><small>Compagnie virtuelle, IVAO, VATSIM…</small></span></button>
+            <button role="menuitem" onclick="openTourEditor()"><span class="am-ico">🧭</span><span><b>Nouveau tour</b><small>Une suite d'étapes à valider</small></span></button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="career-grid" id="careerGrid"></div>
 
     <div class="tours-section" id="toursSection">
-      <h3 class="tours-heading">Tours IVAO en cours</h3>
+      <h3 class="tours-heading">Tours en cours <span class="tours-head-count" id="toursHeadCount"></span></h3>
       <div id="toursList"></div>
-    </div>
-
-    <div class="card-panel" id="tourPanel">
-      <h3 id="tourFormTitle">Nouveau tour</h3>
-      <div class="field">
-        <label>Carrière IVAO concernée</label>
-        <select id="tourCareerSelect"></select>
-        <div class="hint">Seules les carrières de type IVAO apparaissent ici. Crée d'abord une carrière IVAO ci-dessous si la liste est vide.</div>
-      </div>
-      <div class="field"><label>Nom du tour</label><input type="text" id="tourName" placeholder="ex : Tour d'Europe 2026"></div>
-      <div class="field">
-        <label>Étapes (une par ligne, format : OACI départ;OACI arrivée)</label>
-        <textarea id="tourLegs" placeholder="LFPG;EDDF&#10;EDDF;LOWW&#10;LOWW;LIRF" style="min-height:90px; font-family:var(--font-mono);"></textarea>
-      </div>
-      <div class="btn-row">
-        <button class="btn primary" id="tourSaveBtn" onclick="saveTour()">Ajouter ce tour</button>
-        <button class="btn" onclick="resetTourForm()">Annuler</button>
-      </div>
-    </div>
-
-    <div class="card-panel">
-      <h3 id="careerFormTitle">Nouvelle carrière</h3>
-      <div class="row2">
-        <div class="field"><label>Nom</label><input type="text" id="carName" placeholder="ex : Air France Virtual"></div>
-        <div class="field">
-          <label>Type</label>
-          <select id="carType"><option value="VA">Compagnie virtuelle</option><option value="IVAO">IVAO</option><option value="VATSIM">VATSIM</option><option value="Autre">Autre</option></select>
-        </div>
-      </div>
-      <div class="field">
-        <label>Grades (un par ligne, format : Nom;heures requises)</label>
-        <textarea id="carRanks" placeholder="Cadet;0&#10;First Officer;50&#10;Captain;150&#10;Senior Captain;400" style="min-height:90px; font-family:var(--font-mono);"></textarea>
-        <div class="hint">Le premier grade doit commencer à 0 heure. Les heures totales sont calculées automatiquement à partir des vols du logbook liés à cette carrière.</div>
-      </div>
-      <div class="btn-row">
-        <button class="btn primary" onclick="saveCareer()">Enregistrer la carrière</button>
-        <button class="btn" onclick="resetCareerForm()">Annuler</button>
-      </div>
     </div>
   </div>
 
@@ -989,6 +973,40 @@
       <div class="fly-results" id="flyResults"></div>
     </div>
 
+    <!-- v2.1 — events VATSIM + IVAO -->
+    <div class="card-panel ev-card" id="evCard">
+      <div class="ev-head">
+        <h3>🎉 Events VATSIM &amp; IVAO</h3>
+        <span class="hint" id="evUpdated" style="margin:0 0 0 auto;"></span>
+        <button class="btn small" id="evRefreshBtn" onclick="FBv21.eventsRefresh(true)" title="Actualiser">↻</button>
+      </div>
+      <div class="ev-filters">
+        <div class="ev-nets">
+          <button class="atc-chip net" data-evnet="vatsim" style="--net:#3ee0a8" onclick="FBv21.eventsSet('vatsim')"><i></i>VATSIM</button>
+          <button class="atc-chip net" data-evnet="ivao" style="--net:#5b93ff" onclick="FBv21.eventsSet('ivao')"><i></i>IVAO</button>
+        </div>
+        <select id="evPeriod" onchange="FBv21.eventsSet('period', this.value)">
+          <option value="live">En cours</option>
+          <option value="today">Aujourd'hui</option>
+          <option value="48h">48 prochaines heures</option>
+          <option value="week">7 prochains jours</option>
+          <option value="all">Tous</option>
+        </select>
+        <input type="search" id="evSearch" placeholder="Rechercher : nom, OACI, division…" oninput="FBv21.eventsSearch(this.value)">
+      </div>
+      <div class="ev-mapopt">
+        <div class="switch-row" style="padding:0; gap:10px;"><span>Terrains en surbrillance sur la carte du Briefing</span><label class="switch"><input type="checkbox" id="evMapOn" onchange="FBv21.eventsSet('map', this.checked)"><span class="slider"></span></label></div>
+        <select id="evMapHours" onchange="FBv21.eventsSet('mapHours', this.value)" title="Events affichés sur la carte">
+          <option value="6">en cours + 6 h</option>
+          <option value="24">en cours + 24 h</option>
+          <option value="72">en cours + 3 jours</option>
+          <option value="168">en cours + 7 jours</option>
+        </select>
+      </div>
+      <div class="ev-list" id="evList"></div>
+      <div class="hint" style="margin-top:8px;">Données publiques de VATSIM (my.vatsim.net) et d'IVAO, actualisées toutes les 15 min. Heures affichées à l'heure locale, puis en UTC (z).</div>
+    </div>
+
     <div class="tools-grid">
       <!-- Temps / Distance / Vitesse -->
       <div class="card-panel">
@@ -1336,9 +1354,9 @@
       <div class="panel" id="profilPanel">
         <div class="panel-title"><span class="dot"></span> Identité</div>
         <div class="field" data-no-i18n><label>🌐 Langue · Language · Idioma</label><select class="fb-lang"></select></div>
-        <div class="field"><label>Prénom</label><input type="text" id="pfFirstName" placeholder="ex : Alex"></div>
+        <div class="field"><label>Prénom <i class="info-tip" tabindex="0" data-tip="Affiché dans l'appli, l'EFB et le carnet de vol public."></i></label><input type="text" id="pfFirstName" placeholder="ex : Alex"></div>
         <div class="field">
-          <label>Réseau préféré</label>
+          <label>Réseau préféré <i class="info-tip" tabindex="0" data-tip="Pré-remplit le réseau des nouveaux vols du logbook."></i></label>
           <select id="pfNetwork">
             <option value="">Non renseigné</option>
             <option value="VATSIM">VATSIM</option>
@@ -1349,13 +1367,12 @@
           </select>
         </div>
         <div class="row2">
-          <div class="field"><label>VID VATSIM</label><input type="text" id="pfVatsimId" placeholder="ex : 1234567"></div>
-          <div class="field"><label>VID IVAO</label><input type="text" id="pfIvaoId" placeholder="ex : 123456"></div>
+          <div class="field"><label>CID VATSIM <i class="info-tip" tabindex="0" data-tip="Ton numéro de membre VATSIM : sert à importer tes vols VATSIM dans le logbook."></i></label><input type="text" id="pfVatsimId" placeholder="ex : 1234567" inputmode="numeric"></div>
+          <div class="field"><label>VID IVAO <i class="info-tip" tabindex="0" data-tip="Ton numéro de membre IVAO : sert à importer tes vols IVAO dans le logbook."></i></label><input type="text" id="pfIvaoId" placeholder="ex : 123456" inputmode="numeric"></div>
         </div>
-        <div class="switch-row"><span>Je fais des lives (Twitch, OBS)</span><label class="switch"><input type="checkbox" id="pfTwitchFeatures"><span class="slider"></span></label></div>
-        <p class="hint">Affiche les onglets Outil Live, Twitch et À bord (overlays, bot du chat, passagers). Désactivé, FlightBrief reste un pur outil de vol ; tu peux changer d'avis à tout moment dans le Profil.</p>
+        <div class="switch-row"><span>Je fais des lives (Twitch, OBS) <i class="info-tip" tabindex="0" data-tip="Affiche les onglets Outil Live, Twitch et À bord (overlays, bot du chat, passagers). Désactivé, FlightBrief reste un pur outil de vol ; tu peux changer d'avis à tout moment dans le Profil."></i></span><label class="switch"><input type="checkbox" id="pfTwitchFeatures"><span class="slider"></span></label></div>
         <div class="field stream-only"><label>Pseudo Twitch</label><input type="text" id="pfTwitchHandle" placeholder="ex : tonpseudo"></div>
-        <div class="field"><label>Aéroport de base (OACI)</label><input type="text" id="pfHomeBase" placeholder="ex : LFPG" maxlength="4"></div>
+        <div class="field"><label>Aéroport de base (OACI) <i class="info-tip" tabindex="0" data-tip="Point de départ des suggestions « Où voler aujourd'hui » et de tes statistiques."></i></label><input type="text" id="pfHomeBase" placeholder="ex : LFPG" maxlength="4"></div>
         <div class="btn-row">
           <button class="btn primary block" onclick="saveUserProfile()">Enregistrer le profil</button>
         </div>
@@ -1364,14 +1381,12 @@
         <h2>Réglages</h2>
         <div class="btn-row"><button class="btn block" onclick="openLandingThresholds()">⚙ Seuils de toucher par catégorie</button></div>
 
-        <h2>🎛️ Stream Deck</h2>
-        <p class="hint">Pilote FlightBrief depuis ton Stream Deck : tracker, capture, copilote vocal, infos de vol sur les touches, molettes du Stream Deck + pour les volumes. Le plugin s'installe d'un clic, déjà appairé avec ce PC.</p>
+        <h2>🎛️ Stream Deck <i class="info-tip" tabindex="0" data-tip="Pilote FlightBrief depuis ton Stream Deck : tracker, capture, copilote vocal, infos de vol sur les touches, molettes du Stream Deck + pour les volumes. Le plugin s'installe d'un clic, déjà appairé avec ce PC."></i></h2>
         <div class="btn-row"><button class="btn block" onclick="FBv17.deckInstall()">Installer le plugin Stream Deck</button></div>
         <div class="status-msg" id="deckStatus"></div>
-        <button class="btn small" style="margin-top:6px;" onclick="FBv17.deckNewToken()">Nouveau code d'appairage</button>
+        <button class="btn small" style="margin-top:6px;" onclick="FBv17.deckNewToken()" title="Génère un nouveau code si le Stream Deck ne répond plus ou si tu changes de PC">Nouveau code d'appairage</button>
 
-        <h2>🛫 EFB de MSFS 2024</h2>
-        <p class="hint">Ajoute FlightBrief à la tablette (EFB) de tous les avions de MSFS 2024, avec les mêmes rubriques que l'appli : Briefing (vol, météo, ATC, amis, OFP), Logbook, Carrière et Live (bot, paris, passagers, classement, chat). FlightBrief doit tourner sur ce PC pendant le vol. Relance le simulateur après l'installation.</p>
+        <h2>🛫 EFB de MSFS 2024 <i class="info-tip" tabindex="0" data-tip="Ajoute FlightBrief à la tablette (EFB) de tous les avions de MSFS 2024, avec les mêmes rubriques que l'appli : Briefing (vol, météo, ATC, amis, OFP), Logbook, Carrière et Live (bot, paris, passagers, classement, chat). FlightBrief doit tourner sur ce PC pendant le vol. Relance le simulateur après l'installation."></i></h2>
         <div class="btn-row"><button class="btn block" onclick="FBv17.efbInstall()">Installer l'appli EFB</button></div>
         <div class="status-msg" id="efbPkgStatus"></div>
 
@@ -1558,6 +1573,74 @@
   </div>
 </div>
 
+<!-- ================= v2.1 — MODALE DÉTAIL D'UN EVENT ================= -->
+<div class="modal-overlay hidden" id="evModalOverlay" onclick="if(event.target===this) FBv21.eventClose()">
+  <div class="modal modal-wide" id="evModal"></div>
+</div>
+
+<!-- ================= v2.1 — MODALE CARRIÈRE (création / modification) ================= -->
+<div class="modal-overlay hidden" id="careerEditOverlay" onclick="if(event.target===this) closeCareerEditor()">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="careerFormTitle">Nouvelle carrière</h3>
+      <button class="icon-btn" onclick="closeCareerEditor()">Fermer</button>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Nom</label><input type="text" id="carName" placeholder="ex : Air France Virtual" maxlength="60" onkeydown="if(event.key==='Enter') saveCareer()"></div>
+      <div class="field">
+        <label>Type</label>
+        <select id="carType"><option value="VA">Compagnie virtuelle</option><option value="IVAO">IVAO</option><option value="VATSIM">VATSIM</option><option value="Autre">Autre</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <div class="label-row"><label>Grades</label><button class="btn small" type="button" onclick="applyCareerPreset()" title="Remplit les grades avec un modèle adapté au type choisi">Modèle selon le type</button></div>
+      <div class="rank-head"><span></span><span>Nom du grade</span><span>Heures requises</span><span></span></div>
+      <div class="rank-list" id="carRanksList"></div>
+      <button class="btn small" type="button" onclick="addCareerRank()">＋ Ajouter un grade</button>
+      <div class="hint">Les heures totales sont calculées automatiquement à partir des vols du logbook liés à cette carrière. Le premier grade commence à 0 h. Entrée = grade suivant.</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="saveCareer()">Enregistrer la carrière</button>
+      <button class="btn" onclick="closeCareerEditor()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= v2.1 — MODALE TOUR (création / modification) ================= -->
+<div class="modal-overlay hidden" id="tourEditOverlay" onclick="if(event.target===this) closeTourEditor()">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <h3 id="tourFormTitle">Nouveau tour</h3>
+      <button class="icon-btn" onclick="closeTourEditor()">Fermer</button>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Nom du tour</label><input type="text" id="tourName" placeholder="ex : Tour d'Europe 2026" maxlength="80"></div>
+      <div class="field"><label>Carrière</label><select id="tourCareerSelect"></select></div>
+    </div>
+    <div class="field tour-quick">
+      <label>Saisie rapide</label>
+      <textarea id="tourQuick" rows="2" spellcheck="false" placeholder="Colle la liste des aéroports du tour : LFPG EDDF LOWW LIRF…  ou une étape par ligne : LFPG-EDDF"></textarea>
+      <div class="btn-row" style="margin-top:6px;">
+        <button class="btn small primary" type="button" onclick="applyTourQuick('replace')">Créer les étapes</button>
+        <button class="btn small" type="button" onclick="applyTourQuick('append')">Ajouter à la suite</button>
+        <span class="status-msg" id="tourQuickMsg" style="margin:0;"></span>
+      </div>
+    </div>
+    <div class="field">
+      <div class="label-row"><label>Étapes</label><span class="hint" id="tourLegsSummary" style="margin:0;"></span></div>
+      <div class="leg-list" id="tourLegsList"></div>
+      <button class="btn small" type="button" onclick="insertTourLeg()">＋ Ajouter une étape</button>
+      <div class="hint">L'arrivée d'une étape devient le départ de la suivante. Entrée dans « Arrivée » = étape suivante. Un code en orange est inconnu de l'index des aéroports.</div>
+    </div>
+    <div class="switch-row" style="margin-top:6px; gap:12px;"><span>Valider les étapes automatiquement quand un vol correspondant arrive dans le logbook</span><label class="switch"><input type="checkbox" id="tourAuto" checked><span class="slider"></span></label></div>
+    <div class="status-msg" id="tourEditMsg"></div>
+    <div class="btn-row">
+      <button class="btn primary" id="tourSaveBtn" onclick="saveTour()">Créer le tour</button>
+      <button class="btn" onclick="closeTourEditor()">Annuler</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= MODALE DÉTAIL D'UN TOUR (carrière) =================
      Placée AVANT la modale de trajet : le bouton "Carte" d'une étape ouvre la modale
      de trajet par-dessus celle-ci. -->
@@ -1638,6 +1721,7 @@
       <div class="approach3d-shell">
         <div id="approach3d"></div>
         <div class="approach3d-hud" id="approach3dHud"></div>
+        <canvas class="ap3d-pfd" id="ap3dPfd" width="300" height="230" title="PFD reconstitué depuis l'enregistrement du vol"></canvas>
         <div class="approach3d-controls">
           <button class="btn small" id="ap3dPlay" onclick="FBv15.approachPlayToggle()">▶ Rejouer</button>
           <input type="range" id="ap3dScrub" min="0" max="1000" value="1000">
@@ -1648,6 +1732,7 @@
             <option value="pilot">Depuis l'avion</option>
           </select>
           <label class="ap3d-ex"><input type="checkbox" id="ap3dExag" checked onchange="FBv15.approachSetExag(this.checked)"> Relief ×3</label>
+          <label class="ap3d-ex" title="Écran de pilotage (PFD) reconstitué : horizon, vitesse, hauteur, vario, cap, écarts ILS"><input type="checkbox" id="ap3dPfdOn" checked onchange="FBv15.approachTogglePfd(this.checked)"> PFD</label>
         </div>
       </div>
       <div class="hint" id="approach3dHint"></div>
@@ -1892,6 +1977,7 @@
 <script src="copilot.js"></script>
 <script src="v17.js"></script>
 <script src="v18.js"></script>
+<script src="v21.js"></script>
 <script>
 // v1.7 — choix de la langue (Profil et accueil) : enregistré par l'appli, puis rechargement de l'interface.
 document.querySelectorAll('select.fb-lang').forEach(sel => {
