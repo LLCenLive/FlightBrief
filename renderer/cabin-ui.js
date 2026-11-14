@@ -13,6 +13,7 @@ window.FBCabin = FBCabin;
 const $ = id => document.getElementById(id);
 const esc = s => escapeHtml(s == null ? '' : String(s));
 const nf = n => Math.round(n || 0).toLocaleString(FBI18N.locale());
+const T = s => (window.FBI18N ? FBI18N.tr(s) : s); // carte postale : traduire avant de mesurer ou couper le texte (fillText ne voit que des morceaux de ligne)
 
 let st = null, ranking = [], obsUrl = '';
 
@@ -383,7 +384,7 @@ async function buildPostcard(d){
   ctx.textAlign = 'center'; ctx.fillStyle = ink;
   ctx.font = `64px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`; ctx.fillText(flagEmoji(d.arrCc) || '✈', sx + sw / 2, sy + 104);
   ctx.font = `700 38px ui-monospace, Consolas, monospace`; ctx.fillText(d.arr || '', sx + sw / 2, sy + 160);
-  ctx.font = `600 13px ${sans}`; ctx.fillText('POSTE AÉRIENNE', sx + sw / 2, sy + 190);
+  ctx.font = `600 13px ${sans}`; ctx.fillText(T('POSTE AÉRIENNE'), sx + sw / 2, sy + 190);
   ctx.font = `600 12px ${sans}`; ctx.fillText(`${d.distanceNm ? nf(d.distanceNm) + ' NM' : 'FLIGHTBRIEF'}`, sx + sw / 2, sy + 210);
   ctx.textAlign = 'left';
   // Cachet de la poste
@@ -396,24 +397,24 @@ async function buildPostcard(d){
 
   // Texte
   const tx = 1030, tw = 500;
-  ctx.fillStyle = '#5b5348'; ctx.font = `italic 40px ${serif}`; ctx.fillText('Bons baisers de', tx, 420);
-  const city = d.arrCity || d.arr || 'destination';
+  ctx.fillStyle = '#5b5348'; ctx.font = `italic 40px ${serif}`; ctx.fillText(T('Bons baisers de'), tx, 420);
+  const city = d.arrCity || d.arr || T('destination');
   ctx.fillStyle = '#2b2a33'; const cs = fitText(ctx, city, tw, 86, '700 {s}px ' + serif); ctx.font = `700 ${cs}px ${serif}`; ctx.fillText(city, tx, 420 + cs + 6);
   let y = 420 + cs + 70;
   ctx.font = `500 23px ${sans}`; ctx.fillStyle = '#3b3a43';
-  const leg = [`Vol ${d.callsign || ''}`.trim(), `${d.depCity || d.dep || '?'} → ${city}`].filter(Boolean).join(' · ');
+  const leg = [d.callsign ? T(`Vol ${d.callsign}`) : '', `${d.depCity || d.dep || '?'} → ${city}`].filter(Boolean).join(' · ');
   const meta = [d.aircraft, d.durationLabel, d.distanceNm ? nf(d.distanceNm) + ' NM' : null].filter(Boolean).join(' · ');
-  const land = d.fpm != null ? `Toucher −${nf(Math.abs(d.fpm))} ft/min${d.letter ? ' · note ' + d.letter : ''}` : null;
+  const land = d.fpm != null ? T(`Toucher −${nf(Math.abs(d.fpm))} ft/min${d.letter ? ' · note ' + d.letter : ''}`) : null;
   [leg, meta, land].filter(Boolean).forEach(t => { wrap(ctx, t, tw).forEach(l => { ctx.fillText(l, tx, y); y += 34; }); });
   // Lignes d'adresse + passagers à la main
   y += 16;
-  ctx.fillStyle = '#5b5348'; ctx.font = `600 15px ${sans}`; ctx.fillText(`À BORD · ${d.passengers.length} PASSAGER${d.passengers.length > 1 ? 'S' : ''}`, tx, y); y += 12;
+  ctx.fillStyle = '#5b5348'; ctx.font = `600 15px ${sans}`; ctx.fillText(T(`À BORD · ${d.passengers.length} PASSAGER${d.passengers.length > 1 ? 'S' : ''}`), tx, y); y += 12;
   ctx.font = `28px ${script}`; ctx.fillStyle = '#1f3f7a';
   const shown = d.passengers.slice(0, 40), more = d.passengers.length - shown.length;
-  const lines = wrap(ctx, shown.join(', ') + (more > 0 ? ` et ${more} autres` : ''), tw).slice(0, 5);
+  const lines = wrap(ctx, shown.join(', ') + (more > 0 ? ' ' + T(`et ${more} autres`) : ''), tw).slice(0, 5);
   lines.forEach(l => { y += 44; ctx.strokeStyle = 'rgba(80,65,45,.25)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(tx, y + 10); ctx.lineTo(tx + tw, y + 10); ctx.stroke(); ctx.fillText(l, tx, y); });
   // Signature
-  ctx.font = `34px ${script}`; ctx.fillStyle = '#1f3f7a'; ctx.textAlign = 'right'; ctx.fillText('— ' + (d.pilot || 'Le commandant de bord'), 1540, 935); ctx.textAlign = 'left';
+  ctx.font = `34px ${script}`; ctx.fillStyle = '#1f3f7a'; ctx.textAlign = 'right'; ctx.fillText('— ' + (d.pilot || T('Le commandant de bord')), 1540, 935); ctx.textAlign = 'left';
   return cv.toDataURL('image/jpeg', 0.9);
 }
 

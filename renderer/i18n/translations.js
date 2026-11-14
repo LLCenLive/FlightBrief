@@ -2351,4 +2351,335 @@ EFB lisible dans MSFS 2024	Readable EFB in MSFS 2024	EFB legible en MSFS 2024
 EFB de MSFS 2024 : lettres accentuées, flèches et symboles s'affichent enfin (polices complètes fournies par FlightBrief).	MSFS 2024 EFB: accented letters, arrows and symbols finally show up (full fonts provided by FlightBrief).	EFB de MSFS 2024: las letras con acento, las flechas y los símbolos por fin se muestran (fuentes completas proporcionadas por FlightBrief).
 EFB : l'OFP SimBrief se ferme avec un gros bouton toujours visible ou en touchant le fond, et ses colonnes sont alignées.	EFB: the SimBrief OFP closes with a large always-visible button or by tapping the background, and its columns are aligned.	EFB: el OFP de SimBrief se cierra con un botón grande siempre visible o tocando el fondo, y sus columnas están alineadas.
 EFB : statut des passagers en toutes lettres (Argent, Or…) au lieu des emojis, que le simulateur n'affiche pas.	EFB: passenger status in plain words (Silver, Gold…) instead of emojis, which the simulator can't show.	EFB: estatus de los pasajeros en texto (Plata, Oro…) en lugar de emojis, que el simulador no muestra.
+# ================= v2.1 — issue « textes restés en français », carrière, import réseau, events =================
+# --- Issue GitHub : textes restés en français (v2.0.1) ---
+— Choisir —	— Choose —	— Elegir —
+Tous · {0}	All · {0}	Todos · {0}
+↻ Actualiser depuis SimBrief	↻ Refresh from SimBrief	↻ Actualizar desde SimBrief
+↻ Synchroniser	↻ Sync	↻ Sincronizar
+✓ Faite	✓ Done	✓ Hecha
+dans {0}	in {0}	en {0}
+dans {0} · {1} NM	in {0} · {1} NM	en {0} · {1} NM
+{0}/{1} étapes	{0}/{1} legs	{0}/{1} etapas
+/{0} étapes · {1} %{2}	/{0} legs · {1} %{2}	/{0} etapas · {1} %{2}
+sur {0}	of {0}	de {0}
+record d'affilée	best streak	récord seguido
+Ville	City	Ciudad
+Tampons ({0}) {1}	Stamps ({0}) {1}	Sellos ({0}) {1}
+{0} vol{1} · {2} 🛂	{0} flight{1} · {2} 🛂	{0} vuelo{1} · {2} 🛂
+Supprimer toutes ses données	Delete all their data	Borrar todos sus datos
+Supprimer définitivement ce viewer (miles, passeport, ville) ?	Permanently delete this viewer (miles, passport, city)?	¿Borrar definitivamente a este viewer (millas, pasaporte, ciudad)?
+Annuler le vol en cours pour « À bord » ? Les miles déjà gagnés sont conservés, pas de tampon.	Cancel the current flight for "On board"? Miles already earned are kept, no stamp.	¿Cancelar el vuelo en curso de «A bordo»? Las millas ya ganadas se conservan, sin sello.
+Lien copié ✓ — OBS → Source → Navigateur, 420 × 600 (transparente).	Link copied ✓ — OBS → Source → Browser, 420 × 600 (transparent).	Enlace copiado ✓ — OBS → Fuente → Navegador, 420 × 600 (transparente).
+Génération…	Generating…	Generando…
+Site généré ✓ {0} vols, {1} passagers, {2} cartes postales. Ouvre index.html pour le vérifier, puis envoie le contenu du dossier sur GitHub.	Site generated ✓ {0} flights, {1} passengers, {2} postcards. Open index.html to check it, then upload the folder's contents to GitHub.	Sitio generado ✓ {0} vuelos, {1} pasajeros, {2} postales. Abre index.html para comprobarlo y luego sube el contenido de la carpeta a GitHub.
+connecté	connected	conectado
+non connecté	not connected	no conectado
+déconnecté	disconnected	desconectado
+activé	enabled	activado
+désactivé	disabled	desactivado
+Connecter le compte de ma chaîne	Connect my channel's account	Conectar la cuenta de mi canal
+Pour l'envoyer directement, connecte le compte de ta chaîne dans l'onglet À bord. En attendant, « Copier » le met dans ton presse-papiers.	To send it directly, connect your channel's account in the On board tab. Until then, "Copy" puts it in your clipboard.	Para enviarlo directamente, conecta la cuenta de tu canal en la pestaña A bordo. Mientras tanto, «Copiar» lo pone en tu portapapeles.
+Sera appliqué à la chaîne {0}.	Will be applied to the {0} channel.	Se aplicará al canal {0}.
+Titre copié ✓	Title copied ✓	Título copiado ✓
+Envoi à Twitch…	Sending to Twitch…	Enviando a Twitch…
+Titre mis à jour sur Twitch ✓{0}	Title updated on Twitch ✓{0}	Título actualizado en Twitch ✓{0}
+· catégorie {0}	· category {0}	· categoría {0}
+POSTE AÉRIENNE	AIR MAIL	CORREO AÉREO
+Bons baisers de	Greetings from	Saludos desde
+destination	destination	destino
+Vol {0}	Flight {0}	Vuelo {0}
+À BORD · {0} PASSAGER{1}	ON BOARD · {0} PASSENGER{1}	A BORDO · {0} PASAJERO{1}
+Le commandant de bord	The captain	El comandante
+Toucher −{0} ft/min{1}	Touchdown −{0} ft/min{1}	Toma −{0} ft/min{1}
+· note {0}	· grade {0}	· nota {0}
+Bons baisers de {0} · {1} passager{2}.	Greetings from {0} · {1} passenger{2}.	Saludos desde {0} · {1} pasajero{2}.
+Envoyée sur l'overlay Alertes.	Sent to the Alerts overlay.	Enviada al overlay de Alertas.
+🏠 Prochain survol :	🏠 Next flyover:	🏠 Próximo sobrevuelo:
+chez {0}	over {0}'s home	sobre la casa de {0}
+({0}) · {1} km	({0}) · {1} km	({0}) · {1} km
+[À bord] carte postale	[On board] postcard	[A bordo] postal
+[À bord] réglages	[On board] settings	[A bordo] ajustes
+# --- Divers ---
+Langue	Language	Idioma
+Erreur	Error	Error
+Chargement	Loading	Cargando
+Enregistrement…	Saving…	Guardando…
+Description	Description	Descripción
+Bot Twitch	Twitch bot	Bot de Twitch
+Fonctions streaming	Streaming features	Funciones de streaming
+30 kt	30 kt	30 kt
+50 miles	50 miles	50 millas
+Monter	Move up	Subir
+Descendre	Move down	Bajar
+Tout cocher / décocher	Check / uncheck all	Marcar / desmarcar todo
+Génère un nouveau code si le Stream Deck ne répond plus ou si tu changes de PC	Generates a new code if the Stream Deck stops responding or if you change PC	Genera un código nuevo si el Stream Deck deja de responder o si cambias de PC
+Afficher le fichier	Show file	Mostrar el archivo
+Affiché dans l'appli, l'EFB et le carnet de vol public.	Shown in the app, the EFB and the public logbook.	Se muestra en la app, el EFB y el diario de vuelo público.
+Point de départ des suggestions « Où voler aujourd'hui » et de tes statistiques.	Starting point for the "Where to fly today" suggestions and your statistics.	Punto de partida de las sugerencias «¿Dónde volar hoy?» y de tus estadísticas.
+Pré-remplit le réseau des nouveaux vols du logbook.	Pre-fills the network of new logbook flights.	Rellena de antemano la red de los nuevos vuelos del logbook.
+Ton numéro de membre VATSIM : sert à importer tes vols VATSIM dans le logbook.	Your VATSIM member number: used to import your VATSIM flights into the logbook.	Tu número de miembro de VATSIM: sirve para importar tus vuelos de VATSIM al logbook.
+Ton numéro de membre IVAO : sert à importer tes vols IVAO dans le logbook.	Your IVAO member number: used to import your IVAO flights into the logbook.	Tu número de miembro de IVAO: sirve para importar tus vuelos de IVAO al logbook.
+GitHub a répondu HTTP	GitHub replied HTTP	GitHub respondió HTTP
+# --- Atterrissage : assiette et crabe ---
+Assiette	Pitch	Cabeceo
+Assiette (pitch)	Pitch	Cabeceo (pitch)
+Assiette au toucher	Pitch at touchdown	Cabeceo en la toma
+Angle de crabe	Crab angle	Ángulo de deriva
+Crabe	Crab	Deriva
+(nez bas)	(nose down)	(morro abajo)
+0° (aligné)	0° (aligned)	0° (alineado)
+Écart entre l'axe de l'avion et sa trajectoire au contact	Angle between the aircraft's axis and its track at touchdown	Diferencia entre el eje del avión y su trayectoria en el contacto
+PFD reconstitué depuis l'enregistrement du vol	PFD rebuilt from the flight recording	PFD reconstruido a partir de la grabación del vuelo
+Écran de pilotage (PFD) reconstitué : horizon, vitesse, hauteur, vario, cap, écarts ILS	Rebuilt flight display (PFD): horizon, speed, height, vertical speed, heading, ILS deviations	Pantalla de vuelo (PFD) reconstruida: horizonte, velocidad, altura, variómetro, rumbo, desviaciones ILS
+# --- Carrière et tours ---
+Aucune carrière	No career	Ninguna carrera
+Aucune carrière pour l'instant	No career yet	Todavía no hay ninguna carrera
+Crée une carrière (compagnie virtuelle, IVAO, VATSIM…) pour suivre tes heures, tes grades et tes tours.	Create a career (virtual airline, IVAO, VATSIM…) to track your hours, ranks and tours.	Crea una carrera (aerolínea virtual, IVAO, VATSIM…) para seguir tus horas, tus rangos y tus tours.
+Suis ta progression au sein d'une compagnie virtuelle, d'un réseau IVAO/VATSIM, ou de tout autre parcours basé sur les heures de vol, et l'avancement de tes tours.	Track your progress in a virtual airline, an IVAO/VATSIM network, or any other path based on flight hours, along with your tours.	Sigue tu progreso en una aerolínea virtual, una red IVAO/VATSIM o cualquier otro recorrido basado en horas de vuelo, y el avance de tus tours.
+Ajouter une carrière ou un tour	Add a career or a tour	Añadir una carrera o un tour
+Compagnie virtuelle, IVAO, VATSIM…	Virtual airline, IVAO, VATSIM…	Aerolínea virtual, IVAO, VATSIM…
+Une suite d'étapes à valider	A series of legs to complete	Una serie de etapas por validar
+Crée d'abord une carrière.	Create a career first.	Crea primero una carrera.
+Un tour appartient à une carrière. Créer d'abord une carrière ?	A tour belongs to a career. Create a career first?	Un tour pertenece a una carrera. ¿Crear primero una carrera?
+＋ Nouvelle carrière	＋ New career	＋ Nueva carrera
+＋ Ajouter un grade	＋ Add a rank	＋ Añadir un rango
+＋ Ajouter un tour à cette carrière	＋ Add a tour to this career	＋ Añadir un tour a esta carrera
+＋ Ajouter une étape	＋ Add a leg	＋ Añadir una etapa
+Grades	Ranks	Rangos
+Nom du grade	Rank name	Nombre del rango
+Heures requises	Required hours	Horas requeridas
+Retirer ce grade	Remove this rank	Quitar este rango
+Modèle selon le type	Template for this type	Plantilla según el tipo
+Remplit les grades avec un modèle adapté au type choisi	Fills the ranks with a template suited to the chosen type	Rellena los rangos con una plantilla adaptada al tipo elegido
+Remplacer les grades saisis par le modèle de ce type de carrière ?	Replace the ranks entered with the template for this career type?	¿Sustituir los rangos introducidos por la plantilla de este tipo de carrera?
+Les heures totales sont calculées automatiquement à partir des vols du logbook liés à cette carrière. Le premier grade commence à 0 h. Entrée = grade suivant.	Total hours are calculated automatically from the logbook flights linked to this career. The first rank starts at 0 h. Enter = next rank.	Las horas totales se calculan automáticamente a partir de los vuelos del logbook vinculados a esta carrera. El primer rango empieza en 0 h. Intro = rango siguiente.
+Le premier grade commence à 0 h	The first rank starts at 0 h	El primer rango empieza en 0 h
+Cadet	Cadet	Cadete
+First Officer	First Officer	Primer oficial
+Senior First Officer	Senior First Officer	Primer oficial sénior
+Captain	Captain	Comandante
+Senior Captain	Senior Captain	Comandante sénior
+Supprimer la carrière	Delete career	Borrar la carrera
+Supprimer cette carrière{0} ? Les vols liés resteront dans le logbook mais perdront ce lien.	Delete this career{0}? Linked flights will stay in the logbook but lose this link.	¿Borrar esta carrera{0}? Los vuelos vinculados se quedarán en el logbook pero perderán este vínculo.
+et ses {0} tour{1}	and its {0} tour{1}	y sus {0} tour{1}
+{0} dans {1} h	{0} in {1} h	{0} en {1} h
+dernier vol	last flight	último vuelo
+tour{0} en cours	tour{0} in progress	tour{0} en curso
+terminé{0}	completed	terminado{0}
+Vols dans le logbook	Flights in the logbook	Vuelos en el logbook
+Aucun tour pour le moment.{0}	No tours yet.{0}	Todavía no hay tours.{0}
+Clique sur	Click	Haz clic en
+en haut à droite puis « Nouveau tour ».	at the top right, then "New tour".	arriba a la derecha y luego en «Nuevo tour».
+Créer le tour	Create tour	Crear el tour
+Supprimer le tour	Delete tour	Borrar el tour
+Saisie rapide	Quick entry	Entrada rápida
+Colle la liste des aéroports du tour : LFPG EDDF LOWW LIRF… ou une étape par ligne : LFPG-EDDF	Paste the tour's airport list: LFPG EDDF LOWW LIRF… or one leg per line: LFPG-EDDF	Pega la lista de aeropuertos del tour: LFPG EDDF LOWW LIRF… o una etapa por línea: LFPG-EDDF
+Créer les étapes	Create legs	Crear las etapas
+Ajouter à la suite	Append	Añadir a continuación
+Aucun code OACI reconnu (4 caractères, ex : LFPG EDDF LOWW).	No ICAO code recognised (4 characters, e.g. LFPG EDDF LOWW).	Ningún código OACI reconocido (4 caracteres, p. ej. LFPG EDDF LOWW).
+Chaque code OACI doit faire 4 caractères.	Each ICAO code must be 4 characters long.	Cada código OACI debe tener 4 caracteres.
+Ajoute au moins une étape complète (départ et arrivée).	Add at least one complete leg (departure and arrival).	Añade al menos una etapa completa (salida y llegada).
+L'arrivée d'une étape devient le départ de la suivante. Entrée dans « Arrivée » = étape suivante. Un code en orange est inconnu de l'index des aéroports.	A leg's arrival becomes the next leg's departure. Enter in "Arrival" = next leg. A code in orange is not in the airport index.	La llegada de una etapa se convierte en la salida de la siguiente. Intro en «Llegada» = etapa siguiente. Un código en naranja no está en el índice de aeropuertos.
+Aéroport inconnu de l'index	Airport not in the index	Aeropuerto desconocido en el índice
+Insérer une étape après	Insert a leg after	Insertar una etapa después
+Supprimer l'étape	Delete leg	Borrar la etapa
+1 étape	1 leg	1 etapa
+1 étape{0}	1 leg{0}	1 etapa{0}
+{0} étapes	{0} legs	{0} etapas
+{0} étapes{1}	{0} legs{1}	{0} etapas{1}
+1 étape ajoutée.	1 leg added.	1 etapa añadida.
+1 étape créée.	1 leg created.	1 etapa creada.
+{0} étapes ajoutées.	{0} legs added.	{0} etapas añadidas.
+{0} étapes créées.	{0} legs created.	{0} etapas creadas.
+étape	leg	etapa
+Les étapes se valident toutes seules quand un vol correspondant arrive dans le logbook	Legs are completed automatically when a matching flight reaches the logbook	Las etapas se validan solas cuando llega al logbook un vuelo que coincide
+Valider les étapes automatiquement quand un vol correspondant arrive dans le logbook	Complete legs automatically when a matching flight reaches the logbook	Validar las etapas automáticamente cuando llegue al logbook un vuelo que coincida
+Prochaine étape {0}	Next leg {0}	Próxima etapa {0}
+✈ Préparer le vol	✈ Prepare the flight	✈ Preparar el vuelo
+Remplir le Briefing avec cette étape	Fill the Briefing with this leg	Rellenar el Briefing con esta etapa
+Étape chargée dans le Briefing	Leg loaded into the Briefing	Etapa cargada en el Briefing
+Marquer cette étape comme faite	Mark this leg as done	Marcar esta etapa como hecha
+cliquer pour valider (et les étapes précédentes)	click to complete (along with the previous legs)	haz clic para validar (y las etapas anteriores)
+cliquer pour annuler cette étape et les suivantes	click to undo this leg and the following ones	haz clic para anular esta etapa y las siguientes
+Annuler l'étape {0} et toutes les étapes suivantes déjà validées ?	Undo leg {0} and all following legs already completed?	¿Anular la etapa {0} y todas las etapas siguientes ya validadas?
+Étape de tour validée	Tour leg completed	Etapa de tour validada
+Étape {0} : {1} → {2} — {3}	Leg {0}: {1} → {2} — {3}	Etapa {0}: {1} → {2} — {3}
+{0} · étape {1} : {2} → {3}	{0} · leg {1}: {2} → {3}	{0} · etapa {1}: {2} → {3}
+Tour terminé : {0} 🎉	Tour completed: {0} 🎉	Tour terminado: {0} 🎉
+# --- Logbook : import réseau et export CSV ---
+🌐 Importer mes vols en ligne	🌐 Import my online flights	🌐 Importar mis vuelos en línea
+📤 Exporter en CSV	📤 Export to CSV	📤 Exportar a CSV
+📥 Importer un CSV	📥 Import a CSV	📥 Importar un CSV
+Récupérer tes vols VATSIM (CID) ou IVAO (VID)	Fetch your VATSIM (CID) or IVAO (VID) flights	Recuperar tus vuelos de VATSIM (CID) o IVAO (VID)
+Importer un fichier CSV (Little Navmap, Volanta, tableur, export FlightBrief…)	Import a CSV file (Little Navmap, Volanta, spreadsheet, FlightBrief export…)	Importar un archivo CSV (Little Navmap, Volanta, hoja de cálculo, exportación de FlightBrief…)
+Enregistre tout le logbook en CSV dans le dossier « exports » de FlightBrief (ré-importable)	Saves the whole logbook as CSV in FlightBrief's "exports" folder (can be imported again)	Guarda todo el logbook en CSV en la carpeta «exports» de FlightBrief (se puede volver a importar)
+Récupère automatiquement tes vols faits sur VATSIM (avec ton CID) ou IVAO (avec ton VID) : date, indicatif, départ, arrivée, appareil, règles et temps de connexion. Les vols déjà présents dans le logbook ne sont pas importés deux fois.	Automatically fetches the flights you flew on VATSIM (with your CID) or IVAO (with your VID): date, callsign, departure, arrival, aircraft, rules and connection time. Flights already in the logbook are not imported twice.	Recupera automáticamente tus vuelos en VATSIM (con tu CID) o IVAO (con tu VID): fecha, indicativo, salida, llegada, avión, reglas y tiempo de conexión. Los vuelos que ya están en el logbook no se importan dos veces.
+Données publiques de VATSIM (comme VATSIM Stats) : tout ton historique de plans de vol, rapproché de tes connexions pilote. Durée = temps de connexion.	Public VATSIM data (like VATSIM Stats): your whole flight plan history, matched with your pilot connections. Duration = connection time.	Datos públicos de VATSIM (como VATSIM Stats): todo tu historial de planes de vuelo, cruzado con tus conexiones como piloto. Duración = tiempo de conexión.
+IVAO ne publie pas l'historique des membres sans clé. Crée une clé personnelle (gratuite) sur developers.ivao.aero, puis colle-la ici. Elle ne quitte ton PC que pour interroger l'API IVAO.	IVAO doesn't publish member history without a key. Create a personal key (free) on developers.ivao.aero, then paste it here. It only leaves your PC to query the IVAO API.	IVAO no publica el historial de los miembros sin clave. Crea una clave personal (gratuita) en developers.ivao.aero y pégala aquí. Solo sale de tu PC para consultar la API de IVAO.
+Clé API IVAO	IVAO API key	Clave API de IVAO
+Colle ta clé API IVAO (developers.ivao.aero).	Paste your IVAO API key (developers.ivao.aero).	Pega tu clave API de IVAO (developers.ivao.aero).
+Obtenir une clé sur developers.ivao.aero ›	Get a key on developers.ivao.aero ›	Obtener una clave en developers.ivao.aero ›
+Mémoriser la clé sur ce PC	Remember the key on this PC	Recordar la clave en este PC
+Vérifie que la clé est active et autorisée à lire le tracker IVAO.	Check that the key is active and allowed to read the IVAO tracker.	Comprueba que la clave está activa y autorizada a leer el tracker de IVAO.
+{0} invalide : 3 à 9 chiffres.	Invalid {0}: 3 to 9 digits.	{0} no válido: de 3 a 9 cifras.
+Rechercher mes vols	Search my flights	Buscar mis vuelos
+Recherche de tes vols {0}… (quelques secondes)	Searching your {0} flights… (a few seconds)	Buscando tus vuelos de {0}… (unos segundos)
+Recherche en cours : fermer quand même ?	Search in progress: close anyway?	Búsqueda en curso: ¿cerrar de todos modos?
+Échec de la recherche.	Search failed.	Error en la búsqueda.
+Aucun vol trouvé{0}.	No flights found{0}.	No se encontró ningún vuelo{0}.
+: aucun plan de vol récent sur ce compte	: no recent flight plan on this account	: ningún plan de vuelo reciente en esta cuenta
+{0} vol{1} trouvé{2} · {3} nouveau{4} · {5} déjà dans le logbook	{0} flight{1} found · {3} new · {5} already in the logbook	{0} vuelo{1} encontrado{2} · {3} nuevo(s) · {5} ya en el logbook
+Lier les vols importés à	Link imported flights to	Vincular los vuelos importados a
+Importer	Import	Importar
+Importer {0} vol{1}	Import {0} flight{1}	Importar {0} vuelo{1}
+Import terminé	Import complete	Importación terminada
+{0} vol{1} {2} ajouté{3} au logbook	{0} {2} flight{1} added to the logbook	{0} vuelo{1} de {2} añadido{3} al logbook
+{0} vol{1} importé{2} ✓	{0} flight{1} imported ✓	{0} vuelo{1} importado{2} ✓
+Import indisponible	Import unavailable	Importación no disponible
+Redémarre FlightBrief pour activer l'import réseau.	Restart FlightBrief to enable the network import.	Reinicia FlightBrief para activar la importación desde la red.
+Logbook vide	Empty logbook	Logbook vacío
+Aucun vol à exporter pour le moment.	No flights to export yet.	Todavía no hay vuelos que exportar.
+Logbook exporté · {0} vol{1}	Logbook exported · {0} flight{1}	Logbook exportado · {0} vuelo{1}
+Dossier des exports	Exports folder	Carpeta de exportaciones
+Export impossible	Export failed	No se pudo exportar
+Export indisponible	Export unavailable	Exportación no disponible
+Redémarre FlightBrief pour activer l'export.	Restart FlightBrief to enable the export.	Reinicia FlightBrief para activar la exportación.
+écriture impossible	could not write the file	no se pudo escribir el archivo
+Vol enregistré	Flight saved	Vuelo guardado
+Vol modifié	Flight updated	Vuelo modificado
+# --- Briefing : carte, amis, panneaux ---
+Mise à jour de la carte…	Updating the map…	Actualizando el mapa…
+Chargement de {0}…	Loading {0}…	Cargando {0}…
+Retrait de {0}…	Removing {0}…	Quitando {0}…
+Chargement des contrôleurs en ligne…	Loading online controllers…	Cargando los controladores en línea…
+Recherche des amis en ligne…	Looking for online friends…	Buscando amigos en línea…
+Réduire le panneau	Collapse panel	Plegar el panel
+Déployer le panneau	Expand panel	Desplegar el panel
+Afficher les amis connectés en tant qu'ATC	Show friends connected as ATC	Mostrar los amigos conectados como ATC
+Afficher les amis et les viewers en ligne (en vol ou en tant que contrôleurs)	Show online friends and viewers (flying or controlling)	Mostrar los amigos y viewers en línea (en vuelo o como controladores)
+Tes amis apparaissent sur la carte quand ils volent ou contrôlent sur VATSIM ou IVAO. Choisis la couleur de chacun avec la pastille. Les viewers peuvent s'ajouter eux-mêmes depuis le chat avec	Your friends show up on the map when they fly or control on VATSIM or IVAO. Pick each one's colour with the swatch. Viewers can add themselves from the chat with	Tus amigos aparecen en el mapa cuando vuelan o controlan en VATSIM o IVAO. Elige el color de cada uno con la pastilla. Los viewers pueden añadirse ellos mismos desde el chat con
+Couleur de cet ami sur la carte	This friend's colour on the map	Color de este amigo en el mapa
+Couleur de l'ami sur la carte (par défaut : couleur du réseau)	Friend's colour on the map (default: network colour)	Color del amigo en el mapa (por defecto: color de la red)
+Revenir à la couleur du réseau	Back to the network colour	Volver al color de la red
+Connecté en tant que contrôleur	Connected as a controller	Conectado como controlador
+En ligne depuis	Online since	En línea desde
+En ligne depuis {0}	Online since {0}	En línea desde {0}
+({0} en vol{1})	({0} flying{1})	({0} en vuelo{1})
+({0}/{1} vols)	({0}/{1} flights)	({0}/{1} vuelos)
+{0} · {1} vol{2}	{0} · {1} flight{2}	{0} · {1} vuelo{2}
+{0} {1} vols (+{2})	{0} {1} flights (+{2})	{0} {1} vuelos (+{2})
+# --- Events VATSIM et IVAO ---
+🎉 Events VATSIM & IVAO	🎉 VATSIM & IVAO events	🎉 Eventos de VATSIM e IVAO
+En cours	Live	En curso
+En cours · encore {0}	Live · {0} left	En curso · quedan {0}
+Dans {0}	In {0}	En {0}
+Demain	Tomorrow	Mañana
+Demain {0}	Tomorrow {0}	Mañana {0}
+Hier	Yesterday	Ayer
+Aujourd'hui {0}	Today {0}	Hoy {0}
+En ce moment	Right now	Ahora mismo
+48 prochaines heures	Next 48 hours	Próximas 48 horas
+7 prochains jours	Next 7 days	Próximos 7 días
+en cours + 6 h	live + 6 h	en curso + 6 h
+en cours + 24 h	live + 24 h	en curso + 24 h
+en cours + 3 jours	live + 3 days	en curso + 3 días
+en cours + 7 jours	live + 7 days	en curso + 7 días
+Events affichés sur la carte	Events shown on the map	Eventos mostrados en el mapa
+Terrains en surbrillance sur la carte du Briefing	Highlight airports on the Briefing map	Aeropuertos resaltados en el mapa del Briefing
+Rechercher : nom, OACI, division…	Search: name, ICAO, division…	Buscar: nombre, OACI, división…
+Données publiques de VATSIM (my.vatsim.net) et d'IVAO, actualisées toutes les 15 min. Heures affichées à l'heure locale, puis en UTC (z).	Public data from VATSIM (my.vatsim.net) and IVAO, refreshed every 15 min. Times shown in local time, then in UTC (z).	Datos públicos de VATSIM (my.vatsim.net) e IVAO, actualizados cada 15 min. Horas en hora local y luego en UTC (z).
+Mis à jour à	Updated at	Actualizado a las
+Mis à jour à {0}	Updated at {0}	Actualizado a las {0}
+Chargement des events VATSIM et IVAO…	Loading VATSIM and IVAO events…	Cargando los eventos de VATSIM e IVAO…
+Chargement des events…	Loading events…	Cargando eventos…
+Affichage des events…	Showing events…	Mostrando eventos…
+Retrait des events…	Removing events…	Quitando eventos…
+Aucun event pour ces filtres.	No events for these filters.	Ningún evento con estos filtros.
+Terrains avec un event VATSIM ou IVAO (en cours ou à venir) — détail dans l'onglet Outils	Airports with a VATSIM or IVAO event (live or upcoming) — details in the Tools tab	Aeropuertos con un evento de VATSIM o IVAO (en curso o próximo) — detalles en la pestaña Herramientas
+Début	Start	Inicio
+Fin	End	Fin
+Organisé par	Organised by	Organizado por
+Terrains ({0})	Airports ({0})	Aeropuertos ({0})
+Routes proposées ({0})	Suggested routes ({0})	Rutas propuestas ({0})
+Départ du Briefing	Briefing departure	Salida del Briefing
+Arrivée du Briefing	Briefing arrival	Llegada del Briefing
+Mettre en départ du Briefing	Set as Briefing departure	Poner como salida del Briefing
+Mettre en arrivée du Briefing	Set as Briefing arrival	Poner como llegada del Briefing
+Remplir le Briefing avec ce départ, cette arrivée et cette route	Fill the Briefing with this departure, arrival and route	Rellenar el Briefing con esta salida, esta llegada y esta ruta
+🗺️ Voir sur la carte du Briefing	🗺️ Show on the Briefing map	🗺️ Ver en el mapa del Briefing
+Page de l'event ↗	Event page ↗	Página del evento ↗
+Event {0} à {1}	{0} event at {1}	Evento de {0} en {1}
+départ	departure	salida
+# --- Quoi de neuf (titres et lignes du journal des versions) ---
+Carrière repensée, PFD en rediffusion, logbook connecté à VATSIM et IVAO	Redesigned career, PFD in replays, logbook connected to VATSIM and IVAO	Carrera rediseñada, PFD en la repetición, logbook conectado a VATSIM e IVAO
+Carrière : un seul bouton « + » (Nouvelle carrière / Nouveau tour) et des fenêtres de saisie claires. Grades et étapes se saisissent ligne par ligne, ou en collant d'un coup la liste des aéroports du tour (LFPG EDDF LOWW…).	Career: a single "+" button (New career / New tour) and clear entry windows. Ranks and legs are entered line by line, or by pasting the tour's airport list in one go (LFPG EDDF LOWW…).	Carrera: un solo botón «+» (Nueva carrera / Nuevo tour) y ventanas de entrada claras. Rangos y etapas se introducen línea a línea, o pegando de una vez la lista de aeropuertos del tour (LFPG EDDF LOWW…).
+Tours : prochaine étape mise en avant avec bouton « Préparer le vol » (remplit le Briefing), progression en % et en NM, validation automatique des étapes quand le vol arrive dans le logbook. Tours possibles pour toutes les carrières.	Tours: next leg highlighted with a "Prepare the flight" button (fills the Briefing), progress in % and NM, legs completed automatically when the flight reaches the logbook. Tours available for every career.	Tours: próxima etapa destacada con un botón «Preparar el vuelo» (rellena el Briefing), progreso en % y en NM, validación automática de las etapas cuando el vuelo llega al logbook. Tours posibles en todas las carreras.
+Approche 3D : un PFD reconstitué accompagne la rediffusion (horizon, vitesse, hauteur, vario, cap, écarts ILS, annonces de hauteur).	3D approach: a rebuilt PFD plays alongside the replay (horizon, speed, height, vertical speed, heading, ILS deviations, height callouts).	Aproximación 3D: un PFD reconstruido acompaña la repetición (horizonte, velocidad, altura, variómetro, rumbo, desviaciones ILS, avisos de altura).
+Logbook : import automatique de tes vols VATSIM (CID) et IVAO (VID, avec ta clé API IVAO), et export CSV dans le dossier « exports » de FlightBrief (ré-importable).	Logbook: automatic import of your VATSIM (CID) and IVAO (VID, with your IVAO API key) flights, and CSV export to FlightBrief's "exports" folder (can be imported again).	Logbook: importación automática de tus vuelos de VATSIM (CID) e IVAO (VID, con tu clave API de IVAO), y exportación CSV a la carpeta «exports» de FlightBrief (se puede volver a importar).
+Events VATSIM et IVAO : liste filtrable et fiche détaillée (horaires, terrains, routes, description) dans Outils, terrains en surbrillance sur la carte du Briefing, et alerte quand ton départ ou ton arrivée accueille un event. Une route d'event remplit le Briefing en un clic.	VATSIM and IVAO events: filterable list and detailed sheet (times, airports, routes, description) in Tools, highlighted airports on the Briefing map, and an alert when your departure or arrival hosts an event. An event route fills the Briefing in one click.	Eventos de VATSIM e IVAO: lista filtrable y ficha detallada (horarios, aeropuertos, rutas, descripción) en Herramientas, aeropuertos resaltados en el mapa del Briefing y aviso cuando tu salida o tu llegada acoge un evento. Una ruta de evento rellena el Briefing en un clic.
+Amis sur la carte : une couleur au choix pour chaque ami, et les amis connectés en tant que contrôleurs (ATC) apparaissent aussi.	Friends on the map: a colour of your choice for each friend, and friends connected as controllers (ATC) show up too.	Amigos en el mapa: un color a elegir para cada amigo, y los amigos conectados como controladores (ATC) también aparecen.
+Profil : textes d'aide remplacés par de petits (i) qui s'affichent au survol.	Profile: help texts replaced by small (i) icons shown on hover.	Perfil: textos de ayuda sustituidos por pequeños (i) que se muestran al pasar el ratón.
+Logbook : enregistrer une modification de vol ne crée plus de doublon en cas de double clic, et la liste se met à jour immédiatement.	Logbook: saving a flight edit no longer creates a duplicate on double click, and the list updates immediately.	Logbook: guardar un cambio de vuelo ya no crea un duplicado con doble clic, y la lista se actualiza al instante.
+Patch : alertes sur mesure, captures & profil	Patch: custom alerts, screenshots & profile	Parche: alertas a medida, capturas y perfil
+Patch : volumes, fluidité & allègement	Patch: volumes, smoothness & lighter app	Parche: volúmenes, fluidez y aligeramiento
+Captures, rangs & overlays à ta façon	Screenshots, ranks & overlays your way	Capturas, rangos y overlays a tu manera
+OFP SimBrief, suivi de la carte & mises à jour	SimBrief OFP, map following & updates	OFP de SimBrief, seguimiento del mapa y actualizaciones
+Twitch, atterrissages notés & approche en 3D	Twitch, graded landings & 3D approach	Twitch, aterrizajes puntuados y aproximación en 3D
+26 succès à débloquer dans le Profil (beurre, vol de nuit, globe-trotter, tour du monde…), avec une animation dans l'appli et sur le stream.	26 achievements to unlock in the Profile (butter, night flight, globetrotter, round the world…), with an animation in the app and on stream.	26 logros por desbloquear en el Perfil (mantequilla, vuelo nocturno, trotamundos, vuelta al mundo…), con una animación en la app y en el stream.
+3e source OBS « Alertes » (localhost:4814/alerts) : carte d'atterrissage, paris, succès débloqués et réponses du bot, avec position, durée et taille réglables.	3rd OBS source "Alerts" (localhost:4814/alerts): landing card, bets, unlocked achievements and bot replies, with adjustable position, duration and size.	3.ª fuente de OBS «Alertas» (localhost:4814/alerts): tarjeta de aterrizaje, apuestas, logros desbloqueados y respuestas del bot, con posición, duración y tamaño ajustables.
+4e source OBS « À bord » : le manifeste des passagers en direct, avec le prochain survol et le quiz en cours.	4th OBS source "On board": the live passenger manifest, with the next flyover and the current quiz.	4.ª fuente de OBS «A bordo»: el manifiesto de pasajeros en directo, con el próximo sobrevuelo y el quiz en curso.
+67 succès (au lieu de 26), classés en bronze, argent, or et platine : réseaux VATSIM et IVAO, vols contrôlés par l'ATC, stream et bot Twitch, captures, flotte… Ils se consultent dans une fenêtre dédiée, avec des filtres et la progression de chacun.	67 achievements (instead of 26), ranked bronze, silver, gold and platinum: VATSIM and IVAO networks, ATC-controlled flights, stream and Twitch bot, screenshots, fleet… They're shown in a dedicated window, with filters and each one's progress.	67 logros (en lugar de 26), clasificados en bronce, plata, oro y platino: redes VATSIM e IVAO, vuelos controlados por ATC, stream y bot de Twitch, capturas, flota… Se consultan en una ventana dedicada, con filtros y el progreso de cada uno.
+ATC en ligne VATSIM et IVAO sur la carte du Briefing : secteurs des centres, cercles d'approche et badges d'aéroport (ATIS, sol, tour, approche). Un clic donne le détail, et la liste en dessous montre tes aéroports de départ et d'arrivée.	Online VATSIM and IVAO ATC on the Briefing map: centre sectors, approach circles and airport badges (ATIS, ground, tower, approach). A click shows the details, and the list below shows your departure and arrival airports.	ATC en línea de VATSIM e IVAO en el mapa del Briefing: sectores de los centros, círculos de aproximación y distintivos de aeropuerto (ATIS, rodadura, torre, aproximación). Un clic muestra el detalle, y la lista de abajo muestra tus aeropuertos de salida y llegada.
+Animations de croisière : vue du hublot (ville et pays survolés), annonce de chaque nouveau pays, quiz du hublot (!rep) et pronostic de l'heure d'arrivée (!arrivee 21:47).	Cruise animations: window view (city and country overflown), announcement of each new country, window quiz (!answer) and arrival time guess (!arrival 21:47).	Animaciones de crucero: vista de la ventanilla (ciudad y país sobrevolados), anuncio de cada nuevo país, quiz de la ventanilla (!resp) y pronóstico de la hora de llegada (!llegada 21:47).
+Appli plus réactive : les sauvegardes du logbook se font en arrière-plan au lieu de bloquer l'interface à chaque clic, et l'aperçu de l'overlay n'est plus recalculé quand l'onglet Outil Live est fermé.	More responsive app: logbook saves happen in the background instead of blocking the interface on every click, and the overlay preview is no longer recalculated when the Live tool tab is closed.	App más fluida: los guardados del logbook se hacen en segundo plano en lugar de bloquear la interfaz en cada clic, y la vista previa del overlay ya no se recalcula cuando la pestaña Herramienta Live está cerrada.
+Approche finale rejouée en 3D dans le détail de chaque vol, comparée au plan de descente de 3°, avec plusieurs vues et un relief accentué.	Final approach replayed in 3D in each flight's details, compared with the 3° glide path, with several views and exaggerated terrain.	Aproximación final repetida en 3D en el detalle de cada vuelo, comparada con la senda de 3°, con varias vistas y relieve acentuado.
+Barre de navigation rangée par usage (Vol · Carnet · Stream), avec des icônes, Profil et Admin à droite, et les raccourcis Ctrl+1 à Ctrl+9.	Navigation bar grouped by use (Flight · Logbook · Stream), with icons, Profile and Admin on the right, and Ctrl+1 to Ctrl+9 shortcuts.	Barra de navegación ordenada por uso (Vuelo · Diario · Stream), con iconos, Perfil y Admin a la derecha, y los atajos Ctrl+1 a Ctrl+9.
+Captures d'écran de tes vols : bouton dans le Briefing, raccourci clavier global (Ctrl+Alt+F12 par défaut, utilisable pendant que le simulateur a le focus) et captures automatiques au décollage, en croisière et à l'atterrissage. Elles sont rattachées au vol enregistré : galerie depuis le logbook (📷) et dans le détail du trajet.	Screenshots of your flights: button in the Briefing, global keyboard shortcut (Ctrl+Alt+F12 by default, usable while the simulator has focus) and automatic captures at takeoff, in cruise and at landing. They're attached to the saved flight: gallery from the logbook (📷) and in the route details.	Capturas de pantalla de tus vuelos: botón en el Briefing, atajo de teclado global (Ctrl+Alt+F12 por defecto, utilizable mientras el simulador tiene el foco) y capturas automáticas en el despegue, en crucero y en el aterrizaje. Se vinculan al vuelo guardado: galería desde el logbook (📷) y en el detalle del trayecto.
+Carnet de vol public : un mini-site statique (vols, carte, passagers, passeports, cartes postales) à publier sur GitHub Pages. Aucune connexion vers ton PC, pas de ville de viewer publiée, et !passeport cacher pour se retirer.	Public logbook: a small static site (flights, map, passengers, passports, postcards) to publish on GitHub Pages. No connection to your PC, no viewer city published, and !passport hide to opt out.	Diario de vuelo público: un minisitio estático (vuelos, mapa, pasajeros, pasaportes, postales) para publicar en GitHub Pages. Ninguna conexión a tu PC, ninguna ciudad de viewer publicada, y !pasaporte ocultar para retirarse.
+Carte du Briefing : route prévue avec départ, arrivée, TOC et TOD, bouton « Vol entier », plein écran, bandeau de vol sur la carte (phase, altitude, vitesse, TOD, ETA), zoom plus fin, légende ATC et raccourcis F / V / P.	Briefing map: planned route with departure, arrival, TOC and TOD, "Whole flight" button, full screen, flight strip on the map (phase, altitude, speed, TOD, ETA), finer zoom, ATC legend and F / V / P shortcuts.	Mapa del Briefing: ruta prevista con salida, llegada, TOC y TOD, botón «Vuelo completo», pantalla completa, banda de vuelo en el mapa (fase, altitud, velocidad, TOD, ETA), zoom más fino, leyenda ATC y atajos F / V / P.
+Carte du Briefing bien plus fluide au zoom : secteurs ATC, cercles d'approche et route dessinés en accéléré, badges ATC affichés seulement autour de la vue (de simples points quand on dézoome), plus d'à-coups quand le suivi recentre la carte.	Much smoother Briefing map when zooming: ATC sectors, approach circles and route drawn with hardware acceleration, ATC badges shown only around the view (simple dots when zoomed out), no more jerks when following recentres the map.	Mapa del Briefing mucho más fluido al hacer zoom: sectores ATC, círculos de aproximación y ruta dibujados con aceleración, distintivos ATC mostrados solo alrededor de la vista (simples puntos al alejar), sin tirones cuando el seguimiento recentra el mapa.
+Carte du vol en direct : bouton pour suivre ou non l'avion. Déplacer la carte à la main coupe le suivi.	Live flight map: button to follow the aircraft or not. Moving the map by hand stops following.	Mapa del vuelo en directo: botón para seguir o no al avión. Mover el mapa a mano desactiva el seguimiento.
+Carte postale à chaque arrivée : ta capture d'atterrissage, la carte du trajet, la ville d'arrivée et la liste des passagers. Elle s'affiche sur l'overlay Alertes et dans le détail du vol.	A postcard at every arrival: your landing screenshot, the route map, the arrival city and the passenger list. It shows on the Alerts overlay and in the flight details.	Una postal en cada llegada: tu captura de aterrizaje, el mapa del trayecto, la ciudad de llegada y la lista de pasajeros. Se muestra en el overlay de Alertas y en el detalle del vuelo.
+Cartes d'événement personnalisables comme l'overlay live : couleur et titre propres à chaque type de carte (atterrissage, paris, succès, réponse du bot), couleur et épaisseur de bordure, fond en dégradé, taille du texte.	Event cards customisable like the live overlay: colour and title for each card type (landing, bets, achievements, bot reply), border colour and thickness, gradient background, text size.	Tarjetas de evento personalizables como el overlay en directo: color y título propios de cada tipo de tarjeta (aterrizaje, apuestas, logros, respuesta del bot), color y grosor del borde, fondo degradado, tamaño del texto.
+Compagnon mobile : la barre d'onglets reste désormais figée en bas de l'écran pendant le défilement (iPhone / appli installée).	Mobile companion: the tab bar now stays fixed at the bottom of the screen while scrolling (iPhone / installed app).	Compañero móvil: la barra de pestañas ahora se queda fija abajo de la pantalla al desplazarse (iPhone / app instalada).
+Compagnon mobile : la barre d'onglets touche de nouveau le bas de l'écran sur iPhone (appli installée).	Mobile companion: the tab bar touches the bottom of the screen again on iPhone (installed app).	Compañero móvil: la barra de pestañas vuelve a tocar el borde inferior de la pantalla en iPhone (app instalada).
+Correspondances : enchaîne les vols sans en rater un pour cumuler un bonus de miles. !voyage montre le trajet en cours (Paris → Toulouse → Madrid…).	Connections: chain flights without missing one to build up a miles bonus. !trip shows the current journey (Paris → Toulouse → Madrid…).	Conexiones: encadena vuelos sin perderte ninguno para acumular un bonus de millas. !viaje muestra el trayecto en curso (París → Toulouse → Madrid…).
+Design des alertes du bot (succès, paris, atterrissage…) entièrement personnalisable : 5 thèmes, couleurs, police, largeur, arrondis, animation, ombre, flou, son, avec un aperçu en direct.	Fully customisable design for the bot alerts (achievements, bets, landing…): 5 themes, colours, font, width, corner radius, animation, shadow, blur, sound, with a live preview.	Diseño de las alertas del bot (logros, apuestas, aterrizaje…) totalmente personalizable: 5 temas, colores, fuente, ancho, redondeos, animación, sombra, desenfoque, sonido, con vista previa en directo.
+Début de descente (TOD) et heure d'arrivée (ETA) en direct, calculés le long de la route de l'OFP SimBrief. Ils s'affichent dans le Briefing et peuvent être ajoutés à l'overlay live.	Live top of descent (TOD) and arrival time (ETA), calculated along the SimBrief OFP route. They show in the Briefing and can be added to the live overlay.	Inicio del descenso (TOD) y hora de llegada (ETA) en directo, calculados a lo largo de la ruta del OFP de SimBrief. Se muestran en el Briefing y se pueden añadir al overlay en directo.
+Enregistrer un raccourci comme Ctrl+1 ne change plus d'onglet, et l'ancien raccourci ne bloque plus l'enregistrement du nouveau.	Recording a shortcut such as Ctrl+1 no longer switches tabs, and the old shortcut no longer blocks recording the new one.	Grabar un atajo como Ctrl+1 ya no cambia de pestaña, y el atajo anterior ya no bloquea la grabación del nuevo.
+Fenêtre « Quoi de neuf » au premier lancement après une mise à jour (et consultable à tout moment depuis Admin → À propos).	"What's new" window on first launch after an update (and available any time from Admin → About).	Ventana «Novedades» en el primer arranque tras una actualización (y disponible en cualquier momento desde Admin → Acerca de).
+Lancement plus rapide et 100 % hors ligne : les moteurs carte et 3D sont désormais inclus dans l'appli (plus de téléchargement au démarrage).	Faster and 100% offline startup: the map and 3D engines are now bundled with the app (no more download at startup).	Arranque más rápido y 100 % sin conexión: los motores de mapa y 3D ahora vienen incluidos en la app (ya no se descargan al arrancar).
+Les curseurs de volume fonctionnent enfin à chaque réglage (alerte du tracker, son de capture, alertes OBS) : avant, seul le premier changement était pris en compte.	Volume sliders finally work on every change (tracker alert, screenshot sound, OBS alerts): before, only the first change was taken into account.	Los controles de volumen por fin funcionan en cada ajuste (alerta del tracker, sonido de captura, alertas de OBS): antes solo se tenía en cuenta el primer cambio.
+Logbook : colonne « Atterro » avec la note de chaque vol, et la colonne Durée est de nouveau alignée.	Logbook: "Landing" column with each flight's grade, and the Duration column is aligned again.	Logbook: columna «Aterrizaje» con la nota de cada vuelo, y la columna Duración vuelve a estar alineada.
+Mise à jour en un clic : la nouvelle version se télécharge et s'installe depuis l'appli.	One-click update: the new version downloads and installs from within the app.	Actualización en un clic: la nueva versión se descarga e instala desde la app.
+Moins de charge pour ton PC pendant que tu voles : le globe et l'approche 3D ne se redessinent plus quand rien ne bouge.	Less load on your PC while you fly: the globe and the 3D approach are no longer redrawn when nothing moves.	Menos carga para tu PC mientras vuelas: el globo y la aproximación 3D ya no se redibujan cuando nada se mueve.
+Ménage dans le code : styles et fonctions inutilisés retirés.	Code clean-up: unused styles and functions removed.	Limpieza del código: estilos y funciones sin uso eliminados.
+Nouveau son de capture : un petit « tic » doux à la place du bruit qui faisait sursauter, avec son propre volume.	New screenshot sound: a soft little "tick" instead of the startling noise, with its own volume.	Nuevo sonido de captura: un pequeño «tic» suave en lugar del ruido que sobresaltaba, con su propio volumen.
+Nouveau son pour le rappel « tracker non lancé » : un carillon doux façon appel cabine, à la place des bips stridents.	New sound for the "tracker not started" reminder: a soft cabin-call style chime instead of the shrill beeps.	Nuevo sonido para el aviso «tracker no iniciado»: un carillón suave tipo llamada de cabina, en lugar de los pitidos estridentes.
+Nouvel onglet Twitch : un bot répond dans ton chat à !eta, !route, !metar, !avion, !alt, !landing et !fb, avec le nom que tu lui donnes. Chaque streamer utilise sa propre application Twitch, déclarée en 2 minutes grâce à un assistant intégré. Sans compte connecté, le bot lit le chat et répond sur l'overlay.	New Twitch tab: a bot replies in your chat to !eta, !route, !metar, !plane, !alt, !landing and !fb, with the name you give it. Each streamer uses their own Twitch application, registered in 2 minutes with a built-in wizard. Without a connected account, the bot reads the chat and replies on the overlay.	Nueva pestaña Twitch: un bot responde en tu chat a !eta, !ruta, !metar, !avion, !alt, !landing y !fb, con el nombre que le pongas. Cada streamer usa su propia aplicación de Twitch, registrada en 2 minutos con un asistente integrado. Sin cuenta conectada, el bot lee el chat y responde en el overlay.
+Nouvel onglet « À bord » : les viewers montent à bord de tes vols avec !embarquer et gagnent des miles tant qu'ils sont actifs dans le chat. Statuts Membre, Argent, Or, Platine et Légende, et classement des fidèles.	New "On board" tab: viewers board your flights with !board and earn miles as long as they're active in the chat. Member, Silver, Gold, Platinum and Legend statuses, and a loyalty leaderboard.	Nueva pestaña «A bordo»: los viewers suben a tus vuelos con !embarcar y ganan millas mientras estén activos en el chat. Estatus Miembro, Plata, Oro, Platino y Leyenda, y clasificación de fieles.
+Nouvelles icônes d'avion sur les cartes (PC et téléphone), au choix dans Admin : avion de ligne, silhouette, aviation légère ou flèche.	New aircraft icons on the maps (PC and phone), selectable in Admin: airliner, silhouette, light aircraft or arrow.	Nuevos iconos de avión en los mapas (PC y teléfono), a elegir en Admin: avión de línea, silueta, aviación ligera o flecha.
+Onglet Profil : ton prénom (ou ton pseudo Twitch) et l'icône de ton rang, au lieu du chiffre qui ressemblait à une notification.	Profile tab: your first name (or Twitch username) and your rank icon, instead of the number that looked like a notification.	Pestaña Perfil: tu nombre (o tu usuario de Twitch) y el icono de tu rango, en lugar del número que parecía una notificación.
+Option « Assortir à mon overlay live » : les alertes reprennent les couleurs, la police, les arrondis, la bordure, l'ombre et le flou de ton overlay, et suivent ses changements.	"Match my live overlay" option: alerts reuse your overlay's colours, font, corner radius, border, shadow and blur, and follow its changes.	Opción «Combinar con mi overlay en directo»: las alertas toman los colores, la fuente, los redondeos, el borde, la sombra y el desenfoque de tu overlay, y siguen sus cambios.
+Outil Live : réordonne les blocs de l'overlay par glisser-déposer, choisis le coin de l'écran où il s'affiche, ou passe en mode « Libre » pour placer chaque bloc où tu veux sur une scène 1920×1080, avec magnétisme et guides.	Live tool: reorder the overlay blocks by drag and drop, choose the screen corner where it appears, or switch to "Free" mode to place each block wherever you like on a 1920×1080 scene, with snapping and guides.	Herramienta Live: reordena los bloques del overlay arrastrando y soltando, elige la esquina de la pantalla donde aparece, o pasa al modo «Libre» para colocar cada bloque donde quieras en una escena de 1920×1080, con imantación y guías.
+Overlay live : les libellés personnalisés et les textes libres s'affichent maintenant aussi dans OBS, pas seulement dans l'aperçu.	Live overlay: custom labels and free texts now also show in OBS, not just in the preview.	Overlay en directo: las etiquetas personalizadas y los textos libres ahora también se muestran en OBS, no solo en la vista previa.
+Paris d'atterrissage : le chat devine ton taux au toucher avec !pari 180. Ouverture au début de la descente, fermeture en courte finale, podium à l'écran et classement (!top).	Landing bets: the chat guesses your touchdown rate with !bet 180. Opens at top of descent, closes on short final, on-screen podium and leaderboard (!top).	Apuestas de aterrizaje: el chat adivina tu tasa de toma con !apuesta 180. Se abren al inicio del descenso y se cierran en final corta, con podio en pantalla y clasificación (!top).
+Passeport : chaque atterrissage tamponne le passeport des passagers (aéroport, ville, pays). !passeport pour le consulter, !miles pour son statut.	Passport: every landing stamps the passengers' passports (airport, city, country). !passport to view it, !miles for your status.	Pasaporte: cada aterrizaje sella el pasaporte de los pasajeros (aeropuerto, ciudad, país). !pasaporte para consultarlo, !millas para ver su estatus.
+Pop-up quand une nouvelle version de FlightBrief est disponible, avec lien vers la page de téléchargement.	Pop-up when a new version of FlightBrief is available, with a link to the download page.	Ventana emergente cuando hay una nueva versión de FlightBrief, con enlace a la página de descarga.
+Rangs FlightBrief : chaque succès et chaque vol rapporte de l'XP, avec 9 rangs de « Élève pilote » à « Légende de l'air ». Ton niveau s'affiche à côté de l'onglet Profil.	FlightBrief ranks: every achievement and every flight earns XP, with 9 ranks from "Student pilot" to "Legend of the skies". Your level shows next to the Profile tab.	Rangos de FlightBrief: cada logro y cada vuelo da XP, con 9 rangos de «Alumno piloto» a «Leyenda del aire». Tu nivel aparece junto a la pestaña Perfil.
+Rappel « tracker non lancé » : si l'avion roule ou vole alors que le suivi est arrêté, une alerte sonore et un bandeau te préviennent, avec un bouton pour le lancer. Le tracker peut aussi démarrer tout seul (Admin).	"Tracker not started" reminder: if the aircraft is taxiing or flying while tracking is stopped, a sound alert and a banner warn you, with a button to start it. The tracker can also start on its own (Admin).	Aviso «tracker no iniciado»: si el avión rueda o vuela con el seguimiento parado, una alerta sonora y un banner te avisan, con un botón para iniciarlo. El tracker también puede arrancar solo (Admin).
+Récupération de l'OFP du plan de vol actif SimBrief, lisible directement dans l'appli (copie locale consultable hors ligne, PDF, copie du texte).	Fetches the OFP of the active SimBrief flight plan, readable right in the app (local copy available offline, PDF, text copy).	Recuperación del OFP del plan de vuelo activo de SimBrief, legible directamente en la app (copia local consultable sin conexión, PDF, copia del texto).
+Réglages des captures dans une fenêtre dédiée (⚙ à côté du bouton de capture, ou Admin) : nouveau raccourci en une touche avec un vrai enregistreur, retour au raccourci par défaut, captures automatiques activables d'un clic (bouton « Auto » dans le Briefing).	Screenshot settings in a dedicated window (⚙ next to the screenshot button, or Admin): new one-key shortcut with a real recorder, reset to the default shortcut, automatic captures toggled in one click ("Auto" button in the Briefing).	Ajustes de capturas en una ventana dedicada (⚙ junto al botón de captura, o Admin): nuevo atajo de una tecla con un grabador de verdad, vuelta al atajo por defecto, capturas automáticas activables con un clic (botón «Auto» en el Briefing).
+Sauvegardes automatiques : une copie par jour, les 7 dernières gardées, restauration automatique si le fichier de données devient illisible (Admin → Sauvegardes).	Automatic backups: one copy a day, the last 7 kept, automatic restore if the data file becomes unreadable (Admin → Backups).	Copias de seguridad automáticas: una copia al día, se guardan las 7 últimas, restauración automática si el archivo de datos se vuelve ilegible (Admin → Copias de seguridad).
+Schéma de piste du rapport de vol : marquages de seuil, zone de toucher (TDZ) et point de visée à l'échelle, aussi affiché sur le compagnon mobile.	Runway diagram in the flight report: threshold markings, touchdown zone (TDZ) and aiming point to scale, also shown on the mobile companion.	Esquema de pista del informe de vuelo: marcas de umbral, zona de toma (TDZ) y punto de visada a escala, también en el compañero móvil.
+Survol de chez les viewers : chacun donne sa ville (!maville Lyon). L'appli annonce au décollage les survols prévus, prévient quelques minutes avant, puis « On survole chez Kéro ! » sur l'overlay et dans le chat.	Flying over viewers' homes: each one gives their city (!mycity London). The app announces the planned flyovers at takeoff, warns a few minutes before, then "Flying over Kéro's home!" on the overlay and in the chat.	Sobrevuelo de las casas de los viewers: cada uno da su ciudad (!miciudad Madrid). La app anuncia al despegar los sobrevuelos previstos, avisa unos minutos antes y luego «¡Sobrevolamos la casa de Kéro!» en el overlay y en el chat.
+Titre du stream proposé au lancement du vol, à partir de ton briefing. Tu le modifies, et rien n'est envoyé à Twitch sans ta validation.	Stream title suggested when the flight starts, based on your briefing. You edit it, and nothing is sent to Twitch without your approval.	Título del stream propuesto al iniciar el vuelo, a partir de tu briefing. Tú lo modificas, y no se envía nada a Twitch sin tu confirmación.
+Touche Échap pour fermer la galerie, la visionneuse et la fenêtre des succès ; flèches ← → pour passer d'une capture à l'autre.	Escape key closes the gallery, the viewer and the achievements window; ← → arrows move from one screenshot to the next.	Tecla Esc para cerrar la galería, el visor y la ventana de logros; flechas ← → para pasar de una captura a otra.
+Volumes réglables pour de vrai : le curseur suit l'oreille (50 % s'entend nettement moins fort) et le son est joué quand tu relâches le curseur, pour l'alerte du tracker, le son des alertes OBS et le son de capture.	Volumes that really adjust: the slider follows the ear (50% sounds clearly quieter) and the sound plays when you release the slider, for the tracker alert, the OBS alert sound and the screenshot sound.	Volúmenes ajustables de verdad: el control sigue al oído (50 % suena claramente más bajo) y el sonido se reproduce al soltar el control, para la alerta del tracker, el sonido de las alertas de OBS y el sonido de captura.
+Zoom fluide sur le globe du Profil et sur l'approche 3D : la molette glisse en douceur au lieu d'avancer par à-coups.	Smooth zoom on the Profile globe and the 3D approach: the mouse wheel glides gently instead of moving in jerks.	Zoom fluido en el globo del Perfil y en la aproximación 3D: la rueda se desliza suavemente en lugar de avanzar a saltos.
+(départ)	(departure)	(salida)
+(arrivée)	(arrival)	(llegada)
+Aucun vol trouvé : aucun plan de vol récent sur ce compte.	No flights found: no recent flight plan on this account.	No se encontró ningún vuelo: ningún plan de vuelo reciente en esta cuenta.
+Anglais et espagnol : les derniers textes restés en français sont traduits (À bord, carte postale, Hangar, Carrière, Live, historique des nouveautés).	English and Spanish: the last texts still in French are now translated (On board, postcard, Hangar, Career, Live, what's new history).	Inglés y español: se traducen los últimos textos que seguían en francés (A bordo, postal, Hangar, Carrera, Live, historial de novedades).
 `);

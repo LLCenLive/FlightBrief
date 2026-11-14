@@ -44,7 +44,7 @@
   <div class="contrail" aria-hidden="true"></div>
   <div class="wrap hero-grid">
     <div>
-      <a class="pill-new" id="pillNew" href="#nouveautes"><b>Nouveau</b> v1.8.5 · sortie audio du copilote, bot plus discret →</a>
+      <a class="pill-new" id="pillNew" href="#nouveautes"><b>Nouveau</b> v2.1.0 · events VATSIM et IVAO, carrière repensée, tours →</a>
       <h1>Ton copilote de vol, <span class="grad">que tu streames ou non.</span></h1>
       <p class="lead">FlightBrief prépare ton vol, le suit en direct dans Microsoft Flight Simulator, t'annonce tes callouts comme un vrai copilote, transforme ta tablette en EFB — et range tout dans ton carnet de vol. Et si tu streames, ton chat monte à bord.</p>
       <div class="hero-cta">
@@ -440,13 +440,13 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="kicker">Quoi de neuf</span>
-      <h2 style="margin-top:12px;" id="newsTitle">La version 1.8.5, en bref.</h2>
+      <h2 style="margin-top:12px;" id="newsTitle">La version 2.1.0, en bref.</h2>
       <p class="lead">Des nouveautés nées de vos idées en live.</p>
     </div>
     <div class="news three" id="newsGrid">
-      <div class="news-item reveal"><div class="ni" style="background:rgba(142,125,255,.18);">🎧</div><div><b>Sortie audio du copilote</b><p>Choisis où parle le copilote vocal (casque, enceintes, entrée VoiceMeeter…) sans changer la sortie par défaut de Windows.</p></div></div>
-      <div class="news-item reveal"><div class="ni" style="background:rgba(79,227,166,.14);">🤫</div><div><b>Bot plus discret</b><p>Une pause réglable entre deux messages automatiques dans le chat (6 min par défaut), vue du hublot et quiz moins fréquents.</p></div></div>
-      <div class="news-item reveal"><div class="ni" style="background:rgba(255,179,107,.16);">🧹</div><div><b>Moins de messages inutiles</b><p>Plus de vue du hublot sans ville, ni de réponse de quiz ou de résultat de paris quand personne n'a joué.</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(233,139,192,.16);">🎉</div><div><b>Events VATSIM et IVAO</b><p>Liste filtrable et fiche détaillée dans Outils, terrains en surbrillance sur la carte du Briefing, alerte quand ton départ ou ton arrivée accueille un event</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(124,196,255,.16);">🧭</div><div><b>Carrière repensée</b><p>Bouton « + » (Nouvelle carrière / Nouveau tour), saisie dans des fenêtres, étapes ligne par ligne ou en collant la liste des aéroports</p></div></div>
+      <div class="news-item reveal"><div class="ni" style="background:rgba(79,227,166,.14);">🛬</div><div><b>Atterrissage</b><p>Assiette (pitch) et angle de crabe au toucher</p></div></div>
     </div>
   </div>
 </section>
@@ -582,14 +582,27 @@ function parseReleaseNotes(body){
     })
     .filter(x => x && x.title && x.text);
 }
+// Pages EN / ES : les notes de version sont rédigées en français et traduites ligne à ligne via
+// docs/translations.js (node scripts/build-docs.js signale les lignes manquantes). S'il en manque
+// une, le badge annonce quand même la bonne version et renvoie vers la Release GitHub.
 function renderNews(release){
-  if(!release || document.documentElement.lang !== 'fr') return; // notes de version rédigées en français
-  const items = parseReleaseNotes(release.body);
-  if(items.length < 2) return;
+  if(!release) return;
+  const fr = document.documentElement.lang === 'fr';
+  const T = s => fr || !window.FBI18N ? s : FBI18N.tr(s);
   const v = release.tag_name.replace(/^v/, '');
+  let items = parseReleaseNotes(release.body);
+  if(!fr) items = items.every(it => T(it.text) !== it.text) ? items.map(it => ({ icon: it.icon, title: T(it.title), text: T(it.text) })) : [];
+  if(items.length < 2){
+    if(fr) return;
+    const pill = $('pillNew');
+    pill.innerHTML = `<b>${escHtml(T('Nouveau'))}</b> v${escHtml(v)} · ${escHtml(T('voir les nouveautés'))} →`;
+    if(release.html_url){ pill.href = release.html_url; pill.target = '_blank'; pill.rel = 'noopener'; }
+    return;
+  }
+  const lowerFirst = s => s.replace(/^\p{Lu}(?=\p{Ll})/u, c => c.toLowerCase()); // « Events VATSIM » → « events VATSIM »
   $('newsGrid').innerHTML = items.map((it, i) => `<div class="news-item reveal in"><div class="ni" style="background:${NEWS_TINTS[i % NEWS_TINTS.length]};">${escHtml(it.icon)}</div><div><b>${escHtml(it.title)}</b><p>${escHtml(it.text)}</p></div></div>`).join('');
-  $('newsTitle').textContent = `La version ${v}, en bref.`;
-  $('pillNew').innerHTML = `<b>Nouveau</b> v${escHtml(v)} · ${escHtml(items.slice(0, 3).map(x => x.title.toLowerCase()).join(', '))} →`;
+  $('newsTitle').textContent = T(`La version ${v}, en bref.`);
+  $('pillNew').innerHTML = `<b>${escHtml(T('Nouveau'))}</b> v${escHtml(v)} · ${escHtml(items.slice(0, 3).map(x => lowerFirst(x.title)).join(', '))} →`;
 }
 (async function loadRelease(){
   try{

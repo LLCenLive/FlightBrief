@@ -59,3 +59,22 @@ for (const page of PAGES) {
   }
 }
 if (allMissing.size) { console.log(`\nSans traduction (${allMissing.size}) :`); allMissing.forEach(m => console.log('  ' + m)); }
+
+// Notes de la dernière version : sur les pages EN / ES, le « Quoi de neuf » et le badge du haut les
+// traduisent ligne à ligne au chargement (voir renderNews dans docs/index.html). Il faut donc que
+// chaque titre et chaque texte ait sa ligne dans docs/translations.js, sinon le badge se contente
+// d'annoncer la version.
+const notes = fs.readdirSync(root).map(f => f.match(/^RELEASE_NOTES_v(\d+)\.(\d+)\.(\d+)\.md$/)).filter(Boolean)
+  .sort((a, b) => (+b[1] - +a[1]) || (+b[2] - +a[2]) || (+b[3] - +a[3]))[0];
+if (notes) {
+  const page = fs.readFileSync(path.join(root, 'docs', 'index.html'), 'utf-8');
+  const parseReleaseNotes = new Function(page.match(/function parseReleaseNotes[\s\S]*?\n}\n/)[0] + 'return parseReleaseNotes;')();
+  const items = parseReleaseNotes(fs.readFileSync(path.join(root, notes[0]), 'utf-8'));
+  const left = new Set();
+  for (const lang of ['en', 'es']) {
+    I18N.use(lang);
+    items.forEach(it => [it.title, it.text].forEach(s => { if (I18N.tr(s) === s && (s === it.text || /[à-ÿ]/i.test(s))) left.add(`[${lang}] ${s}`); }));
+  }
+  console.log(left.size ? `\n${notes[0]} : lignes sans traduction dans docs/translations.js (${left.size}) :` : `\n${notes[0]} : notes traduites en anglais et en espagnol ✓`);
+  left.forEach(m => console.log('  ' + m));
+}

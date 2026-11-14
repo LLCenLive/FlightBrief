@@ -131,6 +131,8 @@ L'appli installée lit **`latest.yml`** dans la Release GitHub pour savoir quoi 
 
 Sans `latest.yml`, l'appli propose simplement d'ouvrir la page de téléchargement, comme avant. Le workflow GitHub Actions joint ces fichiers automatiquement.
 
+Page de téléchargement en anglais et en espagnol : le badge « New » et le « What's new » traduisent les notes de version (`RELEASE_NOTES_vX.Y.Z.md`) ligne à ligne. Lance `node scripts/build-docs.js` : il liste les lignes des dernières notes sans traduction, à ajouter dans `docs/translations.js`. Sans elles, le badge annonce quand même la bonne version et renvoie vers la Release.
+
 ## Bot Twitch : application propre à chaque utilisateur
 
 FlightBrief n'embarque **aucun Client ID** : chaque streamer déclare sa propre application Twitch, depuis l'onglet **Twitch → Ton application Twitch** (assistant pas à pas) :

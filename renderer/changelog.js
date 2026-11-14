@@ -22,7 +22,8 @@ window.FB_CHANGELOG = [
       ['new', "Amis sur la carte : une couleur au choix pour chaque ami, et les amis connectés en tant que contrôleurs (ATC) apparaissent aussi."],
       ['improved', "Briefing : indicateur de chargement sur la carte quand tu actives VATSIM, IVAO ou les amis ; panneaux « Copilote vocal » et « ATC en ligne » repliables."],
       ['improved', "Profil : textes d'aide remplacés par de petits (i) qui s'affichent au survol."],
-      ['fix', "Logbook : enregistrer une modification de vol ne crée plus de doublon en cas de double clic, et la liste se met à jour immédiatement."]
+      ['fix', "Logbook : enregistrer une modification de vol ne crée plus de doublon en cas de double clic, et la liste se met à jour immédiatement."],
+      ['fix', "Anglais et espagnol : les derniers textes restés en français sont traduits (À bord, carte postale, Hangar, Carrière, Live, historique des nouveautés)."]
     ]
   },
   {

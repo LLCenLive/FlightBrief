@@ -8,7 +8,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 
 const FILES = [
-  'renderer/index.html', 'renderer/app.js', 'renderer/v15.js', 'renderer/cabin-ui.js', 'renderer/v17.js', 'renderer/v18.js', 'renderer/copilot.js', 'renderer/fb-shared.js', 'renderer/bug-ui.js',
+  'renderer/index.html', 'renderer/app.js', 'renderer/v15.js', 'renderer/cabin-ui.js', 'renderer/v17.js', 'renderer/v18.js', 'renderer/copilot.js', 'renderer/fb-shared.js', 'renderer/bug-ui.js', 'renderer/v21.js', 'renderer/changelog.js',
   'renderer/alerts-overlay.html', 'renderer/cabin-overlay.html', 'renderer/live-overlay.html', 'renderer/obs.html',
   'renderer/mobile/index.html', 'renderer/mobile/mobile.js', 'renderer/mobile/setup.html',
   'renderer/public-logbook/index.html', 'renderer/public-logbook/app.js',
@@ -34,8 +34,9 @@ function isText(s) {
   if (/[;{}]/.test(bare) && /:\s*[\w#-]/.test(bare)) return false; // CSS en ligne
   if (/[àâäçéèêëîïôöùûüœæ«»]/i.test(bare)) return true;
   const words = bare.toLowerCase().split(/[^\p{L}']+/u).filter(Boolean);
-  if (words.some(w => STOP.has(w)) && words.length > 1) return true;
-  return /^[A-ZÀ-Ý][a-zà-ÿ]{2,}(\s[\p{L}'’-]+)*[\s.!?…:]*$/u.test(bare) || /\s/.test(bare) && /^[\p{L}\d'’ ,.!?…:()-]+$/u.test(bare);
+  if (words.some(w => STOP.has(w)) && (words.length > 1 || /\{\d+\}/.test(s))) return true; // « Tous · {0} », « sur {0} »
+  const lead = bare.replace(/^[\s—–\-·•↻⟳＋+✓✔→←↗›»«]+/u, '');                         // « — Choisir — », « ↻ Actualiser… »
+  return /^[A-ZÀ-Ý][a-zà-ÿ]{2,}(\s[\p{L}'’-]+)*[\s.!?…:—–]*$/u.test(lead) ||/\s/.test(bare) && /^[\p{L}\d'’ ,.!?…:()-]+$/u.test(bare);
 }
 
 // Découpe un morceau de HTML (avec {n} à la place des ${…}) en textes affichés + attributs.
@@ -67,12 +68,15 @@ function fromJs(src, out) {
     while (i < n && src[i] !== '`') {
       if (src[i] === '\\') { s += src[i + 1] === 'n' ? '\n' : src[i + 1]; i += 2; continue; }
       if (src[i] === '$' && src[i + 1] === '{') {
-        i += 2; let depth = 1;
+        i += 2; let depth = 1, sig = '{';
         while (i < n && depth) {
           const c = src[i];
-          if (c === '`') { const inner = readTemplate(); strings.push(inner); continue; }
-          if (c === '"' || c === "'") { strings.push(readQuoted(c)); continue; }
+          if (c === '`') { const inner = readTemplate(); strings.push(inner); sig = 'x'; continue; }
+          if (c === '"' || c === "'") { strings.push(readQuoted(c)); sig = 'x'; continue; }
+          // Regex dans ${…} (ex. .replace(/'/g, …)) : son apostrophe n'ouvre pas une chaîne.
+          if (c === '/' && src[i + 1] !== '/' && src[i + 1] !== '*' && /[(,=:[!&|?{};+\-*%<>~^]/.test(sig)) { skipRegex(); sig = 'x'; continue; }
           if (c === '{') depth++; else if (c === '}') depth--;
+          if (!/\s/.test(c)) sig = /[\w$)\]]/.test(c) ? 'x' : c;
           i++;
         }
         s += `{${k++}}`; continue;
@@ -80,6 +84,11 @@ function fromJs(src, out) {
       s += src[i++];
     }
     i++; return s;
+  }
+  function skipRegex() { // i sur le / d'ouverture
+    i++; let cls = false;
+    while (i < n && src[i] !== '\n') { if (src[i] === '\\') { i += 2; continue; } if (src[i] === '[') cls = true; else if (src[i] === ']') cls = false; else if (src[i] === '/' && !cls) break; i++; }
+    i++;
   }
   function readQuoted(q) {
     let s = ''; i++;
@@ -91,9 +100,7 @@ function fromJs(src, out) {
     if (c === '/' && src[i + 1] === '/') { while (i < n && src[i] !== '\n') i++; continue; }
     if (c === '/' && src[i + 1] === '*') { i = src.indexOf('*/', i + 2); i = i < 0 ? n : i + 2; continue; }
     if (c === '/' && (/[(,=:[!&|?{};+\-*%<>~^]/.test(lastSig) || lastSig === '' || /\b(return|typeof|case)$/.test(src.slice(Math.max(0, i - 8), i).trim()))) {
-      i++; let cls = false;
-      while (i < n && src[i] !== '\n') { if (src[i] === '\\') { i += 2; continue; } if (src[i] === '[') cls = true; else if (src[i] === ']') cls = false; else if (src[i] === '/' && !cls) break; i++; }
-      i++; lastSig = 'x'; continue;
+      skipRegex(); lastSig = 'x'; continue;
     }
     if (c === '"' || c === "'") { strings.push(readQuoted(c)); lastSig = 'x'; continue; }
     if (c === '`') { strings.push(readTemplate()); lastSig = 'x'; continue; }

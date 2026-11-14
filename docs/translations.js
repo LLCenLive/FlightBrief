@@ -386,4 +386,34 @@ Bot plus discret	Quieter bot	Bot más discreto
 Une pause réglable entre deux messages automatiques dans le chat (6 min par défaut), vue du hublot et quiz moins fréquents.	An adjustable gap between two automatic chat messages (6 min by default), less frequent window views and quizzes.	Una pausa ajustable entre dos mensajes automáticos en el chat (6 min por defecto), vistas desde la ventanilla y quiz menos frecuentes.
 Moins de messages inutiles	Fewer pointless messages	Menos mensajes inútiles
 Plus de vue du hublot sans ville, ni de réponse de quiz ou de résultat de paris quand personne n'a joué.	No more window views with no city, nor quiz answers or bet results when nobody played.	Se acabaron las vistas desde la ventanilla sin ciudad y las respuestas de quiz o resultados de apuestas cuando nadie ha jugado.
+# ================= v2.1 — badge et « Quoi de neuf » dynamiques en EN / ES =================
+Nouveau	New	Nuevo
+voir les nouveautés	see what's new	ver las novedades
+La version {0}, en bref.	Version {0} at a glance.	La versión {0}, en resumen.
+Nouveau v2.1.0 · events VATSIM et IVAO, carrière repensée, tours →	New v2.1.0 · VATSIM and IVAO events, redesigned career, tours →	Nuevo v2.1.0 · eventos de VATSIM e IVAO, carrera rediseñada, tours →
+v2.1.0 · events VATSIM et IVAO, carrière repensée, tours →	v2.1.0 · VATSIM and IVAO events, redesigned career, tours →	v2.1.0 · eventos de VATSIM e IVAO, carrera rediseñada, tours →
+# Notes de version 2.1.0 (RELEASE_NOTES_v2.1.0.md) : titre puis texte de chaque ligne
+Events VATSIM et IVAO	VATSIM and IVAO events	Eventos de VATSIM e IVAO
+Liste filtrable et fiche détaillée dans Outils, terrains en surbrillance sur la carte du Briefing, alerte quand ton départ ou ton arrivée accueille un event	Filterable list and detailed sheet in Tools, highlighted airports on the Briefing map, an alert when your departure or arrival hosts an event	Lista filtrable y ficha detallada en Herramientas, aeropuertos resaltados en el mapa del Briefing, aviso cuando tu salida o tu llegada acoge un evento
+Carrière repensée	Redesigned career	Carrera rediseñada
+Bouton « + » (Nouvelle carrière / Nouveau tour), saisie dans des fenêtres, étapes ligne par ligne ou en collant la liste des aéroports	"+" button (New career / New tour), entry in windows, legs line by line or by pasting the airport list	Botón «+» (Nueva carrera / Nuevo tour), entrada en ventanas, etapas línea a línea o pegando la lista de aeropuertos
+Tours	Tours	Tours
+Prochaine étape mise en avant, « Préparer le vol » remplit le Briefing, validation automatique depuis le logbook	Next leg highlighted, "Prepare the flight" fills the Briefing, automatic completion from the logbook	Próxima etapa destacada, «Preparar el vuelo» rellena el Briefing, validación automática desde el logbook
+Atterrissage	Landing	Aterrizaje
+Assiette (pitch) et angle de crabe au toucher	Pitch and crab angle at touchdown	Cabeceo (pitch) y ángulo de deriva en la toma
+Approche 3D	3D approach	Aproximación 3D
+PFD reconstitué pendant la rediffusion (horizon, vitesses, hauteur, vario, cap, écarts ILS)	Rebuilt PFD during the replay (horizon, speeds, height, vertical speed, heading, ILS deviations)	PFD reconstruido durante la repetición (horizonte, velocidades, altura, variómetro, rumbo, desviaciones ILS)
+Logbook	Logbook	Logbook
+Import de tout ton historique VATSIM (CID) et IVAO (VID + clé API), export CSV dans le dossier de l'appli	Import of your whole VATSIM (CID) and IVAO (VID + API key) history, CSV export to the app folder	Importación de todo tu historial de VATSIM (CID) e IVAO (VID + clave API), exportación CSV a la carpeta de la app
+Amis sur la carte	Friends on the map	Amigos en el mapa
+Couleur au choix, et amis connectés en tant qu'ATC	Colour of your choice, and friends connected as ATC	Color a elegir, y amigos conectados como ATC
+Briefing	Briefing	Briefing
+Indicateur de chargement de la carte, panneaux Copilote vocal et ATC en ligne repliables	Map loading indicator, collapsible Voice copilot and Online ATC panels	Indicador de carga del mapa, paneles Copiloto de voz y ATC en línea plegables
+Profil	Profile	Perfil
+Aides en infobulles (i)	Help in (i) tooltips	Ayuda en burbujas (i)
+Correctif	Fix	Corrección
+Plus de doublon en modifiant un vol du logbook	No more duplicates when editing a logbook flight	Ya no hay duplicados al modificar un vuelo del logbook
+Les boutons de la carte du Briefing passent à la ligne au lieu de se chevaucher sur une fenêtre étroite	The Briefing map buttons wrap onto a new line instead of overlapping in a narrow window	Los botones del mapa del Briefing pasan a la línea siguiente en lugar de solaparse en una ventana estrecha
+Anglais et espagnol	English and Spanish	Inglés y español
+Les derniers textes restés en français sont traduits	The last texts still in French are now translated	Se traducen los últimos textos que seguían en francés
 `);

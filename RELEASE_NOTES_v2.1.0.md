@@ -9,3 +9,4 @@
 ℹ️ Profil : aides en infobulles (i)
 🛠️ Correctif : plus de doublon en modifiant un vol du logbook
 🛠️ Correctif : les boutons de la carte du Briefing passent à la ligne au lieu de se chevaucher sur une fenêtre étroite
+🌍 Anglais et espagnol : les derniers textes restés en français sont traduits
