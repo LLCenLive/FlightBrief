@@ -108,3 +108,39 @@ test('vol trop court : proposé (flight-rejected) au lieu d\'être effacé', () 
     assert.ok(rejected[0].result && Array.isArray(rejected[0].result.path) && rejected[0].result.path.length > 0);
   } finally { Date.now = realNow; }
 });
+
+test('v2.2 décollage : point « roues en l\'air », un point par seconde en montée initiale, piste de départ', () => {
+  const { ends } = run([
+    { n: 30, from: LEMD, to: LEMD, gs: 15, ground: true },
+    { n: 20, from: LEMD, to: LEMD, gs: 90, ground: true },
+    { n: 600, from: LEMD, to: LEPP, gs: 250, alt: 10000 },
+    { n: 20, from: LEPP, to: LEPP, gs: 20, ground: true }
+  ]);
+  const r = ends[0];
+  const offs = r.path.filter(p => p.wheelsOff);
+  assert.strictEqual(offs.length, 1, 'un seul lâcher des roues');
+  assert.ok(r.takeoff && r.takeoff.exact, 'décollage mesuré');
+  assert.strictEqual(r.takeoff.liftoffTs, offs[0].ts);
+  const lift = r.path.find(p => p.phase === 'liftoff');
+  const roll = r.path.filter(p => p.phase === 'taxi_out' && p.gsKt > 25);
+  assert.ok(roll.length === 0 || roll.every((p, i) => !i || p.ts - roll[i - 1].ts <= 1000), 'course au décollage à 1 Hz');
+  const climb = r.path.filter(p => p.phase === 'air' && p.ts < lift.ts + 60000);
+  assert.ok(climb.length >= 55, `montée initiale à 1 Hz (${climb.length} points)`);
+  const later = r.path.filter(p => p.phase === 'air' && p.ts > lift.ts + 300000 && p.ts < lift.ts + 360000);
+  assert.ok(later.length <= 13, 'retour à 1 point / 5 s ensuite');
+});
+
+test('v2.2 computeTakeoff : vols d\'avant la 2.2 (sans point « roues en l\'air »)', () => {
+  const { computeTakeoff } = require('../tracker');
+  const P = [
+    { phase: 'taxi_out', lat: 1, lon: 1, ts: 0, onGround: true },
+    { phase: 'liftoff', lat: 1, lon: 1, ts: 5000, onGround: true, gsKt: 45 },
+    { phase: 'air', lat: 1.01, lon: 1, ts: 10000, onGround: false, iasKt: 140, pitchDeg: -8 }
+  ];
+  const k = computeTakeoff(P, '', path.join(__dirname, '..', 'renderer'));
+  assert.strictEqual(k.liftoffTs, 10000);
+  assert.strictEqual(k.liftoffIasKt, 140);
+  assert.strictEqual(k.liftoffPitchDeg, 8);
+  assert.strictEqual(k.exact, false);
+  assert.strictEqual(computeTakeoff([{ phase: 'taxi_out' }], 'LEMD', ''), null);
+});

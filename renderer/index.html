@@ -612,8 +612,7 @@
   <!-- ================= TWITCH VIEW (v1.5) ================= -->
   <div class="view" id="view-twitch">
     <div class="page-head">
-      <h1>Twitch</h1>
-      <p>Un bot qui répond aux questions du chat sur ton vol (!eta, !metar…), des paris sur ton taux d'atterrissage, et une 3e source OBS qui affiche les alertes à l'écran.</p>
+      <h1>Twitch <i class="info-tip" tabindex="0" data-tip="Bot du chat (!eta, !metar…), paris sur ton taux d'atterrissage et overlay Alertes pour OBS."></i></h1>
     </div>
 
     <div class="workspace">
@@ -630,18 +629,16 @@
         <h2>Ton application Twitch</h2>
         <div id="twAppBox"></div>
 
-        <h2>Compte qui parle dans le chat</h2>
+        <h2>Compte qui parle dans le chat <i class="info-tip" tabindex="0" data-tip="Sans compte connecté, le bot lit quand même le chat : ses réponses et les paris passent par l'overlay Alertes. Pour qu'il parle sous son propre nom, crée un compte Twitch dédié, connecte-le ici et nomme-le modérateur (/mod NomDuBot)."></i></h2>
         <div id="twAccountBox" class="tw-account"></div>
         <div class="tw-device hidden" id="twDeviceBox">
           <div class="hint">Une page Twitch vient de s'ouvrir. Connecte-toi avec le compte qui doit parler (le tien ou celui du bot), puis saisis ce code :</div>
           <div class="tw-code" id="twDeviceCode">—</div>
           <div class="btn-row"><button class="btn small" onclick="FBv15.twitchCopyCode()">Copier le code</button><button class="btn small" onclick="FBv15.twitchCancelLogin()">Annuler</button></div>
         </div>
-        <div class="hint">Sans compte connecté, le bot <b>lit</b> quand même le chat : ses réponses et les paris s'affichent alors sur l'overlay Alertes. Pour qu'il apparaisse sous son propre nom dans le chat, crée un compte Twitch dédié (ex. <i>FlightBot_LLC</i>), connecte-le ici et nomme-le modérateur de ta chaîne (<code>/mod NomDuBot</code>).</div>
         <div class="status-msg" id="twLoginMsg"></div>
 
-        <h2>Commandes</h2>
-        <p class="hint">Renomme une commande (ex. <code>!top</code> déjà pris par un autre bot) ou change son délai anti-spam. Une commande renommée ne répond plus à son nom d'origine. Champs vides = réglages d'origine.</p>
+        <h2>Commandes <i class="info-tip" tabindex="0" data-tip="Renomme une commande (ex. !top déjà pris par un autre bot) ou change son délai anti-spam. Une commande renommée ne répond plus à son nom d'origine. Champs vides = réglages d'origine."></i></h2>
         <div id="twCommands"></div>
         <div class="status-msg err" id="twCmdConflicts"></div>
         <div class="field" style="margin-top:8px;">
@@ -651,8 +648,8 @@
         <div class="switch-row"><span>Afficher aussi les réponses sur l'overlay</span><label class="switch"><input type="checkbox" id="twReplyOverlay"><span class="slider"></span></label></div>
 
         <h2>Alertes dans le chat</h2>
-        <div class="switch-row"><span>Nouveau METAR à destination<small class="tw-sub">Annoncé dans le chat seulement, pendant le vol</small></span><label class="switch"><input type="checkbox" id="twAlertMetar"><span class="slider"></span></label></div>
-        <div class="switch-row"><span>Excès de vitesse au roulage<small class="tw-sub">Au-dessus de la limite pendant 10 s, au sol</small></span><label class="switch"><input type="checkbox" id="twAlertTaxi"><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Nouveau METAR à destination <i class="info-tip" tabindex="0" data-tip="Annoncé dans le chat seulement, pendant le vol."></i></span><label class="switch"><input type="checkbox" id="twAlertMetar"><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Excès de vitesse au roulage <i class="info-tip" tabindex="0" data-tip="Au sol, au-dessus de la limite pendant 10 s."></i></span><label class="switch"><input type="checkbox" id="twAlertTaxi"><span class="slider"></span></label></div>
         <div class="field">
           <label>Limite de vitesse au roulage</label>
           <div class="range-row"><input type="range" id="twAlertTaxiKt" min="15" max="35" step="1"><span class="val-label" id="twAlertTaxiKtVal">30 kt</span></div>
@@ -666,8 +663,7 @@
           <div class="range-row"><input type="range" id="twBetLockAgl" min="300" max="3000" step="100"><span class="val-label" id="twBetLockAglVal">1000 ft</span></div>
         </div>
         <div class="switch-row"><span>Annoncer l'ouverture et le résultat dans le chat</span><label class="switch"><input type="checkbox" id="twBetAnnounce" checked><span class="slider"></span></label></div>
-        <div class="switch-row"><span>Prédiction Twitch (points de chaîne)</span><label class="switch"><input type="checkbox" id="twBetPrediction"><span class="slider"></span></label></div>
-        <p class="hint">Les viewers misent leurs points de chaîne sur une tranche de taux de toucher, dans l'interface de Twitch : ouverte et fermée avec les paris, résultat au toucher, remboursée si le vol est interrompu. Demande une chaîne Affiliée ou Partenaire et le compte de ta chaîne connecté (onglet À bord) : Twitch n'autorise que le compte de la chaîne à lancer une prédiction, pas un compte modérateur comme le bot.</p>
+        <div class="switch-row"><span>Prédiction Twitch (points de chaîne) <i class="info-tip" tabindex="0" data-tip="Les viewers misent leurs points de chaîne sur une tranche de taux de toucher, dans Twitch : ouverte et fermée avec les paris, remboursée si le vol est interrompu. Chaîne Affiliée ou Partenaire, avec le compte de ta chaîne connecté (onglet À bord)."></i></span><label class="switch"><input type="checkbox" id="twBetPrediction"><span class="slider"></span></label></div>
         <div class="status-msg" id="twPredStatus"></div>
 
       </div>
@@ -689,8 +685,7 @@
 
         <div class="tw-grid">
           <div class="card-panel">
-            <div class="bet-head"><h3>Classement des parieurs</h3><button class="btn small" onclick="FBv15.twitchBet('reset-leaderboard')">Remettre à zéro</button></div>
-            <div class="hint" style="margin:-4px 0 8px;">Victoires / paris joués.</div>
+            <div class="bet-head"><h3>Classement des parieurs <i class="info-tip" tabindex="0" data-tip="Victoires / paris joués."></i></h3><button class="btn small" onclick="FBv15.twitchBet('reset-leaderboard')">Remettre à zéro</button></div>
             <div id="betLeaderboard" class="top-list"></div>
           </div>
           <div class="card-panel">
@@ -700,8 +695,7 @@
         </div>
 
         <div class="card-panel">
-          <h3>Overlay « Alertes » pour OBS</h3>
-          <p class="hint" style="margin:-4px 0 10px;">Une 3e source navigateur, transparente, qui affiche la carte d'atterrissage, les paris, les succès débloqués et les réponses du bot. Place-la où tu veux sur ta scène (1920 × 1080 conseillé).</p>
+          <h3>Overlay « Alertes » pour OBS <i class="info-tip" tabindex="0" data-tip="Source navigateur transparente : carte d'atterrissage, paris, succès et réponses du bot. À placer où tu veux sur ta scène (1920 × 1080 conseillé)."></i></h3>
           <div class="simbrief-row">
             <input type="text" id="alertsLink" readonly>
             <button class="btn small" onclick="FBv15.copyAlertsLink()">Copier</button>
@@ -741,8 +735,7 @@
             <div class="al-design-grid">
               <div>
                 <div class="al-match-box">
-                  <div class="switch-row strong"><span>🔗 Assortir à mon overlay live</span><label class="switch"><input type="checkbox" id="alsMatch"><span class="slider"></span></label></div>
-                  <div class="hint" style="margin:2px 0 0;">Reprend les couleurs, la police, les arrondis, la bordure, l'ombre et le flou de ton overlay (Outil Live) et suit leurs changements.</div>
+                  <div class="switch-row strong"><span>🔗 Assortir à mon overlay live <i class="info-tip" tabindex="0" data-tip="Reprend les couleurs, la police, les arrondis, la bordure, l'ombre et le flou de ton overlay (Outil Live) et suit leurs changements."></i></span><label class="switch"><input type="checkbox" id="alsMatch"><span class="slider"></span></label></div>
                 </div>
                 <div class="al-lockable" id="alsLockable">
                   <div class="al-locked-note">Réglé par ton overlay live : désactive « Assortir » pour personnaliser.</div>
@@ -789,13 +782,12 @@
                 <div class="switch-row"><span>Liseré coloré à gauche</span><label class="switch"><input type="checkbox" id="alsStripe" checked><span class="slider"></span></label></div>
                 <div class="switch-row"><span>Barre de temps restant</span><label class="switch"><input type="checkbox" id="alsTimer" checked><span class="slider"></span></label></div>
                 <div class="switch-row"><span>Son à l'apparition (audio de la source OBS)</span><label class="switch"><input type="checkbox" id="alsSound"><span class="slider"></span></label></div>
-                <div class="field"><label>Volume <small class="hint">(joue le son quand tu relâches le curseur)</small></label><div class="range-row"><input type="range" id="alsVolume" min="0" max="100" step="5"><span class="val-label" id="alsVolumeVal">60%</span></div></div>
+                <div class="field"><label>Volume <i class="info-tip" tabindex="0" data-tip="Joue le son quand tu relâches le curseur."></i></label><div class="range-row"><input type="range" id="alsVolume" min="0" max="100" step="5"><span class="val-label" id="alsVolumeVal">60%</span></div></div>
                 <div class="btn-row"><button class="btn small" onclick="FBv15.alertsChimeTest()">▶ Écouter le son</button><button class="btn small" onclick="FBv15.alertsDesignReset()">Réinitialiser le design</button></div>
               </div>
               <div class="al-preview-col">
-                <div class="eyebrow" style="margin-bottom:6px;">Aperçu en direct</div>
+                <div class="eyebrow" style="margin-bottom:6px;">Aperçu en direct <i class="info-tip" tabindex="0" data-tip="Rendu réel de la source OBS, mis à jour à chaque réglage. Pour l'audio, coche « Contrôler l'audio via OBS » dans les propriétés de la source."></i></div>
                 <div class="al-preview-shell"><iframe id="alPreviewFrame" title="Aperçu des alertes"></iframe></div>
-                <div class="hint">Rendu réel de la source OBS, mis à jour à chaque réglage. Pour l'audio, coche « Contrôler l'audio via OBS » dans les propriétés de la source.</div>
               </div>
             </div>
           </details>
@@ -814,18 +806,16 @@
   <!-- ================= TOOLS VIEW ================= -->
   <div class="view" id="view-cabin">
     <div class="page-head">
-      <h1>À bord</h1>
-      <p>Le chat monte à bord de tes vols : miles, passeport tamponné à chaque arrivée, correspondances, cartes postales, et de quoi animer la croisière (survols de chez les viewers, vue du hublot, quiz). Fonctionne avec le bot de l'onglet Twitch.</p>
+      <h1>À bord <i class="info-tip" tabindex="0" data-tip="Le chat monte à bord : miles, passeport, correspondances, cartes postales, survols, hublot, quiz. Fonctionne avec le bot de l'onglet Twitch."></i></h1>
     </div>
     <div class="workspace">
       <div class="panel" id="cabinPanel">
         <div class="panel-title"><span class="dot" id="cbDot"></span> Programme passagers</div>
         <div class="tw-status" id="cbStatus">—</div>
-        <div class="switch-row"><span>Activer « À bord »</span><label class="switch"><input type="checkbox" id="cbEnabled" checked><span class="slider"></span></label></div>
-        <div class="hint">L'embarquement s'ouvre tout seul quand tu lances le tracker. Les viewers tapent <code>!embarquer</code> et gagnent 1 mile par NM parcouru tant qu'ils sont actifs dans le chat (20 min après leur dernier message).</div>
+        <div class="switch-row"><span>Activer « À bord » <i class="info-tip" tabindex="0" data-tip="L'embarquement s'ouvre quand tu lances le tracker. Les viewers tapent !embarquer et gagnent 1 mile par NM tant qu'ils sont actifs dans le chat (20 min après leur dernier message)."></i></span><label class="switch"><input type="checkbox" id="cbEnabled" checked><span class="slider"></span></label></div>
 
         <h2>Animations de croisière</h2>
-        <div class="field"><label>Pause minimale entre deux messages automatiques</label><div class="range-row"><input type="range" id="cbChatGap" min="0" max="20" step="1"><span class="val-label" id="cbChatGapVal">6 min</span></div><small class="hint">Hublot, nouveaux pays, préavis de survol, quiz… : au plus un message toutes les X minutes dans le chat (0 = sans limite). L'overlay Alertes les affiche quand même ; les réponses aux commandes et les résultats passent toujours.</small></div>
+        <div class="field"><label>Pause minimale entre deux messages automatiques <i class="info-tip" tabindex="0" data-tip="Hublot, nouveaux pays, survols, quiz… : au plus un message toutes les X minutes dans le chat (0 = sans limite). L'overlay Alertes les affiche quand même ; réponses aux commandes et résultats passent toujours."></i></label><div class="range-row"><input type="range" id="cbChatGap" min="0" max="20" step="1"><span class="val-label" id="cbChatGapVal">6 min</span></div></div>
         <div class="switch-row"><span>🪟 Vue du hublot (ville et pays survolés)</span><label class="switch"><input type="checkbox" id="cbWindow" checked><span class="slider"></span></label></div>
         <div class="field"><label>Toutes les</label><div class="range-row"><input type="range" id="cbWindowEvery" min="4" max="30" step="1"><span class="val-label" id="cbWindowEveryVal">12 min</span></div></div>
         <div class="switch-row"><span>🏠 Survol de chez les viewers (<code>!maville</code>)</span><label class="switch"><input type="checkbox" id="cbFlyover" checked><span class="slider"></span></label></div>
@@ -836,41 +826,37 @@
         <div class="field"><label>Un quiz toutes les</label><div class="range-row"><input type="range" id="cbQuizEvery" min="6" max="40" step="1"><span class="val-label" id="cbQuizEveryVal">15 min</span></div></div>
         <div class="switch-row"><span>⏱️ Deviner l'heure d'arrivée (<code>!arrivee</code>)</span><label class="switch"><input type="checkbox" id="cbArrival" checked><span class="slider"></span></label></div>
 
-        <h2>Turbulences</h2>
-        <div class="switch-row"><span>⚠️ Alerte turbulences (<code>!ceinture</code>)<small class="tw-sub">Les passagers actifs dans le chat bouclent leur ceinture à temps, sinon ils perdent des miles</small></span><label class="switch"><input type="checkbox" id="cbTurb"><span class="slider"></span></label></div>
-        <div class="switch-row"><span>Secousses réelles du simulateur<small class="tw-sub">Accélération verticale, en montée, croisière et descente</small></span><label class="switch"><input type="checkbox" id="cbTurbAuto" checked><span class="slider"></span></label></div>
+        <h2>Turbulences <i class="info-tip" tabindex="0" data-tip="Au plus une alerte automatique toutes les 10 min. Un viewer ne perd jamais les miles déjà dépensés au duty free."></i></h2>
+        <div class="switch-row"><span>⚠️ Alerte turbulences (<code>!ceinture</code>) <i class="info-tip" tabindex="0" data-tip="Les passagers actifs dans le chat bouclent leur ceinture à temps, sinon ils perdent des miles."></i></span><label class="switch"><input type="checkbox" id="cbTurb"><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Secousses réelles du simulateur <i class="info-tip" tabindex="0" data-tip="Accélération verticale, en montée, croisière et descente."></i></span><label class="switch"><input type="checkbox" id="cbTurbAuto" checked><span class="slider"></span></label></div>
         <div class="field"><label>Sensibilité</label><select id="cbTurbSens"><option value="low">Faible (fortes secousses seulement)</option><option value="medium">Moyenne</option><option value="high">Forte (la moindre secousse)</option></select></div>
-        <div class="switch-row"><span>Turbulences surprises en croisière<small class="tw-sub">Même sans secousses, pour animer le chat</small></span><label class="switch"><input type="checkbox" id="cbTurbRandom"><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Turbulences surprises en croisière <i class="info-tip" tabindex="0" data-tip="Même sans secousses, pour animer le chat."></i></span><label class="switch"><input type="checkbox" id="cbTurbRandom"><span class="slider"></span></label></div>
         <div class="field"><label>En moyenne toutes les</label><div class="range-row"><input type="range" id="cbTurbEvery" min="10" max="120" step="5"><span class="val-label" id="cbTurbEveryVal">45 min</span></div></div>
         <div class="field"><label>Temps pour boucler sa ceinture</label><div class="range-row"><input type="range" id="cbTurbSec" min="15" max="180" step="5"><span class="val-label" id="cbTurbSecVal">60 s</span></div></div>
         <div class="field"><label>Miles perdus sans ceinture</label><div class="range-row"><input type="range" id="cbTurbPenalty" min="0" max="500" step="10"><span class="val-label" id="cbTurbPenaltyVal">50 miles</span></div></div>
-        <small class="hint">Au plus une alerte automatique toutes les 10 min. Un viewer ne perd jamais les miles qu'il a déjà dépensés au duty free.</small>
 
-        <h2>Duty free</h2>
-        <div class="switch-row"><span>🛍️ Duty free (<code>!dutyfree</code>, <code>!acheter</code>)<small class="tw-sub">Les viewers dépensent leurs miles en badges, titres et couleurs de pseudo</small></span><label class="switch"><input type="checkbox" id="cbDuty" checked><span class="slider"></span></label></div>
+        <h2>Duty free <i class="info-tip" tabindex="0" data-tip="Achats payés sur le solde (miles gagnés − dépensés) : statut et classement ne baissent pas. Les cosmétiques apparaissent dans le chat, sur les overlays et sur le carnet de vol public."></i></h2>
+        <div class="switch-row"><span>🛍️ Duty free (<code>!dutyfree</code>, <code>!acheter</code>) <i class="info-tip" tabindex="0" data-tip="Les viewers dépensent leurs miles en badges, titres et couleurs de pseudo."></i></span><label class="switch"><input type="checkbox" id="cbDuty" checked><span class="slider"></span></label></div>
         <div class="field"><label>Prix</label><div class="range-row"><input type="range" id="cbDutyMult" min="0.5" max="3" step="0.25"><span class="val-label" id="cbDutyMultVal">×1</span></div></div>
         <div class="cb-shop" id="cbShop"></div>
-        <small class="hint">Les achats se paient sur le solde (miles gagnés − miles dépensés) : le statut et le classement ne baissent pas. Les cosmétiques apparaissent dans le chat, sur les overlays et sur le carnet de vol public.</small>
 
         <h2>Titre du stream</h2>
         <div class="switch-row"><span>Me proposer un titre au lancement du vol</span><label class="switch"><input type="checkbox" id="cbTitleAuto" checked><span class="slider"></span></label></div>
-        <div class="field"><label>Modèle</label><textarea id="cbTitleTpl" rows="3" maxlength="200"></textarea>
-          <div class="hint" style="margin-top:4px;">Variables : <code>{indicatif}</code> <code>{depart}</code> <code>{arrivee}</code> (villes) <code>{dep}</code> <code>{arr}</code> (OACI) <code>{avion}</code>. Rien n'est envoyé à Twitch sans ta validation.</div></div>
+        <div class="field"><label>Modèle <i class="info-tip" tabindex="0" data-tip="{depart} / {arrivee} : villes, {dep} / {arr} : codes OACI. Rien n'est envoyé à Twitch sans ta validation."></i></label><textarea id="cbTitleTpl" rows="3" maxlength="200"></textarea>
+          <div class="hint" style="margin-top:4px;"><code>{indicatif}</code> <code>{depart}</code> <code>{arrivee}</code> <code>{dep}</code> <code>{arr}</code> <code>{avion}</code></div></div>
         <div class="field"><label>Catégorie Twitch</label><input type="text" id="cbTitleCat" placeholder="Microsoft Flight Simulator 2024"></div>
-        <div class="field"><label>Compte de ta chaîne</label><div id="cbChanBox"></div>
+        <div class="field"><label>Compte de ta chaîne <i class="info-tip" tabindex="0" data-tip="Pour changer le titre, Twitch exige le compte de la chaîne elle-même (pas celui du bot). Utilise ton application Twitch de l'onglet Twitch."></i></label><div id="cbChanBox"></div>
           <div class="tw-device hidden" id="cbChanDevice"><div class="hint">Une page Twitch s'est ouverte : connecte-toi avec <b>le compte de ta chaîne</b> et saisis ce code :</div><div class="tw-code" id="cbChanCode">—</div>
           <div class="btn-row"><button class="btn small" onclick="FBCabin.chanCancel()">Annuler</button></div></div>
-          <div class="hint">Pour changer le titre, Twitch exige le compte de la chaîne elle-même (pas celui du bot). Il utilise ton application Twitch de l'onglet Twitch.</div>
           <div class="status-msg" id="cbChanMsg"></div></div>
         <div class="btn-row"><button class="btn small" onclick="FBCabin.openTitle()">📝 Proposer un titre maintenant</button></div>
 
-        <h2>Carnet de vol public</h2>
-        <div class="hint">Un mini-site statique (vols, carte, passagers, passeports, cartes postales) à publier sur GitHub Pages. Rien ne pointe vers ton PC : ce sont juste des fichiers. Les villes des viewers ne sont jamais publiées, et un viewer peut se retirer avec <code>!passeport cacher</code>.</div>
+        <h2>Carnet de vol public <i class="info-tip" tabindex="0" data-tip="Mini-site statique (vols, carte, passagers, passeports, cartes postales) à publier sur GitHub Pages. Rien ne pointe vers ton PC. Les villes des viewers ne sont jamais publiées ; un viewer peut se retirer avec !passeport cacher."></i></h2>
         <div class="field"><label>Dossier d'export</label><div class="simbrief-row"><input type="text" id="cbPubDir" readonly placeholder="Choisis un dossier…"><button class="btn small" onclick="FBCabin.chooseDir()">Choisir</button></div></div>
         <div class="field"><label>Nom affiché</label><input type="text" id="cbPubPilot" maxlength="40" placeholder="ex : LLCenLive"></div>
         <div class="switch-row"><span>Tracés des vols sur la carte</span><label class="switch"><input type="checkbox" id="cbPubRoutes" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span>Passagers, passeports et classement</span><label class="switch"><input type="checkbox" id="cbPubPax" checked><span class="slider"></span></label></div>
-        <div class="field"><label>Adresse du site une fois publié <small class="hint">(donnée par <code>!passeport</code>)</small></label><input type="text" id="cbPubUrl" placeholder="https://llcenlive.github.io/carnet"></div>
+        <div class="field"><label>Adresse du site une fois publié <i class="info-tip" tabindex="0" data-tip="Donnée par la commande !passeport."></i></label><input type="text" id="cbPubUrl" placeholder="https://llcenlive.github.io/carnet"></div>
         <div class="btn-row"><button class="btn small primary" onclick="FBCabin.exportPublic()">Générer le site</button><button class="btn small" onclick="FBCabin.openPubDir()">Ouvrir le dossier</button></div>
         <div class="status-msg" id="cbPubMsg"></div>
 
@@ -916,7 +902,7 @@
             <div id="cbRanking" class="cb-ranking"></div>
           </div>
           <div class="card-panel">
-            <h3>Commandes du chat</h3>
+            <h3>Commandes du chat <i class="info-tip" tabindex="0" data-tip="Statuts : 🎫 Membre · 🥈 Argent (1 500) · 🥇 Or (6 000) · 💠 Platine (20 000) · 👑 Légende (60 000 miles). Bonus : atterrissage +100, survol de chez soi +150, quiz +50, heure d'arrivée +100, correspondance +100 par vol enchaîné."></i></h3>
             <div class="cb-cmds">
               <div><code>!embarquer</code><span>monter à bord du vol</span></div>
               <div><code>!maville Lyon</code><span>sa ville, pour être survolé (<code>!maville oublier</code> l'efface)</span></div>
@@ -930,21 +916,18 @@
               <div><code>!dutyfree</code><span>catalogue du duty free et solde de miles</span></div>
               <div><code>!acheter canard</code><span>acheter (ou remettre) un article du duty free</span></div>
             </div>
-            <div class="hint" style="margin-top:8px;">Statuts : 🎫 Membre · 🥈 Argent (1 500) · 🥇 Or (6 000) · 💠 Platine (20 000) · 👑 Légende (60 000 miles). Bonus : atterrissage +100, survol de chez soi +150, quiz +50, heure d'arrivée +100, correspondance +100 par vol enchaîné.</div>
           </div>
         </div>
 
         <div class="card-panel">
-          <h3>Source OBS « À bord »</h3>
-          <p class="hint" style="margin:-4px 0 10px;">Le manifeste des passagers, en direct (transparent quand aucun vol n'est en cours). Les annonces (survols, hublot, quiz, carte postale) passent par l'overlay Alertes de l'onglet Twitch. Options d'URL : <code>?lignes=8</code>, <code>?largeur=380</code>.</p>
+          <h3>Source OBS « À bord » <i class="info-tip" tabindex="0" data-tip="Manifeste des passagers en direct (transparent sans vol en cours). Les annonces passent par l'overlay Alertes. Options d'URL : ?lignes=8, ?largeur=380."></i></h3>
           <div class="simbrief-row"><input type="text" id="cbObsLink" readonly><button class="btn small" onclick="FBCabin.copyObs()">Copier</button></div>
           <div class="status-msg" id="cbObsMsg"></div>
           <div class="cb-obs-preview"><iframe id="cbObsFrame" title="Aperçu À bord"></iframe></div>
         </div>
 
         <div class="card-panel">
-          <div class="bet-head"><h3>Cartes postales</h3><button class="btn small" onclick="window.cabin.openPostcards()">Ouvrir le dossier</button></div>
-          <div class="hint" style="margin:-4px 0 10px;">Créée automatiquement à chaque atterrissage avec passagers : ta capture d'atterrissage, la ville d'arrivée et la liste des passagers. Elle s'affiche aussi sur l'overlay Alertes.</div>
+          <div class="bet-head"><h3>Cartes postales <i class="info-tip" tabindex="0" data-tip="Créée à chaque atterrissage avec passagers : capture d'atterrissage, ville d'arrivée et passagers. Affichée aussi sur l'overlay Alertes."></i></h3><button class="btn small" onclick="window.cabin.openPostcards()">Ouvrir le dossier</button></div>
           <div class="cb-cards" id="cbCards"></div>
         </div>
       </div>
@@ -954,12 +937,10 @@
   <div class="view" id="view-tools">
     <div class="page-head">
       <h1>Outils</h1>
-      <p>Calculateurs de vol rapides — temps/distance/vitesse, carburant &amp; autonomie, top of descent, et une estimation IAS → TAS. Rien n'est enregistré, ce sont de simples calculatrices.</p>
     </div>
 
     <div class="card-panel fly-card" id="flyCard">
-      <h3>🧭 Où voler aujourd'hui ?</h3>
-      <p class="hint">Dis combien de temps tu as : FlightBrief propose 3 destinations adaptées à ton avion (distance, longueur de piste), avec la météo réelle, l'ATC en ligne sur VATSIM et IVAO, et les events VATSIM en cours à ton heure d'arrivée.</p>
+      <h3>🧭 Où voler aujourd'hui ? <i class="info-tip" tabindex="0" data-tip="3 destinations adaptées à ton temps et à ton avion (distance, longueur de piste), avec la météo réelle, l'ATC en ligne VATSIM / IVAO et les events à ton heure d'arrivée."></i></h3>
       <div class="row3">
         <div class="field"><label>Départ (OACI)</label><input type="text" id="flyFrom" maxlength="4" placeholder="LFPG"></div>
         <div class="field"><label>Temps disponible</label><select id="flyTime"><option value="30">30 min</option><option value="45">45 min</option><option value="60" selected>1 h</option><option value="90">1 h 30</option><option value="120">2 h</option><option value="180">3 h</option><option value="300">5 h</option><option value="480">8 h</option><option value="720">12 h</option></select></div>
@@ -1152,17 +1133,22 @@
   <!-- ================= ADMIN VIEW ================= -->
   <div class="view" id="view-admin">
     <div class="page-head">
-      <h1>Admin — Personnalisation</h1>
-      <p>Adapte les couleurs, les polices et la disposition de la carte de briefing à ton identité de chaîne.</p>
+      <h1>Admin</h1>
+    </div>
+    <div class="admin-nav" role="tablist">
+      <button data-admin="card" class="active" onclick="adminShow('card')">🎨 Carte de briefing</button>
+      <button data-admin="app" onclick="adminShow('app')">⚙️ Application</button>
+      <button data-admin="mobile" onclick="adminShow('mobile')">📱 Mobile</button>
+      <button data-admin="data" onclick="adminShow('data')">💾 Données</button>
     </div>
 
-    <div class="card-panel">
-      <h3>Thèmes prédéfinis</h3>
-      <div class="theme-preset-grid" id="themePresets"></div>
-      <div class="hint" style="margin-top:10px;">Appliquer un thème remplace couleurs, polices et disposition ci-dessous — tu peux ensuite les affiner librement.</div>
-    </div>
-
+    <div class="admin-sec" data-admin="card">
     <div class="admin-grid">
+      <div class="card-panel admin-wide">
+      <div class="bet-head"><h3>Thèmes prédéfinis <i class="info-tip" tabindex="0" data-tip="Appliquer un thème remplace couleurs, polices et disposition : tu peux ensuite les affiner librement."></i></h3><button class="btn small" onclick="resetTheme()">Réinitialiser le thème</button></div>
+      <div class="theme-preset-grid" id="themePresets"></div>
+      </div>
+
       <div class="card-panel">
         <h3>Couleurs</h3>
         <div class="swatches">
@@ -1211,12 +1197,11 @@
       </div>
 
       <div class="card-panel">
-        <h3>Disposition de la carte</h3>
+        <h3>Dimensions &amp; style</h3>
         <div class="row2">
           <div class="field"><label>Largeur (px)</label><input type="number" id="thWidth" min="300" max="3000" step="10"></div>
-          <div class="field"><label>Hauteur (px)</label><input type="number" id="thHeight" min="0" max="2000" step="10"></div>
+          <div class="field"><label>Hauteur (px) <i class="info-tip" tabindex="0" data-tip="0 = automatique selon le contenu. Sinon, le contenu qui dépasse est masqué (pour caler exactement la source OBS)."></i></label><input type="number" id="thHeight" min="0" max="2000" step="10"></div>
         </div>
-        <div class="hint" style="margin-top:-6px; margin-bottom:10px;">Hauteur à 0 = automatique selon le contenu affiché. Sinon, le contenu qui dépasse est masqué (utile pour caler exactement la source OBS).</div>
         <div class="field">
           <label>Taille du texte</label>
           <div class="range-row"><input type="range" id="thFontScale" min="70" max="160" step="5"><span class="val-label" id="thFontScaleVal">100%</span></div>
@@ -1236,6 +1221,11 @@
             <button onclick="setHeaderAlign('center')">Centré</button>
           </div>
         </div>
+      </div>
+
+      <div class="card-panel">
+        <h3>Contenu de la carte</h3>
+        <div class="field"><label>Texte de marque (watermark, ex : @tonpseudo)</label><input type="text" id="thBrandText" placeholder="ex : twitch.tv/tonpseudo"></div>
         <div class="field">
           <label>Colonnes des cases (Appareil / Niveau / Durée)</label>
           <div class="toggle-group" id="thTileColumnsToggle" data-cols="3">
@@ -1243,7 +1233,6 @@
             <button onclick="setTileColumns(3)">3 colonnes</button>
           </div>
         </div>
-        <div class="field"><label>Texte de marque (watermark, ex : @tonpseudo)</label><input type="text" id="thBrandText" placeholder="ex : twitch.tv/tonpseudo"></div>
         <div class="switch-row"><span>Case Appareil</span><label class="switch"><input type="checkbox" id="thShowAircraft" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span>Case Niveau</span><label class="switch"><input type="checkbox" id="thShowAltitude" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span>Case Durée</span><label class="switch"><input type="checkbox" id="thShowDuration" checked><span class="slider"></span></label></div>
@@ -1251,68 +1240,42 @@
         <div class="switch-row"><span>Case Météo</span><label class="switch"><input type="checkbox" id="thShowWeather" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span>Barre de notes</span><label class="switch"><input type="checkbox" id="thShowNotes" checked><span class="slider"></span></label></div>
       </div>
+    </div>
+    </div>
 
-      <div class="card-panel">
-        <h3>Données</h3>
-        <p class="hint" style="margin-bottom:10px;">Toutes les données (logbook, carrières, thème) sont enregistrées automatiquement dans un fichier sur cet ordinateur :</p>
-        <div class="field"><input type="text" id="dataPathDisplay" readonly style="font-size:11px;"></div>
-        <div class="btn-row"><button class="btn block" onclick="resetTheme()">Réinitialiser le thème par défaut</button></div>
+    <div class="admin-sec hidden" data-admin="app">
+    <div class="admin-grid">
+      <div class="card-panel" id="noticePanel">
+        <h3>💬 Pop-ups de l'appli <i class="info-tip" tabindex="0" data-tip="Messages importants (vol terminé, PIREP enregistré, vol trop court, erreur du simulateur) en bas de la fenêtre, avec un petit son."></i></h3>
+        <div class="switch-row"><span>Son des pop-ups</span><label class="switch"><input type="checkbox" id="noticeSound"><span class="slider"></span></label></div>
+        <div class="field"><label>Volume <i class="info-tip" tabindex="0" data-tip="Joue un exemple quand tu relâches le curseur."></i></label><div class="range-row"><input type="range" id="noticeVolume" min="0" max="100" step="5"><span class="val-label" id="noticeVolumeVal">45%</span></div></div>
+        <div class="btn-row"><button class="btn small" onclick="FBv18.testNotice()">▶ Voir un exemple</button></div>
+      </div>
+
+      <div class="card-panel" id="watchPanel">
+        <h3>🔔 Rappel « tracker non lancé » <i class="info-tip" tabindex="0" data-tip="Si l'avion roule ou vole alors que le suivi n'est pas lancé : son et notification Windows après 5 min, puis toutes les minutes."></i></h3>
+        <div class="switch-row"><span>Activer le rappel</span><label class="switch"><input type="checkbox" id="watchEnabled"><span class="slider"></span></label></div>
+        <div class="switch-row"><span>Lancer le tracker automatiquement à la place</span><label class="switch"><input type="checkbox" id="watchAutoStart"><span class="slider"></span></label></div>
+        <div class="field"><label>Volume de l'alerte <i class="info-tip" tabindex="0" data-tip="Joue l'alerte quand tu relâches le curseur."></i></label><div class="range-row"><input type="range" id="watchVolume" min="0" max="100" step="5"><span class="val-label" id="watchVolumeVal">70%</span></div></div>
+        <div class="btn-row"><button class="btn small" onclick="FBv15.watchTestSound()">▶ Écouter l'alerte</button></div>
       </div>
 
       <div class="card-panel" id="shotsPanel">
-        <h3>📷 Captures d'écran des vols</h3>
-        <p class="hint" style="margin:-4px 0 10px;">Les captures prises pendant un vol suivi sont rattachées automatiquement à son PIREP (Logbook → 📷).</p>
+        <h3>📷 Captures d'écran des vols <i class="info-tip" tabindex="0" data-tip="Les captures prises pendant un vol suivi sont rattachées automatiquement à son PIREP (Logbook → 📷)."></i></h3>
         <div class="shots-summary" id="shotsSummary"></div>
         <div class="btn-row"><button class="btn small primary" onclick="FBv15.openShotsSettings()">Réglages des captures</button><button class="btn small" onclick="window.shots.openFolder()">Ouvrir le dossier</button><span class="hint" id="shotStats" style="align-self:center;"></span></div>
       </div>
 
-      <div class="card-panel" id="watchPanel">
-        <h3>🔔 Rappel « tracker non lancé »</h3>
-        <p class="hint" style="margin:-4px 0 10px;">Si ton avion roule ou vole dans le simulateur alors que le suivi n'est pas lancé, FlightBrief te prévient par un son et une notification Windows après 5 minutes de roulage ou de vol, puis toutes les minutes.</p>
-        <div class="switch-row"><span>Activer le rappel</span><label class="switch"><input type="checkbox" id="watchEnabled"><span class="slider"></span></label></div>
-        <div class="switch-row"><span>Lancer le tracker automatiquement à la place</span><label class="switch"><input type="checkbox" id="watchAutoStart"><span class="slider"></span></label></div>
-        <div class="field"><label>Volume de l'alerte <small class="hint">(joue l'alerte quand tu relâches le curseur)</small></label><div class="range-row"><input type="range" id="watchVolume" min="0" max="100" step="5"><span class="val-label" id="watchVolumeVal">70%</span></div></div>
-        <div class="btn-row"><button class="btn small" onclick="FBv15.watchTestSound()">▶ Écouter l'alerte</button></div>
-      </div>
-
-      <div class="card-panel" id="noticePanel">
-        <h3>💬 Pop-ups de l'appli</h3>
-        <p class="hint" style="margin:-4px 0 10px;">Les messages importants (vol terminé, PIREP enregistré, vol trop court, erreur du simulateur) s'affichent en bas de la fenêtre avec un petit son.</p>
-        <div class="switch-row"><span>Son des pop-ups</span><label class="switch"><input type="checkbox" id="noticeSound"><span class="slider"></span></label></div>
-        <div class="field"><label>Volume <small class="hint">(joue un exemple quand tu relâches le curseur)</small></label><div class="range-row"><input type="range" id="noticeVolume" min="0" max="100" step="5"><span class="val-label" id="noticeVolumeVal">45%</span></div></div>
-        <div class="btn-row"><button class="btn small" onclick="FBv18.testNotice()">▶ Voir un exemple</button></div>
-      </div>
-
       <div class="card-panel" id="planeIconPanel">
-        <h3>✈️ Icône de l'avion sur les cartes</h3>
-        <p class="hint" style="margin:-4px 0 10px;">Utilisée sur la carte de suivi du Briefing et sur le compagnon mobile (après une synchro).</p>
+        <h3>✈️ Icône de l'avion sur les cartes <i class="info-tip" tabindex="0" data-tip="Carte de suivi du Briefing et compagnon mobile (après une synchro)."></i></h3>
         <div class="plane-picker" id="planePicker"></div>
       </div>
+    </div>
+    </div>
 
-      <div class="card-panel" id="backupsPanel">
-        <h3>🛟 Sauvegardes automatiques</h3>
-        <p class="hint" style="margin:-4px 0 10px;">Une copie de tes données est faite chaque jour où tu utilises FlightBrief. Les <b>7 dernières</b> sont gardées. Si le fichier principal est un jour illisible, l'appli repart toute seule de la plus récente.</p>
-        <div class="backup-list" id="backupList"></div>
-        <div class="btn-row">
-          <button class="btn small" onclick="FBv15.backupNow()">Sauvegarder maintenant</button>
-          <button class="btn small" onclick="FBv15.openBackupFolder()">Ouvrir le dossier</button>
-        </div>
-        <div class="status-msg" id="backupStatus"></div>
-      </div>
-
-      <div class="card-panel">
-        <h3>À propos</h3>
-        <p class="hint" style="margin-bottom:10px;">FlightBrief <b id="aboutVersion" style="font-family:var(--font-mono);">—</b></p>
-        <div class="btn-row">
-          <button class="btn block" onclick="openChangelog()">📝 Voir les nouveautés</button>
-          <button class="btn block" onclick="checkForAppUpdate(true)">Vérifier les mises à jour</button>
-        </div>
-        <div class="status-msg" id="aboutUpdateStatus"></div>
-      </div>
-
-      <div class="card-panel mobile-panel" id="mobilePanel">
-        <h3>📱 Application mobile</h3>
-        <p class="hint" style="margin:-4px 0 10px;">Ton logbook, tes carrières, tes tours et ton hangar sur ton téléphone, <b>même hors ligne</b>. L'appli garde une copie des données sur le téléphone : tu la mets à jour d'un appui sur « Synchroniser » quand tu es sur le <b>même Wi-Fi</b> que ce PC (FlightBrief ouvert). Rien ne passe par Internet.</p>
+    <div class="admin-sec hidden" data-admin="mobile">
+    <div class="card-panel mobile-panel" id="mobilePanel">
+        <h3>📱 Application mobile <i class="info-tip" tabindex="0" data-tip="Logbook, carrières, tours et hangar sur ton téléphone, même hors ligne. Mise à jour d'un appui sur « Synchroniser » sur le même Wi-Fi que ce PC (FlightBrief ouvert). Rien ne passe par Internet."></i></h3>
         <div class="switch-row"><span>Activer l'accès depuis le téléphone</span><label class="switch"><input type="checkbox" id="mobileEnabled"><span class="slider"></span></label></div>
         <div class="status-msg" id="mobileStatusMsg"></div>
         <div id="mobileDetails" class="hidden">
@@ -1340,6 +1303,35 @@
           <div class="hint" id="mobileCaInfo"></div>
         </div>
       </div>
+    </div>
+
+    <div class="admin-sec hidden" data-admin="data">
+    <div class="admin-grid">
+      <div class="card-panel">
+        <h3>Fichier de données <i class="info-tip" tabindex="0" data-tip="Logbook, carrières et thème sont enregistrés automatiquement dans ce fichier, sur cet ordinateur."></i></h3>
+        <div class="field"><input type="text" id="dataPathDisplay" readonly style="font-size:11px;"></div>
+      </div>
+
+      <div class="card-panel" id="backupsPanel">
+        <h3>🛟 Sauvegardes automatiques <i class="info-tip" tabindex="0" data-tip="Une copie par jour d'utilisation, les 7 dernières sont gardées. Si le fichier principal devient illisible, l'appli repart de la plus récente."></i></h3>
+        <div class="backup-list" id="backupList"></div>
+        <div class="btn-row">
+          <button class="btn small" onclick="FBv15.backupNow()">Sauvegarder maintenant</button>
+          <button class="btn small" onclick="FBv15.openBackupFolder()">Ouvrir le dossier</button>
+        </div>
+        <div class="status-msg" id="backupStatus"></div>
+      </div>
+
+      <div class="card-panel">
+        <h3>À propos</h3>
+        <p class="hint" style="margin-bottom:10px;">FlightBrief <b id="aboutVersion" style="font-family:var(--font-mono);">—</b></p>
+        <div class="btn-row">
+          <button class="btn block" onclick="openChangelog()">📝 Voir les nouveautés</button>
+          <button class="btn block" onclick="checkForAppUpdate(true)">Vérifier les mises à jour</button>
+        </div>
+        <div class="status-msg" id="aboutUpdateStatus"></div>
+      </div>
+    </div>
     </div>
   </div>
 
@@ -1703,7 +1695,7 @@
         </table>
       </div>
 
-      <h4 class="modal-subhead">Toucher des roues</h4>
+      <h4 class="modal-subhead">Décollage et atterrissage</h4>
       <div id="routeModalTouchdown"></div>
     </div>
 
@@ -1717,12 +1709,16 @@
     </div>
 
     <div id="approach3dSection" class="hidden">
-      <h4 class="modal-subhead">Approche finale en 3D <span class="new-pill">1.5</span></h4>
+      <h4 class="modal-subhead">Rejeu 3D <span class="new-pill">2.2</span></h4>
       <div class="approach3d-shell">
         <div id="approach3d"></div>
         <div class="approach3d-hud" id="approach3dHud"></div>
         <canvas class="ap3d-pfd" id="ap3dPfd" width="300" height="230" title="PFD reconstitué depuis l'enregistrement du vol"></canvas>
         <div class="approach3d-controls">
+          <select id="ap3dMode" onchange="FBv15.approachSetMode(this.value)" title="Rejouer l'approche finale ou le décollage">
+            <option value="arr">Approche</option>
+            <option value="dep">Décollage</option>
+          </select>
           <button class="btn small" id="ap3dPlay" onclick="FBv15.approachPlayToggle()">▶ Rejouer</button>
           <input type="range" id="ap3dScrub" min="0" max="1000" value="1000">
           <select id="ap3dView" onchange="FBv15.approachSetView(this.value)">

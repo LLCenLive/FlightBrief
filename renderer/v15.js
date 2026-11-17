@@ -576,8 +576,75 @@ FBv15.disposeApproach3D = function(){
 FBv15.renderApproach3D = async function(f){
   FBv15.disposeApproach3D();
   renderRouteShots(f).catch(() => {});
+  ap3d.flight = f;
+  return load3D(f);
+};
+// v2.2 : rejeu 3D de l'approche OU du décollage (menu « Approche / Décollage »).
+async function load3D(f){
   const sec = $('approach3dSection');
   if(!sec) return;
+  const td = f && f.trackData;
+  const hasArr = !!(td && td.touchdown), hasDep = !!(td && td.takeoff && Array.isArray(td.path));
+  sec.classList.toggle('hidden', !hasArr && !hasDep);
+  if(!hasArr && !hasDep) return;
+  const mode = ap3d.mode === 'dep' && hasDep ? 'dep' : hasArr ? 'arr' : 'dep';
+  const sel = $('ap3dMode');
+  if(sel){
+    [...sel.options].forEach(o => { o.disabled = o.value === 'dep' ? !hasDep : !hasArr; });
+    sel.value = mode;
+  }
+  return mode === 'dep' ? loadDeparture3D(f) : loadApproach3D(f);
+}
+FBv15.approachSetMode = m => {
+  ap3d.mode = m === 'dep' ? 'dep' : 'arr';
+  if(ap3d.flight){ FBv15.disposeApproach3D(); load3D(ap3d.flight); }
+};
+async function loadDeparture3D(f){
+  const sec = $('approach3dSection');
+  const td = f.trackData, k = td.takeoff, z = k && k.zone;
+  sec.classList.remove('hidden');
+  if(!window.THREE || !z || z.thresholdLat == null){
+    $('approach3dHint').textContent = !window.THREE ? 'Moteur 3D indisponible (fichier renderer/vendor/three manquant).' : 'Piste de départ non identifiée pour ce vol : décollage 3D indisponible.';
+    $('approach3d').innerHTML = '';
+    return;
+  }
+  // Course au décollage (au sol, > 10 kt, dans la minute qui précède) puis montée initiale,
+  // jusqu'à 6 NM du lâcher des roues ou 6 min après.
+  const P = td.path;
+  const li = P.findIndex(p => p.phase === 'liftoff');
+  const t0 = li >= 0 ? P[li].ts : k.ts;
+  const offLat = k.liftoffLat != null ? k.liftoffLat : k.lat, offLon = k.liftoffLon != null ? k.liftoffLon : k.lon;
+  const raw = [];
+  for(const p of P){
+    if(p.ts < t0 - 60000) continue;
+    if(p.phase === 'taxi_out'){ if((p.gsKt || 0) >= 10) raw.push(p); continue; }
+    if(p.phase !== 'liftoff' && p.phase !== 'air') break;
+    if(p.ts > t0 + 6 * 60000 || FBShared.haversineNm(p.lat, p.lon, offLat, offLon) > 6) break;
+    raw.push(p);
+  }
+  const pts = [];
+  raw.forEach(p => {
+    const prev = pts[pts.length - 1];
+    if(prev && FBShared.haversineNm(prev.lat, prev.lon, p.lat, p.lon) * 1852 < 4) pts[pts.length - 1] = p;
+    else pts.push(p);
+  });
+  if(pts.length < 4){
+    $('approach3d').innerHTML = '';
+    $('approach3dHint').textContent = "Pas assez de points enregistrés après le décollage pour le reconstituer.";
+    return;
+  }
+  const depIcao = FBShared.up(f.dep || (td.depGuess && td.depGuess.icao));
+  const ap = depIcao ? (await resolveAirportCoords([depIcao]))[depIcao] : null;
+  const elevFt = ap && ap.elevFt != null ? ap.elevFt : (pts[0].altFt != null ? pts[0].altFt : 0);
+  const air = pts.filter(p => p.phase === 'air');
+  const fine = air.length > 3 && air.filter((p, i) => i && p.ts - air[i - 1].ts <= 1500).length > air.length / 2;
+  $('approach3dHint').innerHTML = `Course au décollage et montée initiale réelles (<span style="color:#dfe6ec">blanc</span> au sol, <span style="color:#54d6e8">cyan</span> en vol, <span style="color:#39e88f">●</span> lâcher des roues). ${fine ? 'Un point par seconde.' : 'Vol enregistré avant la v2.2 : un point toutes les 5 s, trajectoire lissée.'} Glisser pour tourner, molette pour zoomer.`;
+  ap3d.build = { mode: 'dep', pts, z, t: k, elevFt };
+  ap3d.exag = $('ap3dExag').checked ? 3 : 1;
+  buildApproachScene();
+}
+async function loadApproach3D(f){
+  const sec = $('approach3dSection');
   const td = f && f.trackData;
   const t = td && td.touchdown;
   const z = t && t.zone;
@@ -611,10 +678,10 @@ FBv15.renderApproach3D = async function(f){
   const elevFt = ap && ap.elevFt != null ? ap.elevFt : (t.altFt != null ? t.altFt : 0);
   const fine = pts.filter(p => p.aglFt != null).length > pts.length / 2;
   $('approach3dHint').innerHTML = `Trajectoire réelle (couleur = écart au plan de descente de 3° : <span style="color:#39e88f">vert</span> ±50 ft, <span style="color:#ffb020">orange</span> ±150 ft, <span style="color:#ff5c5c">rouge</span> au-delà). ${fine ? 'Un point par seconde sous 2 500 ft.' : 'Vol enregistré avant la v1.5 : un point toutes les 5 s, trajectoire lissée.'} Glisser pour tourner, molette pour zoomer.`;
-  ap3d.build = { pts, z, t, elevFt };
+  ap3d.build = { mode: 'arr', pts, z, t, elevFt };
   ap3d.exag = $('ap3dExag').checked ? 3 : 1;
   buildApproachScene();
-};
+}
 function buildApproachScene(){
   const B = ap3d.build; if(!B) return;
   const THREE = window.THREE;
@@ -635,6 +702,7 @@ function buildApproachScene(){
   const dl = new THREE.DirectionalLight(0xffffff, 0.6); dl.position.set(-2000, 4000, 1500); scene.add(dl);
 
   const { z, pts, elevFt } = B;
+  const dep = B.mode === 'dep';
   const origin = { lat: z.thresholdLat, lon: z.thresholdLon };
   const toV = (lat, lon, hFt) => { const e = enu(origin, lat, lon); return new THREE.Vector3(e.x, Math.max(0, hFt) * FT * ap3d.exag, -e.n); };
   const opp = enu(origin, z.oppositeLat, z.oppositeLon);
@@ -671,12 +739,14 @@ function buildApproachScene(){
     const along = aimM - d;
     gsPts.push(new THREE.Vector3(ux * along, d * tan3 * ap3d.exag, -un * along));
   }
-  const gsLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(gsPts), new THREE.LineDashedMaterial({ color: 0xa06cf5, dashSize: 60, gapSize: 40, transparent: true, opacity: 0.85 }));
-  gsLine.computeLineDistances(); scene.add(gsLine);
+  if(!dep){
+    const gsLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(gsPts), new THREE.LineDashedMaterial({ color: 0xa06cf5, dashSize: 60, gapSize: 40, transparent: true, opacity: 0.85 }));
+    gsLine.computeLineDistances(); scene.add(gsLine);
+  }
 
   // Trajectoire réelle
   // Hauteur sol : la radiosonde (aglFt, v1.5+) fait foi ; sinon altimètre − altitude du terrain.
-  const hOf = p => p.phase === 'touchdown' ? 0 : (p.aglFt != null ? p.aglFt : (p.altFt != null ? p.altFt - elevFt : 0));
+  const hOf = p => (p.phase === 'touchdown' || p.onGround === true || p.phase === 'taxi_out') ? 0 : (p.aglFt != null ? p.aglFt : (p.altFt != null ? p.altFt - elevFt : 0));
   const v3 = pts.map(p => toV(p.lat, p.lon, hOf(p)));
   const curve = new THREE.CatmullRomCurve3(v3, false, 'centripetal');
   const span = Math.max(1500, v3[0].distanceTo(v3[v3.length - 1]));
@@ -686,8 +756,14 @@ function buildApproachScene(){
   // Couleur par anneau : écart au plan de 3° à cette distance du point d'aboutissement.
   const colors = [];
   const cGood = new THREE.Color(0x39e88f), cMid = new THREE.Color(0xffb020), cBad = new THREE.Color(0xff5c5c);
+  const cGround = new THREE.Color(0xdfe6ec), cAir = new THREE.Color(0x54d6e8);
   for(let i = 0; i <= tubular; i++){
     const p = curve.getPointAt(i / tubular);
+    if(dep){
+      const c = p.y / ap3d.exag / FT < 3 ? cGround : cAir;
+      for(let j = 0; j <= 8; j++) colors.push(c.r, c.g, c.b);
+      continue;
+    }
     const along = p.x * ux + (-p.z) * un;
     const dist = Math.max(0, aimM - along);
     const devFt = (p.y / ap3d.exag - dist * tan3) / FT;
@@ -701,9 +777,9 @@ function buildApproachScene(){
   for(let i = 0; i <= 60; i++){ const p = curve.getPointAt(i / 60); curtain.push(p.x, p.y, p.z, p.x, 0, p.z); }
   const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(curtain, 3));
   scene.add(new THREE.LineSegments(cg, new THREE.LineBasicMaterial({ color: 0x54d6e8, transparent: true, opacity: 0.16 })));
-  // Point de toucher
-  const tdV = toV(B.t.lat, B.t.lon, 0);
-  const tdm = new THREE.Mesh(new THREE.CylinderGeometry(Math.max(9, span / 500), Math.max(9, span / 500), 1.5, 24), new THREE.MeshBasicMaterial({ color: 0xff5c5c }));
+  // Point de toucher (approche) ou de lâcher des roues (décollage)
+  const tdV = dep ? toV(B.t.liftoffLat != null ? B.t.liftoffLat : B.t.lat, B.t.liftoffLon != null ? B.t.liftoffLon : B.t.lon, 0) : toV(B.t.lat, B.t.lon, 0);
+  const tdm = new THREE.Mesh(new THREE.CylinderGeometry(Math.max(9, span / 500), Math.max(9, span / 500), 1.5, 24), new THREE.MeshBasicMaterial({ color: dep ? 0x39e88f : 0xff5c5c }));
   tdm.position.copy(tdV).setY(0.8); scene.add(tdm);
 
   // Avion
@@ -719,7 +795,7 @@ function buildApproachScene(){
     controls.minDistance = 40; controls.maxDistance = Math.max(8000, span * 6);
     if(typeof attachSmoothZoom === 'function') zoom = attachSmoothZoom(controls, camera, renderer.domElement, { floor: 0, speed: 0.0016 });
   }
-  Object.assign(ap3d, { renderer, scene, camera, controls, zoom, curve, plane, pts, aimM, tan3, ux, un, elevFt, span, rwyLen, rwyHdg: (Math.atan2(ux, un) * 180 / Math.PI + 360) % 360, dirty: 2 });
+  Object.assign(ap3d, { renderer, scene, camera, controls, zoom, curve, plane, pts, aimM, tan3, ux, un, elevFt, span, rwyLen, rwyHdg: (Math.atan2(ux, un) * 180 / Math.PI + 360) % 360, mode: dep ? 'dep' : 'arr', dirty: 2 });
   const pfdOn = db.ap3dPfd !== false;
   if($('ap3dPfdOn')) $('ap3dPfdOn').checked = pfdOn;
   if($('ap3dPfd')) $('ap3dPfd').classList.toggle('hidden', !pfdOn);
@@ -782,7 +858,7 @@ function placePlane(){
   const dx = fwd.x - back.x, dz = fwd.z - back.z, dy = (fwd.y - back.y) / (ap3d.exag || 1);
   const horiz = Math.hypot(dx, dz);
   if(horiz > 0.01){
-    const ii = Math.min(ap3d.pts.length - 1, Math.round(u * (ap3d.pts.length - 1)));
+    const ii = Math.min(ap3d.pts.length - 1, Math.round(ptIndexF(u)));
     const bank = Number.isFinite((ap3d.pts[ii] || {}).bankDeg) ? ap3d.pts[ii].bankDeg : 0;
     ap3d.plane.rotation.order = 'YXZ';
     ap3d.plane.rotation.y = Math.atan2(-dx, -dz);                                   // nez (-z local) vers l'avant
@@ -795,9 +871,15 @@ function placePlane(){
   const hFt = p.y / ap3d.exag / FT;
   const gsFt = Math.max(0, (ap3d.aimM - along)) * ap3d.tan3 / FT;
   const dev = Math.round(hFt - gsFt);
-  const idx = Math.min(ap3d.pts.length - 1, Math.round(u * (ap3d.pts.length - 1)));
+  const idx = Math.min(ap3d.pts.length - 1, Math.round(ptIndexF(u)));
   const sp = ap3d.pts[idx] || {};
-  $('approach3dHud').innerHTML = `
+  if(ap3d.mode === 'dep'){
+    $('approach3dHud').innerHTML = `
+    <div><span>Depuis le seuil</span><b>${(Math.max(0, along) / 1852).toFixed(2)} NM</b></div>
+    <div><span>Hauteur</span><b>${Math.round(Math.max(0, hFt))} ft</b></div>
+    <div><span>Vario</span><b>${sp.vsFpm != null && !sp.onGround ? sp.vsFpm + ' ft/min' : '—'}</b></div>
+    <div><span>IAS</span><b>${sp.iasKt != null ? sp.iasKt + ' kt' : '—'}</b></div>`;
+  } else $('approach3dHud').innerHTML = `
     <div><span>Distance seuil</span><b>${(distM / 1852).toFixed(2)} NM</b></div>
     <div><span>Hauteur</span><b>${Math.round(hFt)} ft</b></div>
     <div><span>Plan 3°</span><b style="color:${Math.abs(dev) <= 50 ? '#39e88f' : Math.abs(dev) <= 150 ? '#ffb020' : '#ff5c5c'}">${dev > 0 ? '+' : ''}${dev} ft</b></div>
@@ -810,10 +892,18 @@ function placePlane(){
 /* ---- v2.1 — PFD reconstitué pendant la rediffusion de l'approche ----
    Valeurs interpolées entre deux points enregistrés : assiette, inclinaison, IAS, hauteur,
    vario, cap ; écarts ILS calculés par rapport à l'axe de piste et au plan de 3°. */
+// v2.2 : u est une abscisse curviligne (getPointAt) ; les points enregistrés sont aux paramètres
+// uniformes de la courbe. On convertit pour lire les valeurs du point réellement affiché.
+function ptIndexF(u){
+  const n = ap3d.pts.length;
+  const uu = Math.max(0, Math.min(1, u));
+  const t = ap3d.curve && ap3d.curve.getUtoTmapping ? ap3d.curve.getUtoTmapping(uu) : uu;
+  return Math.max(0, Math.min(1, t)) * (n - 1);
+}
 function lerpPt(u, key){
   const P = ap3d.pts, n = P.length;
   if(!n) return null;
-  const f = Math.max(0, Math.min(1, u)) * (n - 1), i = Math.floor(f), t = f - i;
+  const f = ptIndexF(u), i = Math.floor(f), t = f - i;
   const j = Math.min(n - 1, i + 1);
   const a = P[i] && P[i][key], b = P[j] && P[j][key];
   if(!Number.isFinite(a)) return Number.isFinite(b) ? b : null;
@@ -831,8 +921,9 @@ function drawPfd(u, p, hFt, distM, along){
   x.setTransform(dpr, 0, 0, dpr, 0, 0);
   x.clearRect(0, 0, W, H);
   x.save(); x.scale(W / 300, H / 230); // dessin prévu pour 300 × 230
+  const dep = ap3d.mode === 'dep';
   const td = ap3d.build && ap3d.build.t;
-  const touchdown = u >= 0.999;
+  const touchdown = !dep && u >= 0.999;
   const rawPitch = lerpPt(u, 'pitchDeg'), rawBank = lerpPt(u, 'bankDeg');
   // SimConnect : assiette négative = nez haut, inclinaison négative = virage à droite.
   const pitch = touchdown && td && td.tdPitchDeg != null ? td.tdPitchDeg : (rawPitch != null ? -rawPitch : 0);
@@ -885,6 +976,7 @@ function drawPfd(u, p, hFt, distM, along){
   const locDev = Math.atan2(cross, Math.max(1, (ap3d.rwyLen || 3000) - along)) * 180 / Math.PI;
   const clamp = v => Math.max(-2.3, Math.min(2.3, v));
   const gx = cx + R + 9, ly = cy + R + 9;
+  if(!dep){
   x.strokeStyle = WHITE; x.lineWidth = 1.1;
   for(let i = -2; i <= 2; i++){
     if(!i) continue;
@@ -897,6 +989,7 @@ function drawPfd(u, p, hFt, distM, along){
   if(!touchdown){
     diamond(gx, cy + clamp(gsDev / dotGs) * dotPx);     // trop haut : le glide est sous l'avion
     diamond(cx - clamp(locDev / dotLoc) * dotPx, ly);   // à droite de l'axe : le localizer est à gauche
+  }
   }
 
   // --- Bandes de vitesse (gauche) et de hauteur (droite) ---
@@ -924,18 +1017,33 @@ function drawPfd(u, p, hFt, distM, along){
   };
   tape(16, 42, ias, 10, 2.2, 'IAS KT');
   const agl = touchdown ? 0 : Math.max(0, hFt);
-  tape(240, 44, agl, 50, 0.45, 'HAUT FT', agl < 100 ? AMBER : null);
+  tape(234, 44, agl, 50, 0.45, 'HAUT FT', agl < 100 ? AMBER : null);
 
-  // --- Vario ---
-  const vsY = v => cy - Math.sign(v) * Math.min(R - 6, Math.sqrt(Math.abs(v) / 2000) * (R - 6));
-  x.strokeStyle = '#5b6b78'; x.lineWidth = 1;
-  [-2000, -1000, -500, 0, 500, 1000, 2000].forEach(v => { x.beginPath(); x.moveTo(289, vsY(v)); x.lineTo(294, vsY(v)); x.stroke(); });
+  // --- Vario (v2.2 : comme sur un vrai PFD) ---
+  // Échelle graduée à gauche du bandeau ; l'aiguille part d'un pivot situé à DROITE, hors
+  // de l'écran, et pointe vers la graduation : en descente elle descend vers le bas à gauche.
+  const vx0 = 281, vx1 = 300, pivX = 330;
+  const vsY = v => cy - Math.sign(v) * Math.min(R - 8, Math.sqrt(Math.min(6000, Math.abs(v)) / 6000) * (R - 8));
+  x.fillStyle = 'rgba(30,36,44,.92)';
+  x.beginPath(); x.moveTo(vx0, cy - R + 10); x.lineTo(vx1, cy - 22); x.lineTo(vx1, cy + 22); x.lineTo(vx0, cy + R - 10); x.closePath(); x.fill();
+  x.strokeStyle = WHITE; x.lineWidth = 1; x.fillStyle = WHITE; x.font = `600 7px ${MONO}`; x.textAlign = 'left'; x.textBaseline = 'middle';
+  [[500, 3], [1000, 6], [1500, 3], [2000, 6], [6000, 6]].forEach(([v, w]) => [1, -1].forEach(sg => {
+    const yy = vsY(sg * v);
+    x.beginPath(); x.moveTo(vx0, yy); x.lineTo(vx0 + w, yy); x.stroke();
+    if(v === 1000 || v === 2000 || v === 6000) x.fillText(String(v / 1000), vx0 + 8, yy);
+  }));
+  x.beginPath(); x.moveTo(vx0, cy); x.lineTo(vx0 + 8, cy); x.strokeStyle = '#ffd400'; x.lineWidth = 1.6; x.stroke();
   if(vs != null){
     const c = vs < -1000 ? AMBER : GREEN;
+    const tipY = Math.abs(vs) < 20 ? cy : vsY(vs);
+    x.save(); x.beginPath(); x.rect(vx0, cy - R, vx1 - vx0, R * 2); x.clip();
     x.strokeStyle = c; x.lineWidth = 2.4;
-    x.beginPath(); x.moveTo(289, cy); x.lineTo(296, vsY(vs)); x.stroke();
-    x.fillStyle = c; x.font = `600 9px ${MONO}`; x.textAlign = 'right';
-    x.fillText((vs > 0 ? '+' : '') + Math.round(vs), 297, vs < 0 ? cy + R + 9 : cy - R - 16);
+    x.beginPath(); x.moveTo(pivX, cy); x.lineTo(vx0 + 2, tipY); x.stroke();
+    x.restore();
+    if(Math.abs(vs) >= 200){
+      x.fillStyle = c; x.font = `700 9px ${MONO}`; x.textAlign = 'center';
+      x.fillText(String(Math.round(Math.abs(vs) / 100)).padStart(2, '0'), (vx0 + vx1) / 2 + 1, vs < 0 ? cy + R - 2 : cy - R + 2);
+    }
   }
 
   // --- Cap ---
@@ -960,11 +1068,23 @@ function drawPfd(u, p, hFt, distM, along){
   x.fillText(hdg != null ? String(Math.round(hdg) % 360).padStart(3, '0') : '---', cx, hy - 20);
 
   // --- Bandeau : distance au seuil, assiette, inclinaison, annonces ---
-  x.font = `600 9px ${MONO}`; x.textBaseline = 'middle'; x.fillStyle = DIM;
-  x.textAlign = 'left'; x.fillText(`${(distM / 1852).toFixed(1)} NM`, 8, 11);
+  // v2.2 : piste + distance (DME) en bas à gauche, comme sur un vrai PFD.
+  const rwyId = ap3d.build && ap3d.build.z && ap3d.build.z.thresholdIdent;
+  const dme = dep ? Math.max(0, along) / 1852 : distM / 1852;
+  x.textBaseline = 'middle'; x.textAlign = 'left';
+  x.fillStyle = MAG; x.font = `700 9px ${MONO}`;
+  x.fillText(rwyId ? 'RWY ' + rwyId : (dep ? 'DEP' : 'ILS'), 8, 202);
+  x.fillStyle = WHITE; x.font = `700 11px ${MONO}`;
+  x.fillText(dme < 10 ? dme.toFixed(1) : String(Math.round(dme)), 8, 216);
+  const dmeW = x.measureText(dme < 10 ? dme.toFixed(1) : String(Math.round(dme))).width;
+  x.fillStyle = DIM; x.font = `600 8px ${MONO}`; x.fillText('NM', 11 + dmeW, 217);
+  x.font = `600 9px ${MONO}`; x.fillStyle = DIM;
   x.textAlign = 'right'; x.fillText(`P ${pitch > 0 ? '+' : ''}${pitch.toFixed(1)}°  R ${Math.abs(roll).toFixed(0)}°${Math.abs(roll) >= 1 ? (roll > 0 ? 'D' : 'G') : ''}`, 292, 11);
   x.textAlign = 'center';
-  if(touchdown){
+  if(dep){
+    const ts = lerpPt(u, 'ts');
+    if(td && td.liftoffTs != null && ts != null && ts >= td.liftoffTs - 500 && ts <= td.liftoffTs + 2500){ x.fillStyle = GREEN; x.font = `700 11px ${MONO}`; x.fillText('LIFTOFF', cx, cy - R + 26); }
+  } else if(touchdown){
     x.fillStyle = GREEN; x.font = `700 11px ${MONO}`; x.fillText('TOUCHDOWN', cx, cy - R + 26);
     if(td && td.crabDeg != null){ x.font = `600 9px ${MONO}`; x.fillText(`CRABE ${Math.abs(td.crabDeg).toFixed(1)}°`, cx, cy + 38); }
   } else if(hFt < 2600 && hFt > 5){
@@ -1003,7 +1123,7 @@ function setCamera(view){
   const len = ap3d.span || start.distanceTo(end);
   const back = new THREE.Vector3(start.x - end.x, 0, start.z - end.z).normalize(); // vers l'arrière de l'approche
   const perp = new THREE.Vector3(-back.z, 0, back.x);                               // perpendiculaire (côté)
-  const target = start.clone().lerp(end, 0.7).setY(start.y * 0.25);
+  const target = ap3d.mode === 'dep' ? start.clone().lerp(end, 0.35).setY(end.y * 0.2) : start.clone().lerp(end, 0.7).setY(start.y * 0.25);
   if(ap3d.plane) ap3d.plane.visible = view !== 'pilot';
   if(ap3d.controls) ap3d.controls.enabled = view !== 'pilot';
   if(view === 'side') ap3d.camera.position.copy(target.clone().add(perp.clone().multiplyScalar(len * 0.95))).setY(start.y * 0.45 + len * 0.04);

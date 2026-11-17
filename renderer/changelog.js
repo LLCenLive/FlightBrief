@@ -9,6 +9,19 @@
    ========================================================= */
 window.FB_CHANGELOG = [
   {
+    version: '2.2.0',
+    date: '2026-11-18',
+    title: "Décollage en 3D, PFD plus réaliste, Admin et logbook mieux rangés",
+    items: [
+      ['new', "Rejeu 3D du décollage : course au décollage et montée initiale rejouées en 3D avec le PFD, comme l'approche (menu « Approche / Décollage »). Les nouveaux vols sont enregistrés à un point par seconde au décollage."],
+      ['new', "Logbook : le décollage est mesuré (piste de départ, vitesse et assiette au lâcher des roues, distance depuis le seuil), y compris pour tes vols déjà enregistrés."],
+      ['improved', "PFD : le vario fonctionne comme sur un vrai PFD (aiguille partant de la droite, vers le bas à gauche en descente) et la piste + distance DME sont en bas à gauche. Merci aux pilotes qui l'ont signalé !"],
+      ['improved', "Logbook : récap décollage / atterrissage rangé en cartes lisibles (Atterrissage, Vent, Décollage, Virages)."],
+      ['improved', "Admin rangé en 4 onglets : Carte de briefing, Application, Mobile, Données."],
+      ['improved', "Twitch, À bord et Outils : textes explicatifs remplacés par de petits (i) qui s'affichent au survol."]
+    ]
+  },
+  {
     version: '2.1.0',
     date: '2026-11-14',
     title: "Carrière repensée, PFD en rediffusion, logbook connecté à VATSIM et IVAO",

@@ -2837,7 +2837,7 @@ function populateLogbookFieldsFromTrackedFlight(data){
   _pendingTrackData = {
     landingScore: landScore ? { score: landScore.score, letter: landScore.letter } : null,
     night: nightAt,
-    path: data.path, phases: data.phases, touchdown: data.touchdown,
+    path: data.path, phases: data.phases, touchdown: data.touchdown, takeoff: data.takeoff || null,
     distanceNm: data.distanceNm, maxAltFt: data.maxAltFt, maxIasKt: data.maxIasKt,
     landingRateFpm: data.landingRateFpm, fuelUsedLbs: data.fuelUsedLbs,
     bounceCount: data.bounceCount, turnStats: data.turnStats,
@@ -2900,7 +2900,7 @@ function openRouteModal(flightId){
     renderPhaseTable(td.phases);
     renderProfileChart(td.path);
     if(td.touchdown) td.touchdown._score = FBShared.flightLandingScore(f);
-    renderTouchdownPanel(td.touchdown, td.turnStats);
+    renderTouchdownPanel(td.touchdown, td.turnStats, td.takeoff);
     if(td.touchdown) delete td.touchdown._score;
   }
   if(window.FBv15) FBv15.renderApproach3D(f);
@@ -3020,50 +3020,93 @@ function renderPhaseLegend(path, targetId){
   }).join('');
 }
 
-// Petit schéma de piste vue du dessus, avec le point de toucher des roues positionné
-// à l'échelle (distance depuis le seuil + écart latéral) et le taux de descente (fpm).
-function renderTouchdownPanel(touchdown, turnStats){
+// v2.2 — Récap décollage / atterrissage du logbook, rangé par cartes : Atterrissage (taux,
+// G, schéma de piste, position et attitude au toucher), Vent, Décollage, Virages. Chaque
+// carte aligne ses valeurs en lignes « libellé … valeur » plutôt qu'en tuiles éparpillées.
+function renderTouchdownPanel(touchdown, turnStats, takeoff){
   const container = el('routeModalTouchdown');
-  const turnsHtml = (turnStats && turnStats.totalTurns)
-    ? `<div class="touchdown-stats" style="margin-top:10px;">
-        <div class="tstat"><div class="cap">Virages effectués</div><div class="val">${turnStats.totalTurns}</div></div>
-        <div class="tstat"><div class="cap">Inclinaison max</div><div class="val">${turnStats.maxBankDeg}°</div></div>
-        <div class="tstat"><div class="cap">Virages serrés (&gt;30°)</div><div class="val">${turnStats.steepTurnCount}</div></div>
-        <div class="tstat"><div class="cap">Virages engagés (&gt;45°)</div><div class="val">${turnStats.aggressiveTurnCount}</div></div>
-      </div>`
-    : '';
+  const nf = v => Number(v).toLocaleString(FBI18N.locale());
+  const kv = rows => `<dl class="td2-kv">${rows.filter(Boolean).map(([k, v, tip]) => `<div${tip ? ` title="${escapeHtml(tip)}"` : ''}><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+  const card = (title, badge, body, cls) => `<section class="td2-card${cls ? ' ' + cls : ''}"><h5><span>${title}</span>${badge ? `<span class="td2-badge">${escapeHtml(badge)}</span>` : ''}</h5>${body}</section>`;
+  const side = s => s === 'droite' ? 'à droite' : 'à gauche';
+
+  // --- Virages ---
+  const turnsCard = (turnStats && turnStats.totalTurns) ? card('Virages en vol', null, kv([
+    ['Virages', turnStats.totalTurns],
+    ['Inclinaison max', `${turnStats.maxBankDeg}°`],
+    ['Serrés (&gt;30°)', turnStats.steepTurnCount],
+    ['Engagés (&gt;45°)', turnStats.aggressiveTurnCount]
+  ])) : '';
+
+  // --- Décollage ---
+  let depCard = '';
+  if(takeoff && (takeoff.liftoffTs != null || takeoff.zone)){
+    const kz = takeoff.zone;
+    const p = takeoff.liftoffPitchDeg;
+    depCard = card('Décollage', kz && kz.thresholdIdent ? 'RWY ' + kz.thresholdIdent : null, kv([
+      ['Vitesse au décollage', takeoff.liftoffIasKt != null ? `${takeoff.liftoffIasKt} kt` : '—', 'Vitesse indiquée au moment où les roues quittent le sol'],
+      takeoff.liftoffDistFt != null ? ['Roues en l\'air à', `${nf(takeoff.liftoffDistFt)} ft <small>· ${takeoff.liftoffPct} %</small>`, 'Distance depuis le seuil de la piste de départ'] : null,
+      p != null && isFinite(p) ? ['Assiette', `${p > 0 ? '+' : ''}${p.toFixed(1)}°`] : null,
+      kz && kz.lengthFt ? ['Longueur de piste', `${nf(kz.lengthFt)} ft`] : null
+    ]), 'td2-dep');
+  }
+
   if(!touchdown){
-    container.innerHTML = '<div class="hint">Pas de donnée de toucher des roues pour ce vol.</div>' + turnsHtml;
+    container.innerHTML = (depCard || turnsCard)
+      ? `<div class="td2"><div class="hint">Pas de donnée de toucher des roues pour ce vol.</div><div class="td2-grid td2-grid-side">${depCard}${turnsCard}</div></div>`
+      : '<div class="hint">Pas de donnée de toucher des roues pour ce vol.</div>';
     return;
   }
   const zone = touchdown.zone;
   const fpm = touchdown.vsFpm;
-  let diagram = '';
-  if(zone) diagram = FBShared.runwayDiagramSvg(zone, { width: 360, height: 96 });
   const sc = touchdown._score;
   const scoreHtml = sc ? `<div class="score-breakdown">
       <div class="score-big" style="--sc:${sc.color}"><span class="l">${sc.letter}</span><span class="n">${sc.score}<small>/100</small></span></div>
       <div class="score-parts">${sc.parts.map(p => `<div class="sp"><span>${escapeHtml(p.label)}</span><div class="sp-bar"><i style="width:${Math.round(100 * p.pts / p.max)}%"></i></div><b>${p.pts}/${p.max}</b></div>`).join('')}</div>
     </div>` : '';
-  const windHtml = touchdown.windKt != null ? `${String(touchdown.windDir ?? 0).padStart(3,'0')}°/${touchdown.windKt} kt` : '—';
-  const xwHtml = touchdown.crosswindKt != null ? `${Math.abs(touchdown.crosswindKt)} kt ${touchdown.crosswindKt >= 0 ? 'de droite' : 'de gauche'}${touchdown.headwindKt != null ? ' · ' + (touchdown.headwindKt >= 0 ? 'face ' : 'arrière ') + Math.abs(touchdown.headwindKt) + ' kt' : ''}` : '—';
-  container.innerHTML = `<div class="touchdown-panel">
+
+  // --- Atterrissage ---
+  const exact = touchdown.measure === 'touchdown-velocity';
+  const hero = `<div class="td2-hero">
+      <div><b>${fpm != null ? fpm : '—'}</b><span>ft/min${exact ? ' <sup title="Valeur exacte mesurée par le simulateur à l\'impact">✓</sup>' : ''}</span><em>Taux de descente</em></div>
+      <div><b>${touchdown.gForce != null ? touchdown.gForce.toFixed(2) : '—'}</b><span>G</span><em>Facteur de charge</em></div>
+    </div>`;
+  const diagram = zone ? `<div class="td2-rwy">${FBShared.runwayDiagramSvg(zone, { width: 360, height: 96, fluid: true })}</div>` : '';
+  const landCard = card('Atterrissage', zone ? 'RWY ' + (zone.thresholdIdent || zone.runway) : 'Piste non identifiée', hero + diagram + kv([
+    ['Distance du seuil', zone ? `${nf(zone.distanceFromThresholdFt)} ft <small>· ${zone.percentAlongRunway} %</small>` : '—'],
+    ['Écart latéral', zone ? (zone.lateralOffsetFt ? `${zone.lateralOffsetFt} ft ${side(zone.side)}` : 'Dans l\'axe') : '—'],
+    ['Assiette', fmtTdPitch(touchdown)],
+    ['Angle de crabe', fmtTdCrab(touchdown), 'Écart entre l\'axe de l\'avion et sa trajectoire au contact']
+  ]), 'td2-land');
+
+  // --- Vent ---
+  let windCard = '';
+  if(touchdown.windKt != null){
+    const xw = touchdown.crosswindKt, hw = touchdown.headwindKt;
+    windCard = card('Vent au toucher', null, `<div class="td2-hero td2-hero-sm"><div><b>${String(touchdown.windDir ?? 0).padStart(3, '0')}°</b><span>/ ${touchdown.windKt} kt</span></div></div>` + kv([
+      xw != null ? ['Traversier', Math.abs(xw) < 1 ? '0 kt' : `${Math.abs(xw)} kt <small>${xw >= 0 ? 'de droite' : 'de gauche'}</small>`] : null,
+      hw != null ? [hw >= 0 ? 'Vent de face' : 'Vent arrière', `${Math.abs(hw)} kt`] : null
+    ]));
+  }
+
+  container.innerHTML = `<div class="td2">
     ${scoreHtml}
-    ${diagram}
-    <div class="touchdown-stats">
-      <div class="tstat"><div class="cap">Taux de descente (fpm)</div><div class="val">${fpm != null ? fpm + ' ft/min' : '—'}${touchdown.measure === 'touchdown-velocity' ? ' <sup title="Valeur exacte mesurée par le simulateur à l\'impact">✓</sup>' : ''}</div></div>
-      <div class="tstat"><div class="cap">Facteur de charge</div><div class="val">${touchdown.gForce != null ? touchdown.gForce.toFixed(2) + ' G' : '—'}</div></div>
-      <div class="tstat"><div class="cap">Vent au toucher</div><div class="val">${windHtml}</div></div>
-      <div class="tstat"><div class="cap">Vent traversier</div><div class="val val-sm">${xwHtml}</div></div>
-      <div class="tstat"><div class="cap">Assiette (pitch)</div><div class="val">${fmtTdPitch(touchdown)}</div></div>
-      <div class="tstat"><div class="cap">Angle de crabe</div><div class="val val-sm" title="Écart entre l'axe de l'avion et sa trajectoire au contact">${fmtTdCrab(touchdown)}</div></div>
-      <div class="tstat"><div class="cap">Piste identifiée</div><div class="val">${zone ? escapeHtml(zone.runway) : 'Non identifiée'}</div></div>
-      <div class="tstat"><div class="cap">Distance depuis le seuil</div><div class="val">${zone ? zone.distanceFromThresholdFt + ' ft (' + zone.percentAlongRunway + '%)' : '—'}</div></div>
-      <div class="tstat"><div class="cap">Écart latéral</div><div class="val">${zone ? zone.lateralOffsetFt + ' ft à ' + zone.side : '—'}</div></div>
+    <div class="td2-grid">
+      ${landCard}
+      <div class="td2-side">${windCard}${depCard}${turnsCard}</div>
     </div>
-    ${turnsHtml}
   </div>`;
 }
+
+// v2.2 — Admin rangé en sous-onglets (Carte de briefing / Application / Mobile / Données).
+function adminShow(sec){
+  const btns = document.querySelectorAll('.admin-nav button');
+  if(![...btns].some(b => b.dataset.admin === sec)) sec = 'card';
+  btns.forEach(b => { const on = b.dataset.admin === sec; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+  document.querySelectorAll('.admin-sec').forEach(d => d.classList.toggle('hidden', d.dataset.admin !== sec));
+  try { localStorage.setItem('fbAdminSec', sec); } catch(e) { /* stockage indisponible */ }
+}
+document.addEventListener('DOMContentLoaded', () => { let sec = null; try { sec = localStorage.getItem('fbAdminSec'); } catch(e) { /* rien */ } if(sec) adminShow(sec); });
 
 function closeRouteModal(){
   el('routeModalOverlay').classList.add('hidden');
@@ -4765,7 +4808,7 @@ const TOUR_STEPS = [
   { target: '[data-view="hangar"]', title: 'Hangar', text: "Tes avions, avec pour chacun ses heures de vol, sa distance parcourue et la qualité de tes atterrissages." },
   { target: '[data-view="livetool"]', title: 'Outil Live', text: "La carte OBS de ton briefing, et un overlay Twitch entièrement personnalisable pour afficher ta télémétrie en direct." },
   { target: '[data-view="tools"]', title: 'Outils', text: 'Des calculateurs de vol rapides : temps/distance/vitesse, carburant, top of descent, entrée en hold, METAR/TAF...' },
-  { target: '[data-view="admin"]', title: 'Admin', text: "Personnalise entièrement l'apparence de la carte de briefing OBS : couleurs, polices, disposition." },
+  { target: '[data-view="admin"]', title: 'Admin', text: "Apparence de la carte de briefing OBS, réglages de l'appli, appli mobile et sauvegardes." },
   { target: '[data-view="profil"]', title: 'Profil', text: "Ton identité pilote, toutes tes statistiques de vol, et un globe 3D de tous tes trajets déjà effectués. Tu peux relancer cette visite ici à tout moment." }
 ];
 let _tourIndex = 0;

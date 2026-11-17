@@ -113,6 +113,9 @@ const FAST_BUFFER_MS = 9000;          // historique gardé en mémoire (glissant
 const TOUCHDOWN_FINALIZE_MS = 3000;   // délai avant de figer les mesures du toucher (pic de G + rebond éventuel)
 const APPROACH_SAMPLE_MS = 1000;      // échantillonnage du trajet resserré sous 2 500 ft sol en descente (approche 3D)
 const APPROACH_SAMPLE_AGL_FT = 2500;
+// v2.2 : même finesse au décollage (course au décollage + montée initiale) pour le rejeu 3D du départ.
+const DEPARTURE_SAMPLE_MAX_MS = 4 * 60000; // au plus 4 min après le début de la course au décollage
+const TAKEOFF_ROLL_GS_KT = 25;             // au sol, au-delà : course au décollage, un point par seconde
 
 // Composantes du vent par rapport à un cap (piste ou avion) : + = vent de face / venant de droite.
 function windComponents(windDirDeg, windKt, refHdgDeg) {
@@ -336,6 +339,38 @@ function computeTouchdownZone(touchdownPoint, arrIcao, rendererDir) {
     side: lateralOffsetFt >= 0 ? 'droite' : 'gauche',
     headingMatchDeg: Math.round(best.diff)
   };
+}
+
+// v2.2 — Décollage : piste de départ (repérée au point « liftoff », pris en pleine course au
+// décollage, donc sur la piste) et point où les roues ont quitté le sol (distance depuis le
+// seuil, vitesse, assiette). Sert au rejeu 3D du départ et au récap du logbook.
+function computeTakeoff(fullPath, depIcao, rendererDir) {
+  if (!Array.isArray(fullPath)) return null;
+  const li = fullPath.findIndex(p => p && p.phase === 'liftoff');
+  if (li < 0) return null;
+  const roll = fullPath[li];
+  let off = null;
+  for (let i = li; i < fullPath.length; i++) { if (fullPath[i] && fullPath[i].wheelsOff) { off = fullPath[i]; break; } }
+  if (!off) off = roll.onGround === false ? roll : (fullPath.slice(li + 1).find(p => p && p.phase === 'air' && p.onGround === false) || null);
+  let zone = null;
+  try { zone = depIcao ? computeTouchdownZone(roll, depIcao, rendererDir) : null; } catch (e) { zone = null; }
+  const out = { lat: roll.lat, lon: roll.lon, hdg: roll.hdg, ts: roll.ts, zone };
+  if (off) {
+    Object.assign(out, {
+      liftoffLat: off.lat, liftoffLon: off.lon, liftoffTs: off.ts,
+      liftoffIasKt: off.iasKt != null ? off.iasKt : null,
+      liftoffPitchDeg: Number.isFinite(off.pitchDeg) ? -off.pitchDeg : null, // SimConnect : négatif = nez haut
+      exact: !!off.wheelsOff
+    });
+    if (zone && zone.thresholdLat != null) {
+      const g = runwayGeometry(zone, off);
+      const lenFt = zone.lengthFt || Math.round(g.rwyLenM * 3.28084);
+      const distFt = Math.round(g.alongM * 3.28084);
+      out.liftoffDistFt = Math.max(0, distFt);
+      out.liftoffPct = Math.round(Math.max(0, Math.min(100, (distFt / lenFt) * 100)));
+    }
+  }
+  return out;
 }
 
 // Segmente après-coup un trajet en vol (points tagués 'liftoff'/'air'/'touchdown')
@@ -880,7 +915,7 @@ class FlightTracker extends EventEmitter {
             pathChanged = true;
             this._simTitle = data.title || null;
             this.emit('flight-start', { startedAt: now, aircraft: data.title });
-          } else if (now - this._lastPathTs >= GROUND_SAMPLE_MS) {
+          } else if (now - this._lastPathTs >= (gs > TAKEOFF_ROLL_GS_KT ? APPROACH_SAMPLE_MS : GROUND_SAMPLE_MS)) {
             this._path.push({ ...this._point(data, now), phase: 'taxi_out' });
             this._lastPathTs = now;
             pathChanged = true;
@@ -897,8 +932,15 @@ class FlightTracker extends EventEmitter {
         // Échantillonnage resserré en approche (sous 2 500 ft sol, en descente) : le trajet
         // garde alors un point par seconde, assez pour rejouer l'approche finale en 3D.
         const fastNow = this._fastFresh();
-        const sampleMs = (fastNow && fastNow.agl < APPROACH_SAMPLE_AGL_FT && (data.vsFpm || 0) < 0) ? APPROACH_SAMPLE_MS : AIR_SAMPLE_MS;
-        if (now - this._lastPathTs >= sampleMs) {
+        const lowAgl = fastNow && fastNow.agl < APPROACH_SAMPLE_AGL_FT;
+        const departing = now - this._takeoffAt < DEPARTURE_SAMPLE_MAX_MS && (!fastNow || lowAgl);
+        const sampleMs = ((lowAgl && (data.vsFpm || 0) < 0) || departing) ? APPROACH_SAMPLE_MS : AIR_SAMPLE_MS;
+        // v2.2 : instant exact où les roues quittent le sol (une seule fois par vol).
+        if (!onGround && !this._leftGround) {
+          this._path.push({ ...this._point(data, now), phase: 'air', wheelsOff: true });
+          this._lastPathTs = now;
+          pathChanged = true;
+        } else if (now - this._lastPathTs >= sampleMs) {
           this._path.push({ ...this._point(data, now), phase: 'air' });
           this._lastPathTs = now;
           pathChanged = true;
@@ -1110,7 +1152,8 @@ class FlightTracker extends EventEmitter {
       arrGuess: arrAirport,
       path: this._path,
       phases,
-      touchdown: this._touchdownPoint ? { ...this._touchdownPoint, zone: touchdownZone } : null
+      touchdown: this._touchdownPoint ? { ...this._touchdownPoint, zone: touchdownZone } : null,
+      takeoff: computeTakeoff(this._path, depAirport && depAirport.icao, this._rendererDir)
     };
     // Sauvegarde finale AVANT l'émission de l'événement : même si l'IPC vers le renderer
     // échoue (fenêtre détruite, exception quelconque côté UI), le vol complet reste
@@ -1144,4 +1187,4 @@ class FlightTracker extends EventEmitter {
   }
 }
 
-module.exports = { FlightTracker, nearestAirport, loadAirports, loadRunways, computeTouchdownZone, computePhases, computeLivePhases, windComponents, attitudeFromFast, crabFromPath };
+module.exports = { FlightTracker, nearestAirport, loadAirports, loadRunways, computeTouchdownZone, computeTakeoff, computePhases, computeLivePhases, windComponents, attitudeFromFast, crabFromPath };

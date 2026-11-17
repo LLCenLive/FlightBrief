@@ -357,6 +357,12 @@ tr:hover td{background:rgba(255,255,255,.02);}
 #hgStatRow .stat-card .val{font-size:22px;}
 
 .admin-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+.admin-grid .admin-wide{grid-column:1 / -1;}
+.admin-nav{display:flex; flex-wrap:wrap; gap:4px; margin:0 0 16px; padding:4px; border:1px solid var(--hairline); border-radius:10px; background:var(--cockpit-night); width:fit-content; max-width:100%;}
+.admin-nav button{background:none; border:none; color:var(--text-secondary); font-family:var(--font-display); font-weight:600; font-size:12.5px; padding:7px 14px; border-radius:7px; cursor:pointer; transition:color .15s, background .15s;}
+.admin-nav button:hover{color:var(--text-primary);}
+.admin-nav button.active{background:var(--panel-bezel-2); color:var(--text-primary); box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
+.admin-sec.hidden{display:none;}
 .swatches{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
 .range-row{display:flex; align-items:center; gap:10px;}
 .range-row input[type=range]{flex:1;}
@@ -498,6 +504,29 @@ input.tool-output{color:var(--phosphor); border-color:color-mix(in srgb, var(--p
 .touchdown-panel{display:flex; gap:20px; align-items:center; flex-wrap:wrap;}
 .touchdown-diagram{flex:none;}
 .touchdown-stats{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; flex:1; min-width:220px;}
+/* v2.2 — récap décollage / atterrissage du logbook, rangé par cartes */
+.td2-grid{display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:12px; align-items:start;}
+.td2-grid.td2-grid-side{grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); margin-top:10px;}
+.td2-side{display:grid; gap:12px;}
+.td2-card{background:rgba(255,255,255,.02); border:1px solid var(--hairline); border-radius:12px; padding:12px 14px;}
+.td2-card h5{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 10px; font-family:var(--font-display); font-size:10.5px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--text-secondary);}
+.td2-badge{font-family:var(--font-mono); font-size:11px; letter-spacing:.02em; text-transform:none; color:var(--text-primary); background:rgba(255,255,255,.05); border:1px solid var(--hairline); border-radius:6px; padding:2px 7px;}
+.td2-hero{display:flex; gap:26px; margin-bottom:10px;}
+.td2-hero > div{display:flex; flex-wrap:wrap; align-items:baseline; column-gap:5px;}
+.td2-hero b{font-family:var(--font-mono); font-size:26px; font-weight:600; line-height:1.1;}
+.td2-hero span{font-family:var(--font-mono); font-size:12px; color:var(--text-secondary);}
+.td2-hero em{flex-basis:100%; font-style:normal; font-size:10.5px; color:var(--text-secondary); margin-top:2px;}
+.td2-hero sup{color:var(--phosphor);}
+.td2-hero-sm b{font-size:20px;}
+.td2-rwy{margin:2px 0 8px;}
+.td2-rwy svg{display:block; max-width:100%; height:auto;}
+.td2-kv{margin:0; display:grid;}
+.td2-kv > div{display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:6px 0; border-top:1px solid var(--hairline);}
+.td2-kv > div:first-child{border-top:none;}
+.td2-kv dt{font-size:12px; color:var(--text-secondary);}
+.td2-kv dd{margin:0; font-family:var(--font-mono); font-size:13px; font-weight:600; text-align:right; white-space:nowrap;}
+.td2-kv dd small{font-size:11px; font-weight:500; color:var(--text-secondary);}
+@media (max-width: 760px){ .td2-grid{grid-template-columns:1fr;} }
 
 @media (max-width:1000px){
   .workspace{flex-direction:column;}

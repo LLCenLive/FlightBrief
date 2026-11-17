@@ -5,7 +5,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { startServer, startLiveOverlayServer, startMobileAppServer, startMobileSetupServer, setLang: setServerLang } = require('./server');
 const { LocalTls, startMdnsResponder, localIPv4s, HOSTNAME: MOBILE_HOSTNAME } = require('./mobile-tls');
-const { FlightTracker, computeTouchdownZone, windComponents } = require('./tracker');
+const { FlightTracker, computeTouchdownZone, computeTakeoff, windComponents } = require('./tracker');
 const { DataStore, writeJsonSafe, readJsonSafe } = require('./backups');
 const I18N = require('./renderer/i18n.js');
 require('./renderer/i18n/translations.js');
@@ -314,6 +314,12 @@ ipcMain.handle('db:load', () => fixTouchdownZones(readDb()));
 function fixTouchdownZones(db) {
   if (!db || !Array.isArray(db.logbook)) return db;
   for (const f of db.logbook) {
+    // v2.2 : décollage (piste de départ, lâcher des roues) complété pour les vols déjà enregistrés.
+    const tk = f && f.trackData;
+    if (tk && tk.takeoff === undefined && Array.isArray(tk.path)) {
+      const dep = String(f.dep || (tk.depGuess && tk.depGuess.icao) || '').toUpperCase();
+      try { tk.takeoff = computeTakeoff(tk.path, dep, path.join(__dirname, 'renderer')); } catch (e) { tk.takeoff = null; }
+    }
     const td = f && f.trackData && f.trackData.touchdown;
     if (!td || !td.zone || td.lat == null || td.lon == null) continue;
     const arr = String(f.arr || (f.trackData.arrGuess && f.trackData.arrGuess.icao) || '').toUpperCase();
